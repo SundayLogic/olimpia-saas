@@ -1,7 +1,7 @@
 import { createServerComponentClient, createServerActionClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import { cache } from "react";
-import type { Database } from "./client";
+import type { Database, DbDataEntryWithUser } from "./client";
 
 // Cached server component client
 export const createServerClient = cache(() => {
@@ -36,16 +36,9 @@ export const getUserProfile = cache(async () => {
 
   const supabase = createServerClient();
   const { data, error } = await supabase
-    .from("profiles")
-    .select(`
-      id,
-      user_id,
-      full_name,
-      avatar_url,
-      created_at,
-      updated_at
-    `)
-    .eq("user_id", session.user.id)
+    .from('profiles')
+    .select()
+    .eq('user_id', session.user.id)
     .single();
 
   if (error) {
@@ -64,26 +57,20 @@ export async function getDataEntries(page = 1, limit = 10) {
 
   try {
     const { data, error, count } = await supabase
-      .from("data_entries")
+      .from('data_entries')
       .select(`
-        id,
-        title,
-        content,
-        user_id,
-        created_at,
-        updated_at,
-        users (
-          id,
-          name,
-          email
-        )
-      `, { count: "exact" })
-      .order("created_at", { ascending: false })
+        *,
+        user:users!inner(*)
+      `)
+      .order('created_at', { ascending: false })
       .range(start, end);
 
     if (error) throw error;
 
-    return { data, count: count || 0 };
+    return {
+      data: data as unknown as DbDataEntryWithUser[],
+      count: count || 0
+    };
   } catch (error) {
     console.error("Error:", error);
     return { data: [], count: 0 };

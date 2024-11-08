@@ -18,8 +18,6 @@ export type Database = {
           email: string;
           role?: string;
           active?: boolean;
-          created_at?: string;
-          updated_at?: string;
         };
         Update: {
           name?: string;
@@ -42,8 +40,6 @@ export type Database = {
           user_id: string;
           full_name?: string | null;
           avatar_url?: string | null;
-          created_at?: string;
-          updated_at?: string;
         };
         Update: {
           user_id?: string;
@@ -65,8 +61,6 @@ export type Database = {
           title: string;
           content: string;
           user_id: string;
-          created_at?: string;
-          updated_at?: string;
         };
         Update: {
           title?: string;
@@ -88,12 +82,24 @@ export type Database = {
   };
 };
 
-export type Tables<T extends keyof Database['public']['Tables']> = 
-  Database['public']['Tables'][T]['Row'];
+// Helper Types
+export type Tables = Database['public']['Tables'];
+export type TableRow<T extends keyof Tables> = Tables[T]['Row'];
 
-export type DbUser = Tables<'users'>;
-export type DbProfile = Tables<'profiles'>;
-export type DbDataEntry = Tables<'data_entries'>;
+export type DbUser = TableRow<'users'>;
+export type DbProfile = TableRow<'profiles'>;
+export type DbDataEntry = TableRow<'data_entries'>;
 
-export const createClient = () =>
-  createClientComponentClient<Database>();
+export interface DbDataEntryWithUser extends DbDataEntry {
+  user: DbUser;
+}
+
+// Create a singleton instance
+let client: ReturnType<typeof createClientComponentClient<Database>>;
+
+export const getSupabaseClient = () => {
+  if (!client) {
+    client = createClientComponentClient<Database>();
+  }
+  return client;
+};

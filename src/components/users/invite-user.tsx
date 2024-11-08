@@ -30,12 +30,14 @@ const formSchema = z.object({
   role: z.enum(["user", "admin"]).default("user"),
 });
 
+type FormData = z.infer<typeof formSchema>;
+
 export default function InviteUser() {
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
   const supabase = getSupabaseClient();
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       email: "",
@@ -43,14 +45,20 @@ export default function InviteUser() {
     },
   });
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: FormData) => {
     try {
+      setIsOpen(false);
+      
       // First, check if the user already exists
-      const { data: existingUser } = await supabase
+      const { data: existingUser, error: checkError } = await supabase
         .from('users')
         .select('id')
         .eq('email', values.email)
         .single();
+
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        throw checkError;
+      }
 
       if (existingUser) {
         toast({
@@ -62,13 +70,13 @@ export default function InviteUser() {
       }
 
       // Send the invitation
-      const { error } = await supabase.auth.admin.inviteUserByEmail(values.email, {
+      const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(values.email, {
         data: {
           role: values.role,
         },
       });
 
-      if (error) throw error;
+      if (inviteError) throw inviteError;
 
       // Create user record
       const { error: insertError } = await supabase
@@ -87,7 +95,6 @@ export default function InviteUser() {
         description: "Invitation sent successfully.",
       });
       
-      setIsOpen(false);
       form.reset();
     } catch (error: unknown) {
       console.error("Error:", error);
@@ -96,6 +103,9 @@ export default function InviteUser() {
         description: error instanceof Error ? error.message : "Failed to send invitation.",
         variant: "destructive",
       });
+      
+      // Reopen the dialog if there was an error
+      setIsOpen(true);
     }
   };
 
@@ -122,6 +132,7 @@ export default function InviteUser() {
                   <FormControl>
                     <Input 
                       placeholder="Enter email address" 
+                      type="email"
                       {...field} 
                     />
                   </FormControl>
