@@ -20,65 +20,41 @@ import { Button } from "@/components/ui/button";
 import { MoreHorizontal, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import type { Database } from "@/lib/supabase/client";
-
-type User = Database['public']['Tables']['users']['Row'];
+import type { Database, DbUser } from "@/lib/supabase/client";
 
 interface UsersTableProps {
-  initialData: User[];
+  initialData: DbUser[];
 }
 
 export function UsersTable({ initialData }: UsersTableProps) {
-  const [users, setUsers] = useState<User[]>(initialData);
+  const [users, setUsers] = useState<DbUser[]>(initialData);
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const { toast } = useToast();
   const supabase = createClientComponentClient<Database>();
 
   useEffect(() => {
-    console.log('Setting up real-time subscription');
-    
-    const channel = supabase
-      .channel('users_db_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'users',
-        },
-        (payload) => {
-          console.log('Change received!', payload);
-
-          switch (payload.eventType) {
-            case 'UPDATE':
-              setUsers((currentUsers) => 
-                currentUsers.map((user) => {
-                  if (user.id === (payload.new as User).id) {
-                    return { ...user, ...(payload.new as User) };
-                  }
-                  return user;
-                })
-              );
-              break;
-            case 'INSERT':
-              setUsers((currentUsers) => [...currentUsers, payload.new as User]);
-              break;
-            case 'DELETE':
-              if ((payload.old as User)?.id) {
-                setUsers((currentUsers) => 
-                  currentUsers.filter((user) => user.id !== (payload.old as User).id)
-                );
-              }
-              break;
-          }
+    const channel = supabase.channel('users_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'users'
+      }, (payload) => {
+        console.log('Change received:', payload);
+        
+        if (payload.eventType === 'UPDATE') {
+          const updatedUser = payload.new as DbUser;
+          setUsers(currentUsers => 
+            currentUsers.map(user => 
+              user.id === updatedUser.id ? updatedUser : user
+            )
+          );
         }
-      )
+      })
       .subscribe((status) => {
         console.log('Subscription status:', status);
       });
 
     return () => {
-      console.log('Cleaning up subscription');
       supabase.removeChannel(channel);
     };
   }, [supabase]);
@@ -86,7 +62,7 @@ export function UsersTable({ initialData }: UsersTableProps) {
   const handleStatusChange = async (userId: string, active: boolean) => {
     try {
       setIsLoading(userId);
-      
+
       const { error } = await supabase
         .from('users')
         .update({ 
@@ -96,6 +72,13 @@ export function UsersTable({ initialData }: UsersTableProps) {
         .eq('id', userId);
 
       if (error) throw error;
+
+      // Optimistic update
+      setUsers(currentUsers => 
+        currentUsers.map(user => 
+          user.id === userId ? { ...user, active } : user
+        )
+      );
 
       toast({
         title: "Success",
@@ -109,18 +92,15 @@ export function UsersTable({ initialData }: UsersTableProps) {
         description: "Failed to update user status.",
         variant: "destructive",
       });
+      
+      // Revert optimistic update on error
+      setUsers(currentUsers => [...currentUsers]);
     } finally {
       setIsLoading(null);
     }
   };
 
-  if (!users.length) {
-    return (
-      <div className="text-center py-10">
-        <p className="text-muted-foreground">No users found.</p>
-      </div>
-    );
-  }
+  // Rest of your component remains the same...
 
   return (
     <div className="rounded-md border">
