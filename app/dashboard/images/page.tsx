@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ImageUpload } from "@/components/image/ImageUpload";
+import { ImageGallery } from "@/components/image/ImageGallery";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import type { MenuCategory } from '@/components/image/types';
 
 const MENU_CATEGORIES = [
   { value: 'arroces', label: 'Arroces' },
@@ -24,10 +26,8 @@ const MENU_CATEGORIES = [
   { value: 'postres', label: 'Postres' }
 ] as const;
 
-type MenuCategory = typeof MENU_CATEGORIES[number]['value'] | 'all';
-
 export default function ImagesPage() {
-  const [selectedCategory, setSelectedCategory] = useState<MenuCategory>('all');
+  const [selectedCategory, setSelectedCategory] = useState<MenuCategory>('arroces');
   const [itemName, setItemName] = useState('');
   const { toast } = useToast();
   
@@ -37,7 +37,6 @@ export default function ImagesPage() {
       description: "Image uploaded successfully",
     });
     setItemName('');
-    setSelectedCategory('all');
   };
 
   const handleUploadError = (error: string) => {
@@ -66,14 +65,12 @@ export default function ImagesPage() {
             <div className="grid gap-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                    Category
-                  </label>
+                  <label className="text-sm font-medium">Category</label>
                   <Select
                     value={selectedCategory}
                     onValueChange={(value) => setSelectedCategory(value as MenuCategory)}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger>
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
@@ -90,9 +87,7 @@ export default function ImagesPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                    Item Name
-                  </label>
+                  <label className="text-sm font-medium">Item Name</label>
                   <Input
                     placeholder="Enter item name"
                     value={itemName}
@@ -101,15 +96,13 @@ export default function ImagesPage() {
                 </div>
               </div>
 
-              {selectedCategory !== 'all' && itemName && (
-                <div className="mt-4">
-                  <ImageUpload
-                    category={selectedCategory}
-                    itemName={itemName}
-                    onUploadComplete={handleUploadComplete}
-                    onError={handleUploadError}
-                  />
-                </div>
+              {selectedCategory && itemName && (
+                <ImageUpload
+                  category={selectedCategory}
+                  itemName={itemName}
+                  onUploadComplete={handleUploadComplete}
+                  onError={handleUploadError}
+                />
               )}
             </div>
           </CardContent>
@@ -125,11 +118,10 @@ export default function ImagesPage() {
                 value={selectedCategory}
                 onValueChange={(value) => setSelectedCategory(value as MenuCategory)}
               >
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger>
                   <SelectValue placeholder="Filter by category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
                   {MENU_CATEGORIES.map((category) => (
                     <SelectItem 
                       key={category.value} 
@@ -142,11 +134,7 @@ export default function ImagesPage() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              <div className="aspect-square rounded-lg bg-muted flex items-center justify-center">
-                <p className="text-sm text-muted-foreground">No images yet</p>
-              </div>
-            </div>
+            <ImageGallery category={selectedCategory} />
           </CardContent>
         </Card>
       </div>

@@ -1,6 +1,6 @@
 # Documentation for: olimpia-app-v3
 
-Generated on: 2024-11-08 19:17:46
+Generated on: 2024-11-08 19:56:35
 
 ## Directory Structure
 
@@ -17,6 +17,7 @@ olimpia-app-v3/
 │   ├── package.json
 │   ├── postcss.config.mjs
 │   ├── tailwind.config.ts
+│   ├── ts-error-logger.ts
 │   ├── tsconfig.json
 │   ├── yarn.lock
 │   ├── utils.ts
@@ -70,6 +71,7 @@ olimpia-app-v3/
         │   ├── form.tsx
         │   ├── input.tsx
         │   ├── label.tsx
+        │   ├── select.tsx
         │   ├── table.tsx
         │   ├── toast.tsx
         │   ├── toaster.tsx
@@ -334,13 +336,14 @@ export default nextConfig;
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-dropdown-menu": "^2.1.2",
     "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-select": "^2.1.2",
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-toast": "^1.2.2",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/supabase-js": "^2.46.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
-    "lucide-react": "^0.454.0",
+    "lucide-react": "^0.456.0",
     "next": "15.0.3",
     "react": "19.0.0-rc-66855b96-20241106",
     "react-dom": "19.0.0-rc-66855b96-20241106",
@@ -464,6 +467,127 @@ const config = {
 } satisfies Config;
 
 export default config;
+```
+
+### ts-error-logger.ts
+
+```typescript
+import * as fs from 'fs';
+import * as path from 'path';
+import { execSync, ExecSyncOptionsWithStringEncoding } from 'child_process';
+
+interface TypeScriptError {
+    file: string;
+    line: number;
+    character: number;
+    code: string;
+    message: string;
+}
+
+interface CommandError extends Error {
+    stdout?: string;
+    stderr?: string;
+    status?: number;
+}
+
+function getTypeScriptErrors(filePath: string): TypeScriptError[] {
+    try {
+        const options: ExecSyncOptionsWithStringEncoding = {
+            encoding: 'utf-8',
+            stdio: 'pipe'
+        };
+        
+        const output = execSync(`tsc --noEmit ${filePath}`, options);
+        return parseTypeScriptOutput(output);
+    } catch (error) {
+        const commandError = error as CommandError;
+        return parseTypeScriptOutput(commandError.stdout || '');
+    }
+}
+
+function parseTypeScriptOutput(output: string): TypeScriptError[] {
+    const errors: TypeScriptError[] = [];
+    const lines = output.split('\n');
+
+    for (const line of lines) {
+        // Match the TypeScript error format: file(line,character): error TS2307: message
+        const match = line.match(/(.+)\((\d+),(\d+)\): error (TS\d+): (.+)/);
+        if (match) {
+            errors.push({
+                file: match[1],
+                line: parseInt(match[2]),
+                character: parseInt(match[3]),
+                code: match[4],
+                message: match[5].trim()
+            });
+        }
+    }
+
+    return errors;
+}
+
+function generateMarkdown(errors: TypeScriptError[], filePath: string): string {
+    const fileName = path.basename(filePath);
+    const date = new Date().toISOString().split('T')[0];
+    
+    let markdown = `# TypeScript Errors Report - ${fileName}\n\n`;
+    markdown += `Generated on: ${date}\n\n`;
+
+    if (errors.length === 0) {
+        markdown += '✅ No TypeScript errors found!\n';
+        return markdown;
+    }
+
+    markdown += `Found ${errors.length} error${errors.length === 1 ? '' : 's'}:\n\n`;
+
+    errors.forEach((error, index) => {
+        markdown += `## Error ${index + 1}\n\n`;
+        markdown += `- **Location**: ${error.file}:${error.line}:${error.character}\n`;
+        markdown += `- **Error Code**: \`${error.code}\`\n`;
+        markdown += `- **Message**: ${error.message}\n\n`;
+        markdown += `\`\`\`typescript\n// Add code context here if needed\n\`\`\`\n\n`;
+    });
+
+    return markdown;
+}
+
+function main(): void {
+    try {
+        const args = process.argv.slice(2);
+        if (args.length !== 2) {
+            console.error('Usage: ts-node script.ts <source-file> <output-md-file>');
+            process.exit(1);
+        }
+
+        const [sourceFile, outputFile] = args;
+
+        if (!fs.existsSync(sourceFile)) {
+            console.error(`Error: Source file '${sourceFile}' does not exist`);
+            process.exit(1);
+        }
+
+        const errors = getTypeScriptErrors(sourceFile);
+        const markdown = generateMarkdown(errors, sourceFile);
+        
+        fs.writeFileSync(outputFile, markdown);
+        console.log(`Successfully generated error report at: ${outputFile}`);
+        
+        if (errors.length > 0) {
+            console.log(`Found ${errors.length} error${errors.length === 1 ? '' : 's'}`);
+        } else {
+            console.log('No errors found!');
+        }
+    } catch (error) {
+        if (error instanceof Error) {
+            console.error('Error generating report:', error.message);
+        } else {
+            console.error('An unknown error occurred');
+        }
+        process.exit(1);
+    }
+}
+
+main();
 ```
 
 ### tsconfig.json
@@ -840,6 +964,11 @@ export default config;
   resolved "https://registry.yarnpkg.com/@pkgjs/parseargs/-/parseargs-0.11.0.tgz#a77ea742fab25775145434eb1d2328cf5013ac33"
   integrity sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==
 
+"@radix-ui/number@1.1.0":
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/@radix-ui/number/-/number-1.1.0.tgz#1e95610461a09cdf8bb05c152e76ca1278d5da46"
+  integrity sha512-V3gRzhVNU1ldS5XhAPTom1fOIo4ccrjjJgmE+LI2h/WaFpHmx0MQApT+KZHnx8abG6Avtfcz4WoEciMnpFT3HQ==
+
 "@radix-ui/primitive@1.1.0":
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/@radix-ui/primitive/-/primitive-1.1.0.tgz#42ef83b3b56dccad5d703ae8c42919a68798bbe2"
@@ -1044,6 +1173,33 @@ export default config;
     "@radix-ui/react-use-callback-ref" "1.1.0"
     "@radix-ui/react-use-controllable-state" "1.1.0"
 
+"@radix-ui/react-select@^2.1.2":
+  version "2.1.2"
+  resolved "https://registry.yarnpkg.com/@radix-ui/react-select/-/react-select-2.1.2.tgz#2346e118966db793940f6a866fd4cc5db2cc275e"
+  integrity sha512-rZJtWmorC7dFRi0owDmoijm6nSJH1tVw64QGiNIZ9PNLyBDtG+iAq+XGsya052At4BfarzY/Dhv9wrrUr6IMZA==
+  dependencies:
+    "@radix-ui/number" "1.1.0"
+    "@radix-ui/primitive" "1.1.0"
+    "@radix-ui/react-collection" "1.1.0"
+    "@radix-ui/react-compose-refs" "1.1.0"
+    "@radix-ui/react-context" "1.1.1"
+    "@radix-ui/react-direction" "1.1.0"
+    "@radix-ui/react-dismissable-layer" "1.1.1"
+    "@radix-ui/react-focus-guards" "1.1.1"
+    "@radix-ui/react-focus-scope" "1.1.0"
+    "@radix-ui/react-id" "1.1.0"
+    "@radix-ui/react-popper" "1.2.0"
+    "@radix-ui/react-portal" "1.1.2"
+    "@radix-ui/react-primitive" "2.0.0"
+    "@radix-ui/react-slot" "1.1.0"
+    "@radix-ui/react-use-callback-ref" "1.1.0"
+    "@radix-ui/react-use-controllable-state" "1.1.0"
+    "@radix-ui/react-use-layout-effect" "1.1.0"
+    "@radix-ui/react-use-previous" "1.1.0"
+    "@radix-ui/react-visually-hidden" "1.1.0"
+    aria-hidden "^1.1.1"
+    react-remove-scroll "2.6.0"
+
 "@radix-ui/react-slot@1.1.0", "@radix-ui/react-slot@^1.1.0":
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/@radix-ui/react-slot/-/react-slot-1.1.0.tgz#7c5e48c36ef5496d97b08f1357bb26ed7c714b84"
@@ -1092,6 +1248,11 @@ export default config;
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/@radix-ui/react-use-layout-effect/-/react-use-layout-effect-1.1.0.tgz#3c2c8ce04827b26a39e442ff4888d9212268bd27"
   integrity sha512-+FPE0rOdziWSrH9athwI1R0HDVbWlEhd+FR+aSDk4uWGmSJ9Z54sdZVDQPZAinJhJXwfT+qnj969mCsT2gfm5w==
+
+"@radix-ui/react-use-previous@1.1.0":
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/@radix-ui/react-use-previous/-/react-use-previous-1.1.0.tgz#d4dd37b05520f1d996a384eb469320c2ada8377c"
+  integrity sha512-Z/e78qg2YFnnXcW88A4JmTtm4ADckLno6F7OXotmkQfeuCVaKuYzqAATPhVzl3delXE7CxIV8shofPn3jPc5Og==
 
 "@radix-ui/react-use-rect@1.1.0":
   version "1.1.0"
@@ -3024,10 +3185,10 @@ lru-cache@^10.2.0:
   resolved "https://registry.yarnpkg.com/lru-cache/-/lru-cache-10.4.3.tgz#410fc8a17b70e598013df257c2446b7f3383f119"
   integrity sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==
 
-lucide-react@^0.454.0:
-  version "0.454.0"
-  resolved "https://registry.yarnpkg.com/lucide-react/-/lucide-react-0.454.0.tgz#a81b9c482018720f07ead0503ae502d94d528444"
-  integrity sha512-hw7zMDwykCLnEzgncEEjHeA6+45aeEzRYuKHuyRSOPkhko+J3ySGjGIzu+mmMfDFG1vazHepMaYFYHbTFAZAAQ==
+lucide-react@^0.456.0:
+  version "0.456.0"
+  resolved "https://registry.yarnpkg.com/lucide-react/-/lucide-react-0.456.0.tgz#14906c3355cc65d3380b7b2294b331aeda1bb392"
+  integrity sha512-DIIGJqTT5X05sbAsQ+OhA8OtJYyD4NsEMCA/HQW/Y6ToPQ7gwbtujIoeAaup4HpHzV35SQOarKAWH8LYglB6eA==
 
 merge-stream@^2.0.0:
   version "2.0.0"
@@ -4656,6 +4817,7 @@ import {
   Settings,
   LogOut,
   Loader2,
+  ImageIcon, // Add this import
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { Database } from "@/lib/supabase/client";
@@ -4744,6 +4906,16 @@ export default function DashboardLayout({
               >
                 <Users className="mr-2 h-4 w-4" />
                 Users
+              </Button>
+            </Link>
+            {/* Add Images Link */}
+            <Link href="/dashboard/images">
+              <Button
+                variant="ghost"
+                className="w-full justify-start"
+              >
+                <ImageIcon className="mr-2 h-4 w-4" />
+                Images
               </Button>
             </Link>
             <Link href="/dashboard/settings">
@@ -4913,7 +5085,161 @@ export default async function UsersPage() {
 ### app/dashboard/images/page.tsx
 
 ```typescript
+"use client";
 
+import { useState } from "react";
+import { ImageUpload } from "@/components/image/ImageUpload";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/use-toast";
+
+const MENU_CATEGORIES = [
+  { value: 'arroces', label: 'Arroces' },
+  { value: 'carnes', label: 'Carnes' },
+  { value: 'del-huerto', label: 'Del Huerto' },
+  { value: 'del-mar', label: 'Del Mar' },
+  { value: 'para-compartir', label: 'Para Compartir' },
+  { value: 'para-peques', label: 'Para Peques' },
+  { value: 'para-veganos', label: 'Para Veganos' },
+  { value: 'postres', label: 'Postres' }
+] as const;
+
+type MenuCategory = typeof MENU_CATEGORIES[number]['value'] | 'all';
+
+export default function ImagesPage() {
+  const [selectedCategory, setSelectedCategory] = useState<MenuCategory>('all');
+  const [itemName, setItemName] = useState('');
+  const { toast } = useToast();
+  
+  const handleUploadComplete = (url: string) => {
+    toast({
+      title: "Success",
+      description: "Image uploaded successfully",
+    });
+    setItemName('');
+    setSelectedCategory('all');
+  };
+
+  const handleUploadError = (error: string) => {
+    toast({
+      title: "Error",
+      description: error,
+      variant: "destructive",
+    });
+  };
+
+  return (
+    <div className="container mx-auto py-10">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">Image Management</h1>
+        <p className="text-muted-foreground">
+          Upload and manage images for menu items
+        </p>
+      </div>
+
+      <div className="grid gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Upload New Image</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Category
+                  </label>
+                  <Select
+                    value={selectedCategory}
+                    onValueChange={(value) => setSelectedCategory(value as MenuCategory)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MENU_CATEGORIES.map((category) => (
+                        <SelectItem 
+                          key={category.value} 
+                          value={category.value}
+                        >
+                          {category.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Item Name
+                  </label>
+                  <Input
+                    placeholder="Enter item name"
+                    value={itemName}
+                    onChange={(e) => setItemName(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {selectedCategory !== 'all' && itemName && (
+                <div className="mt-4">
+                  <ImageUpload
+                    category={selectedCategory}
+                    itemName={itemName}
+                    onUploadComplete={handleUploadComplete}
+                    onError={handleUploadError}
+                  />
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Image Gallery</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-6">
+              <Select
+                value={selectedCategory}
+                onValueChange={(value) => setSelectedCategory(value as MenuCategory)}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Filter by category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {MENU_CATEGORIES.map((category) => (
+                    <SelectItem 
+                      key={category.value} 
+                      value={category.value}
+                    >
+                      {category.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div className="aspect-square rounded-lg bg-muted flex items-center justify-center">
+                <p className="text-sm text-muted-foreground">No images yet</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
 ```
 
 ### app/fonts/GeistMonoVF.woff
@@ -6340,6 +6666,144 @@ Label.displayName = LabelPrimitive.Root.displayName
 export { Label }
 ```
 
+### src/components/ui/select.tsx
+
+```typescript
+"use client";
+
+import * as React from "react";
+import * as SelectPrimitive from "@radix-ui/react-select";
+import { Check, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const Select = SelectPrimitive.Root;
+const SelectGroup = SelectPrimitive.Group;
+const SelectValue = SelectPrimitive.Value;
+
+interface SelectTriggerProps extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> {
+  className?: string;
+}
+
+const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
+  ({ className, children, ...props }, ref) => (
+    <SelectPrimitive.Trigger
+      ref={ref}
+      className={cn(
+        "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 gap-2",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      <SelectPrimitive.Icon asChild>
+        <ChevronDown className="h-4 w-4 opacity-50" />
+      </SelectPrimitive.Icon>
+    </SelectPrimitive.Trigger>
+  )
+);
+SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
+
+interface SelectContentProps extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> {
+  className?: string;
+  position?: "popper" | "item-aligned";
+}
+
+const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
+  ({ className, children, position = "popper", ...props }, ref) => (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Content
+        ref={ref}
+        className={cn(
+          "relative z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          position === "popper" &&
+            "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
+          className
+        )}
+        position={position}
+        {...props}
+      >
+        <SelectPrimitive.Viewport
+          className={cn(
+            "p-1",
+            position === "popper" &&
+              "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
+          )}
+        >
+          {children}
+        </SelectPrimitive.Viewport>
+      </SelectPrimitive.Content>
+    </SelectPrimitive.Portal>
+  )
+);
+SelectContent.displayName = SelectPrimitive.Content.displayName;
+
+interface SelectLabelProps extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label> {
+  className?: string;
+}
+
+const SelectLabel = React.forwardRef<HTMLDivElement, SelectLabelProps>(
+  ({ className, ...props }, ref) => (
+    <SelectPrimitive.Label
+      ref={ref}
+      className={cn("py-1.5 pl-8 pr-2 text-sm font-semibold", className)}
+      {...props}
+    />
+  )
+);
+SelectLabel.displayName = SelectPrimitive.Label.displayName;
+
+interface SelectItemProps extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> {
+  className?: string;
+}
+
+const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(
+  ({ className, children, ...props }, ref) => (
+    <SelectPrimitive.Item
+      ref={ref}
+      className={cn(
+        "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        className
+      )}
+      {...props}
+    >
+      <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+        <SelectPrimitive.ItemIndicator>
+          <Check className="h-4 w-4" />
+        </SelectPrimitive.ItemIndicator>
+      </span>
+      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    </SelectPrimitive.Item>
+  )
+);
+SelectItem.displayName = SelectPrimitive.Item.displayName;
+
+interface SelectSeparatorProps extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Separator> {
+  className?: string;
+}
+
+const SelectSeparator = React.forwardRef<HTMLDivElement, SelectSeparatorProps>(
+  ({ className, ...props }, ref) => (
+    <SelectPrimitive.Separator
+      ref={ref}
+      className={cn("-mx-1 my-1 h-px bg-muted", className)}
+      {...props}
+    />
+  )
+);
+SelectSeparator.displayName = SelectPrimitive.Separator.displayName;
+
+export {
+  Select,
+  SelectGroup,
+  SelectValue,
+  SelectTrigger,
+  SelectContent,
+  SelectLabel,
+  SelectItem,
+  SelectSeparator,
+};
+```
+
 ### src/components/ui/table.tsx
 
 ```typescript
@@ -7691,29 +8155,86 @@ export function UsersTable({ initialData }: UsersTableProps) {
 ### src/components/image/ImageUpload.tsx
 
 ```typescript
-// src/components/image/ImageUpload.tsx
-import React, { useState, useCallback, useEffect } from 'react';
-import { supabase } from '@/lib/supabase/client';
-import { ImageUploadProps, FilePreview } from './types';
-import { validateFile, generateFileName } from './utils';
+"use client";
 
-export const ImageUpload: React.FC<ImageUploadProps> = ({
+import { useState, useCallback, useEffect } from 'react';
+import Image from 'next/image';
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { Loader2 } from "lucide-react";
+
+type MenuCategory = 
+  | 'arroces' 
+  | 'carnes' 
+  | 'del-huerto' 
+  | 'del-mar' 
+  | 'para-compartir' 
+  | 'para-peques' 
+  | 'para-veganos' 
+  | 'postres';
+
+interface ImageUploadProps {
+  category: MenuCategory;
+  itemName: string;
+  onUploadComplete: (url: string) => void;
+  onError: (error: string) => void;
+}
+
+interface FilePreview {
+  file: File;
+  preview: string;
+}
+
+const validateFile = (file: File) => {
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!validTypes.includes(file.type)) {
+    return {
+      isValid: false,
+      error: 'Only JPG, PNG or WebP files are allowed'
+    };
+  }
+
+  const maxSize = 2 * 1024 * 1024;
+  if (file.size > maxSize) {
+    return {
+      isValid: false,
+      error: 'File is too large. Maximum size is 2MB'
+    };
+  }
+
+  return { isValid: true, error: null };
+};
+
+const generateFileName = (itemName: string, originalName: string): string => {
+  const extension = originalName.split('.').pop()?.toLowerCase() || 'jpg';
+  const cleanName = itemName
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+
+  const timestamp = Date.now();
+  return `${cleanName}-${timestamp}.${extension}`;
+};
+
+export function ImageUpload({
   category,
   itemName,
   onUploadComplete,
   onError
-}) => {
+}: ImageUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<FilePreview | null>(null);
+  const supabase = createClientComponentClient();
 
-  // Handle file selection
   const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const validation = validateFile(file);
     if (!validation.isValid) {
-      onError(validation.error || 'Error de validación');
+      onError(validation.error || 'Validation Error');
       return;
     }
 
@@ -7723,10 +8244,9 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
     });
   }, [onError]);
 
-  // Handle upload
   const handleUpload = async () => {
     if (!selectedFile) {
-      onError('Por favor, seleccione una imagen');
+      onError('Please select an image');
       return;
     }
 
@@ -7736,14 +8256,14 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
       const fileName = generateFileName(itemName, selectedFile.file.name);
       const filePath = `${category}/${fileName}`;
 
-      const { data, error } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('menu-images')
         .upload(filePath, selectedFile.file, {
           cacheControl: '3600',
           upsert: false
         });
 
-      if (error) throw error;
+      if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
         .from('menu-images')
@@ -7752,13 +8272,13 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
       onUploadComplete(publicUrl);
       setSelectedFile(null);
     } catch (error) {
-      onError(error instanceof Error ? error.message : 'Error al subir la imagen');
+      console.error('Upload error:', error);
+      onError(error instanceof Error ? error.message : 'Error uploading image');
     } finally {
       setIsUploading(false);
     }
   };
 
-  // Clear selected file
   const handleClear = useCallback(() => {
     if (selectedFile) {
       URL.revokeObjectURL(selectedFile.preview);
@@ -7766,7 +8286,6 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
     }
   }, [selectedFile]);
 
-  // Cleanup preview URL on unmount
   useEffect(() => {
     return () => {
       if (selectedFile) {
@@ -7778,10 +8297,9 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   return (
     <div className="p-4 border rounded-lg shadow-sm">
       <div className="space-y-4">
-        {/* File Input */}
         <div>
           <label className="block mb-2 text-sm font-medium text-gray-700">
-            Seleccionar Imagen
+            Select Image
           </label>
           <input
             type="file"
@@ -7797,70 +8315,64 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
           />
         </div>
 
-        {/* Preview */}
         {selectedFile && (
           <div className="mt-4">
-            <p className="text-sm text-gray-500 mb-2">Vista previa:</p>
+            <p className="text-sm text-gray-500 mb-2">Preview:</p>
             <div className="relative w-48 h-48 rounded-lg overflow-hidden group">
-              <img
+              <Image
                 src={selectedFile.preview}
-                alt="Preview"
-                className="w-full h-full object-cover"
+                alt="Upload preview"
+                fill
+                className="object-cover"
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               />
               <button
                 onClick={handleClear}
+                type="button"
+                aria-label="Clear selection"
                 className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 
                          group-hover:opacity-100 transition-opacity"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" 
-                     className="h-4 w-4" 
-                     viewBox="0 0 20 20" 
-                     fill="currentColor">
-                  <path fillRule="evenodd" 
-                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" 
-                        clipRule="evenodd" />
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className="h-4 w-4" 
+                  viewBox="0 0 20 20" 
+                  fill="currentColor"
+                >
+                  <path 
+                    fillRule="evenodd" 
+                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" 
+                    clipRule="evenodd" 
+                  />
                 </svg>
               </button>
             </div>
           </div>
         )}
 
-        {/* Upload Button */}
         <button
           onClick={handleUpload}
           disabled={!selectedFile || isUploading}
+          type="button"
           className={`w-full py-2 px-4 rounded-md text-white font-medium
                      ${!selectedFile || isUploading
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700'
-            } transition-colors`}
+                       ? 'bg-gray-400 cursor-not-allowed'
+                       : 'bg-blue-600 hover:bg-blue-700'
+                     } transition-colors`}
         >
           {isUploading ? (
             <span className="flex items-center justify-center">
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" 
-                   xmlns="http://www.w3.org/2000/svg" 
-                   fill="none" 
-                   viewBox="0 0 24 24">
-                <circle className="opacity-25" 
-                        cx="12" 
-                        cy="12" 
-                        r="10" 
-                        stroke="currentColor" 
-                        strokeWidth="4" />
-                <path className="opacity-75" 
-                      fill="currentColor" 
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-              Subiendo...
+              <Loader2 className="animate-spin -ml-1 mr-3 h-5 w-5" />
+              Uploading...
             </span>
           ) : (
-            'Subir Imagen'
+            'Upload Image'
           )}
         </button>
       </div>
     </div>
   );
-};
+}
 
 export default ImageUpload;
 ```
@@ -7869,8 +8381,6 @@ export default ImageUpload;
 
 ```typescript
 // src/components/image/types.ts
-import { Database } from '@/lib/supabase/types';
-
 export type MenuCategory = 
   | 'arroces' 
   | 'carnes' 
@@ -7881,16 +8391,16 @@ export type MenuCategory =
   | 'para-veganos' 
   | 'postres';
 
-export interface FilePreview {
-  file: File;
-  preview: string;
-}
-
 export interface ImageUploadProps {
   category: MenuCategory;
   itemName: string;
   onUploadComplete: (url: string) => void;
   onError: (error: string) => void;
+}
+
+export interface FilePreview {
+  file: File;
+  preview: string;
 }
 
 export interface ValidationResult {
@@ -7902,7 +8412,7 @@ export interface ValidationResult {
 ### src/components/image/utils.ts
 
 ```typescript
-// src/components/image/utils.ts
+// components/image/utils.ts
 import { ValidationResult } from './types';
 
 export const validateFile = (file: File): ValidationResult => {
@@ -7911,7 +8421,7 @@ export const validateFile = (file: File): ValidationResult => {
   if (!validTypes.includes(file.type)) {
     return {
       isValid: false,
-      error: 'Solo se permiten archivos JPG, PNG o WebP'
+      error: 'Only JPG, PNG or WebP files are allowed'
     };
   }
 
@@ -7920,7 +8430,7 @@ export const validateFile = (file: File): ValidationResult => {
   if (file.size > maxSize) {
     return {
       isValid: false,
-      error: 'El archivo es demasiado grande. El tamaño máximo es 2MB'
+      error: 'File is too large. Maximum size is 2MB'
     };
   }
 
