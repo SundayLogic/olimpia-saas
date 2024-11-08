@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
   Loader2,
+  ImageIcon, // Add this import
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { Database } from "@/lib/supabase/client";
@@ -99,6 +100,16 @@ export default function DashboardLayout({
               >
                 <Users className="mr-2 h-4 w-4" />
                 Users
+              </Button>
+            </Link>
+            {/* Add Images Link */}
+            <Link href="/dashboard/images">
+              <Button
+                variant="ghost"
+                className="w-full justify-start"
+              >
+                <ImageIcon className="mr-2 h-4 w-4" />
+                Images
               </Button>
             </Link>
             <Link href="/dashboard/settings">
