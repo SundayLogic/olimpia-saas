@@ -1,220 +1,202 @@
-"use client";
+'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import { useDropzone } from 'react-dropzone';
+import { Loader2, Upload, ImageIcon } from 'lucide-react';
 import Image from 'next/image';
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Loader2 } from "lucide-react";
-
-type MenuCategory = 
-  | 'arroces' 
-  | 'carnes' 
-  | 'del-huerto' 
-  | 'del-mar' 
-  | 'para-compartir' 
-  | 'para-peques' 
-  | 'para-veganos' 
-  | 'postres';
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 interface ImageUploadProps {
-  category: MenuCategory;
+  category: string;
   itemName: string;
   onUploadComplete: (url: string) => void;
   onError: (error: string) => void;
 }
 
-interface FilePreview {
-  file: File;
-  preview: string;
-}
-
-const validateFile = (file: File) => {
-  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
-  if (!validTypes.includes(file.type)) {
-    return {
-      isValid: false,
-      error: 'Only JPG, PNG or WebP files are allowed'
-    };
-  }
-
-  const maxSize = 2 * 1024 * 1024;
-  if (file.size > maxSize) {
-    return {
-      isValid: false,
-      error: 'File is too large. Maximum size is 2MB'
-    };
-  }
-
-  return { isValid: true, error: null };
-};
-
-const generateFileName = (itemName: string, originalName: string): string => {
-  const extension = originalName.split('.').pop()?.toLowerCase() || 'jpg';
-  const cleanName = itemName
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-');
-
-  const timestamp = Date.now();
-  return `${cleanName}-${timestamp}.${extension}`;
-};
-
-export function ImageUpload({
+export function ImageUpload({ 
   category,
   itemName,
   onUploadComplete,
-  onError
+  onError 
 }: ImageUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<FilePreview | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const supabase = createClientComponentClient();
 
-  const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    const file = acceptedFiles[0];
     if (!file) return;
 
-    const validation = validateFile(file);
-    if (!validation.isValid) {
-      onError(validation.error || 'Validation Error');
+    // Validate file
+    if (!file.type.startsWith('image/')) {
+      onError('Please upload an image file');
       return;
     }
 
-    setSelectedFile({
-      file,
-      preview: URL.createObjectURL(file)
-    });
+    // File size validation (2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      onError('Image size should be less than 2MB');
+      return;
+    }
+
+    // Create preview
+    const objectUrl = URL.createObjectURL(file);
+    setPreview(objectUrl);
+    setSelectedFile(file);
+
+    return () => URL.revokeObjectURL(objectUrl);
   }, [onError]);
 
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'image/jpeg': [],
+      'image/png': [],
+      'image/webp': []
+    },
+    maxFiles: 1,
+    multiple: false
+  });
+
   const handleUpload = async () => {
-    if (!selectedFile) {
-      onError('Please select an image');
+    if (!selectedFile || !itemName) {
+      onError('Please select an image and enter an item name');
       return;
     }
 
     setIsUploading(true);
 
     try {
-      const fileName = generateFileName(itemName, selectedFile.file.name);
+      console.log('Starting upload process...');
+      console.log('Category:', category);
+      console.log('Item name:', itemName);
+      console.log('File:', selectedFile.name);
+
+      // Generate file name
+      const fileExt = selectedFile.name.split('.').pop();
+      const fileName = `${itemName.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.${fileExt}`;
       const filePath = `${category}/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
+      console.log('Generated file path:', filePath);
+
+      // Upload to Supabase
+      const { data, error: uploadError } = await supabase.storage
         .from('menu-images')
-        .upload(filePath, selectedFile.file, {
+        .upload(filePath, selectedFile, {
           cacheControl: '3600',
           upsert: false
         });
 
-      if (uploadError) throw uploadError;
+      console.log('Upload response:', { data, error: uploadError });
 
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // Get the public URL
       const { data: { publicUrl } } = supabase.storage
         .from('menu-images')
         .getPublicUrl(filePath);
 
-      onUploadComplete(publicUrl);
+      console.log('Public URL:', publicUrl);
+
+      setIsUploading(false);
+      setPreview(null);
       setSelectedFile(null);
+      onUploadComplete(publicUrl);
+
     } catch (error) {
       console.error('Upload error:', error);
-      onError(error instanceof Error ? error.message : 'Error uploading image');
-    } finally {
+      onError(`Failed to upload image: ${error.message}`);
       setIsUploading(false);
     }
   };
 
-  const handleClear = useCallback(() => {
-    if (selectedFile) {
-      URL.revokeObjectURL(selectedFile.preview);
-      setSelectedFile(null);
-    }
-  }, [selectedFile]);
-
-  useEffect(() => {
-    return () => {
-      if (selectedFile) {
-        URL.revokeObjectURL(selectedFile.preview);
-      }
-    };
-  }, [selectedFile]);
-
   return (
-    <div className="p-4 border rounded-lg shadow-sm">
-      <div className="space-y-4">
-        <div>
-          <label className="block mb-2 text-sm font-medium text-gray-700">
-            Select Image
-          </label>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={handleFileSelect}
-            disabled={isUploading}
-            className="block w-full text-sm text-gray-500
-                     file:mr-4 file:py-2 file:px-4
-                     file:rounded-md file:border-0
-                     file:text-sm file:font-medium
-                     file:bg-blue-50 file:text-blue-700
-                     hover:file:bg-blue-100"
-          />
-        </div>
-
-        {selectedFile && (
-          <div className="mt-4">
-            <p className="text-sm text-gray-500 mb-2">Preview:</p>
-            <div className="relative w-48 h-48 rounded-lg overflow-hidden group">
+    <div className="w-full space-y-4">
+      <div
+        {...getRootProps()}
+        className={cn(
+          "border-2 border-dashed rounded-lg p-8 transition-colors duration-200 ease-in-out cursor-pointer",
+          isDragActive 
+            ? "border-primary bg-primary/5" 
+            : "border-gray-300 hover:border-primary",
+          isUploading && "pointer-events-none opacity-50"
+        )}
+      >
+        <input {...getInputProps()} />
+        <div className="flex flex-col items-center justify-center gap-4">
+          {preview ? (
+            <div className="relative w-40 h-40 rounded-lg overflow-hidden">
               <Image
-                src={selectedFile.preview}
-                alt="Upload preview"
+                src={preview}
+                alt="Preview"
                 fill
                 className="object-cover"
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               />
-              <button
-                onClick={handleClear}
-                type="button"
-                aria-label="Clear selection"
-                className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 
-                         group-hover:opacity-100 transition-opacity"
-              >
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  className="h-4 w-4" 
-                  viewBox="0 0 20 20" 
-                  fill="currentColor"
-                >
-                  <path 
-                    fillRule="evenodd" 
-                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" 
-                    clipRule="evenodd" 
-                  />
-                </svg>
-              </button>
             </div>
-          </div>
-        )}
-
-        <button
-          onClick={handleUpload}
-          disabled={!selectedFile || isUploading}
-          type="button"
-          className={`w-full py-2 px-4 rounded-md text-white font-medium
-                     ${!selectedFile || isUploading
-                       ? 'bg-gray-400 cursor-not-allowed'
-                       : 'bg-blue-600 hover:bg-blue-700'
-                     } transition-colors`}
-        >
-          {isUploading ? (
-            <span className="flex items-center justify-center">
-              <Loader2 className="animate-spin -ml-1 mr-3 h-5 w-5" />
-              Uploading...
-            </span>
           ) : (
-            'Upload Image'
+            <div className="w-40 h-40 rounded-lg bg-gray-50 flex items-center justify-center">
+              {isUploading ? (
+                <Loader2 className="h-10 w-10 animate-spin text-gray-400" />
+              ) : (
+                <ImageIcon className="h-10 w-10 text-gray-400" />
+              )}
+            </div>
           )}
-        </button>
+
+          <div className="text-center">
+            {isUploading ? (
+              <div className="text-sm text-gray-600">Uploading...</div>
+            ) : (
+              <>
+                <div className="flex items-center justify-center gap-1">
+                  <Upload className="h-4 w-4" />
+                  <span className="font-medium">Drop image here or click to select</span>
+                </div>
+                <p className="text-sm text-gray-500 mt-2">
+                  Supports JPG, PNG, WEBP (max 2MB)
+                </p>
+              </>
+            )}
+          </div>
+        </div>
       </div>
+
+      {selectedFile && itemName && (
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSelectedFile(null);
+              setPreview(null);
+            }}
+            disabled={isUploading}
+          >
+            Clear
+          </Button>
+          <Button
+            onClick={handleUpload}
+            disabled={isUploading}
+            className="flex items-center gap-2"
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Uploading...
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4" />
+                Upload Image
+              </>
+            )}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
-
-export default ImageUpload;

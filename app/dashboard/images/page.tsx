@@ -11,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import type { MenuCategory } from '@/components/image/types';
 
@@ -62,7 +61,7 @@ export default function ImagesPage() {
             <CardTitle>Upload New Image</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4">
+            <div className="grid gap-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Category</label>
@@ -88,22 +87,22 @@ export default function ImagesPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Item Name</label>
-                  <Input
+                  <input
+                    type="text"
                     placeholder="Enter item name"
                     value={itemName}
                     onChange={(e) => setItemName(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   />
                 </div>
               </div>
 
-              {selectedCategory && itemName && (
-                <ImageUpload
-                  category={selectedCategory}
-                  itemName={itemName}
-                  onUploadComplete={handleUploadComplete}
-                  onError={handleUploadError}
-                />
-              )}
+              <ImageUpload
+                category={selectedCategory}
+                itemName={itemName}
+                onUploadComplete={handleUploadComplete}
+                onError={handleUploadError}
+              />
             </div>
           </CardContent>
         </Card>
