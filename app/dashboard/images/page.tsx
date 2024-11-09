@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { ImageUpload } from "@/components/image/ImageUpload";
 import { ImageGallery } from "@/components/image/ImageGallery";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,13 +28,10 @@ const MENU_CATEGORIES = [
 export default function ImagesPage() {
   const [selectedCategory, setSelectedCategory] = useState<MenuCategory>('arroces');
   const [itemName, setItemName] = useState('');
+  const [refreshGallery, setRefreshGallery] = useState(0); // Counter to trigger gallery refresh
   const { toast } = useToast();
   
   const handleUploadComplete = (url: string) => {
-    toast({
-      title: "Success",
-      description: "Image uploaded successfully",
-    });
     setItemName('');
   };
 
@@ -45,6 +42,11 @@ export default function ImagesPage() {
       variant: "destructive",
     });
   };
+
+  // Callback to refresh gallery
+  const handleImageUploaded = useCallback(() => {
+    setRefreshGallery(prev => prev + 1); // Increment counter to trigger refresh
+  }, []);
 
   return (
     <div className="container mx-auto py-10">
@@ -102,6 +104,8 @@ export default function ImagesPage() {
                 itemName={itemName}
                 onUploadComplete={handleUploadComplete}
                 onError={handleUploadError}
+                onItemNameChange={setItemName}
+                onImageUploaded={handleImageUploaded}
               />
             </div>
           </CardContent>
@@ -133,7 +137,10 @@ export default function ImagesPage() {
               </Select>
             </div>
 
-            <ImageGallery category={selectedCategory} />
+            <ImageGallery 
+              category={selectedCategory} 
+              refreshTrigger={refreshGallery} // Pass refresh trigger to gallery
+            />
           </CardContent>
         </Card>
       </div>

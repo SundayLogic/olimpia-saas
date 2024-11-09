@@ -7,24 +7,31 @@ import Image from 'next/image';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { StorageError } from '@supabase/storage-js';
+import { useToast } from "@/components/ui/use-toast";
 
 interface ImageUploadProps {
   category: string;
   itemName: string;
   onUploadComplete: (url: string) => void;
   onError: (error: string) => void;
+  onItemNameChange: (name: string) => void;
+  onImageUploaded: () => void;
 }
 
 export function ImageUpload({ 
   category,
   itemName,
   onUploadComplete,
-  onError 
+  onError,
+  onItemNameChange,
+  onImageUploaded
 }: ImageUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const supabase = createClientComponentClient();
+  const { toast } = useToast();
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -47,8 +54,14 @@ export function ImageUpload({
     setPreview(objectUrl);
     setSelectedFile(file);
 
+    // Set item name from file name
+    const fileName = file.name.split('.')[0]
+      .replace(/[-_]/g, ' ') // Replace hyphens and underscores with spaces
+      .replace(/\b\w/g, c => c.toUpperCase()); // Capitalize first letter of each word
+    onItemNameChange(fileName);
+
     return () => URL.revokeObjectURL(objectUrl);
-  }, [onError]);
+  }, [onError, onItemNameChange]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -70,17 +83,10 @@ export function ImageUpload({
     setIsUploading(true);
 
     try {
-      console.log('Starting upload process...');
-      console.log('Category:', category);
-      console.log('Item name:', itemName);
-      console.log('File:', selectedFile.name);
-
       // Generate file name
       const fileExt = selectedFile.name.split('.').pop();
       const fileName = `${itemName.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.${fileExt}`;
       const filePath = `${category}/${fileName}`;
-
-      console.log('Generated file path:', filePath);
 
       // Upload to Supabase
       const { data, error: uploadError } = await supabase.storage
@@ -90,29 +96,55 @@ export function ImageUpload({
           upsert: false
         });
 
-      console.log('Upload response:', { data, error: uploadError });
-
-      if (uploadError) {
-        throw uploadError;
-      }
+      if (uploadError) throw uploadError;
 
       // Get the public URL
       const { data: { publicUrl } } = supabase.storage
         .from('menu-images')
         .getPublicUrl(filePath);
 
-      console.log('Public URL:', publicUrl);
-
       setIsUploading(false);
       setPreview(null);
       setSelectedFile(null);
+      onItemNameChange(''); // Clear item name after successful upload
       onUploadComplete(publicUrl);
+      onImageUploaded(); // Trigger refresh of gallery
+      
+      // Show success toast
+      toast({
+        title: "Success",
+        description: "Image uploaded successfully!",
+        duration: 3000,
+      });
 
     } catch (error) {
       console.error('Upload error:', error);
-      onError(`Failed to upload image: ${error.message}`);
+      const errorMessage = error instanceof StorageError 
+        ? error.message 
+        : error instanceof Error 
+          ? error.message 
+          : 'Failed to upload image';
+      onError(errorMessage);
+      
+      // Show error toast
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+        duration: 5000,
+      });
+      
       setIsUploading(false);
     }
+  };
+
+  const handleClear = () => {
+    if (preview) {
+      URL.revokeObjectURL(preview);
+    }
+    setSelectedFile(null);
+    setPreview(null);
+    onItemNameChange(''); // Clear item name when clearing image
   };
 
   return (
@@ -170,10 +202,7 @@ export function ImageUpload({
         <div className="flex justify-end gap-2">
           <Button
             variant="outline"
-            onClick={() => {
-              setSelectedFile(null);
-              setPreview(null);
-            }}
+            onClick={handleClear}
             disabled={isUploading}
           >
             Clear

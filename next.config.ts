@@ -1,14 +1,15 @@
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    unoptimized: true, // This will bypass Next.js image optimization
+    domains: ['kvfrbrkjfdgepqdmxwqg.supabase.co'],
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**kvfrbrkjfdgepqdmxwqg.supabase.co',
+        hostname: '*.supabase.co',
         pathname: '**',
       },
     ],
   },
-};
+}
 
 export default nextConfig;
