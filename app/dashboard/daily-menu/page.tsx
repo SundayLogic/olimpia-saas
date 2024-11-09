@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Button } from "@/components/ui/button";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 interface DailyMenu {
   id: number;
@@ -27,21 +27,37 @@ interface FullDailyMenu extends DailyMenu {
   second_courses: MenuItem[];
 }
 
+interface EditingState {
+  menuId: number | null;
+  courseType: 'first' | 'second' | null;
+  courseId: number | null;
+  value: string;
+}
+
 export default function DailyMenuPage() {
   const [menus, setMenus] = useState<FullDailyMenu[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [editing, setEditing] = useState<EditingState>({
+    menuId: null,
+    courseType: null,
+    courseId: null,
+    value: ''
+  });
   const { toast } = useToast();
   const supabase = createClientComponentClient();
 
-  const loadMenus = async () => {
+  const loadMenus = useCallback(async () => {
     try {
       setIsLoading(true);
+      console.log('Starting to load menus...');
       
-      // First, get all daily menus
+      // First fetch the daily menus
       const { data: dailyMenus, error: menusError } = await supabase
         .from('daily_menus')
         .select('*')
         .order('date', { ascending: false });
+
+      console.log('Daily menus response:', { dailyMenus, menusError });
 
       if (menusError) throw menusError;
 
@@ -72,6 +88,7 @@ export default function DailyMenuPage() {
         };
       }));
 
+      console.log('Full menus:', fullMenus);
       setMenus(fullMenus);
     } catch (error) {
       console.error('Error loading menus:', error);
@@ -83,11 +100,184 @@ export default function DailyMenuPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [supabase, toast]);
 
   useEffect(() => {
     loadMenus();
-  }, []);
+  }, [loadMenus]);
+
+  const handleEdit = (menuId: number, courseType: 'first' | 'second', course: MenuItem) => {
+    setEditing({
+      menuId,
+      courseType,
+      courseId: course.id,
+      value: course.name
+    });
+  };
+
+  const handleSave = async () => {
+    if (!editing.courseId || !editing.courseType || !editing.value.trim()) return;
+
+    try {
+      const tableName = editing.courseType === 'first' 
+        ? 'daily_menu_first_courses' 
+        : 'daily_menu_second_courses';
+
+      console.log('Updating course:', {
+        tableName,
+        courseId: editing.courseId,
+        newName: editing.value
+      });
+
+      const { data, error } = await supabase
+        .from(tableName)
+        .update({ name: editing.value.trim() })
+        .eq('id', editing.courseId)
+        .select();
+
+      if (error) throw error;
+
+      console.log('Update response:', data);
+
+      toast({
+        title: "Success",
+        description: "Course updated successfully",
+      });
+
+      // Update local state
+      setMenus(prevMenus => 
+        prevMenus.map(menu => ({
+          ...menu,
+          first_courses: editing.courseType === 'first'
+            ? menu.first_courses.map(course =>
+                course.id === editing.courseId
+                  ? { ...course, name: editing.value.trim() }
+                  : course
+              )
+            : menu.first_courses,
+          second_courses: editing.courseType === 'second'
+            ? menu.second_courses.map(course =>
+                course.id === editing.courseId
+                  ? { ...course, name: editing.value.trim() }
+                  : course
+              )
+            : menu.second_courses,
+        }))
+      );
+
+      setEditing({
+        menuId: null,
+        courseType: null,
+        courseId: null,
+        value: ''
+      });
+
+    } catch (error) {
+      console.error('Error updating course:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update course",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUpdateStatus = useCallback(async (menuId: number, currentActive: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('daily_menus')
+        .update({ active: !currentActive })
+        .eq('id', menuId);
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: "Failed to update menu status",
+          variant: "destructive",
+        });
+      } else {
+        setMenus(prevMenus =>
+          prevMenus.map(menu =>
+            menu.id === menuId
+              ? { ...menu, active: !currentActive }
+              : menu
+          )
+        );
+
+        toast({
+          title: "Success",
+          description: "Menu status updated successfully",
+        });
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update menu status",
+        variant: "destructive",
+      });
+    }
+  }, [supabase, toast]);
+
+  const renderCourse = (course: MenuItem, menuId: number, type: 'first' | 'second') => {
+    const isEditing = editing.courseId === course.id && 
+                     editing.menuId === menuId && 
+                     editing.courseType === type;
+
+    if (isEditing) {
+      return (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={editing.value}
+            onChange={(e) => setEditing(prev => ({ ...prev, value: e.target.value }))}
+            className="flex-1 px-2 py-1 border rounded-md"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleSave();
+              } else if (e.key === 'Escape') {
+                setEditing({ menuId: null, courseType: null, courseId: null, value: '' });
+              }
+            }}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleSave}
+          >
+            Save
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setEditing({ menuId: null, courseType: null, courseId: null, value: '' })}
+          >
+            Cancel
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center justify-between group">
+        <span>{course.name}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">
+            Order: {course.display_order}
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={() => handleEdit(menuId, type, course)}
+          >
+            Edit
+          </Button>
+        </div>
+      </div>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -121,22 +311,7 @@ export default function DailyMenuPage() {
               <div className="flex items-center gap-2">
                 <Button 
                   variant={menu.active ? "default" : "secondary"}
-                  onClick={async () => {
-                    const { error } = await supabase
-                      .from('daily_menus')
-                      .update({ active: !menu.active })
-                      .eq('id', menu.id);
-
-                    if (error) {
-                      toast({
-                        title: "Error",
-                        description: "Failed to update menu status",
-                        variant: "destructive",
-                      });
-                    } else {
-                      loadMenus();
-                    }
-                  }}
+                  onClick={() => handleUpdateStatus(menu.id, menu.active)}
                 >
                   {menu.active ? 'Active' : 'Inactive'}
                 </Button>
@@ -148,11 +323,8 @@ export default function DailyMenuPage() {
                   <h3 className="font-semibold mb-4">First Courses</h3>
                   <ul className="space-y-2">
                     {menu.first_courses.map((course) => (
-                      <li key={course.id} className="flex items-center justify-between">
-                        <span>{course.name}</span>
-                        <span className="text-sm text-muted-foreground">
-                          Order: {course.display_order}
-                        </span>
+                      <li key={course.id}>
+                        {renderCourse(course, menu.id, 'first')}
                       </li>
                     ))}
                   </ul>
@@ -161,11 +333,8 @@ export default function DailyMenuPage() {
                   <h3 className="font-semibold mb-4">Second Courses</h3>
                   <ul className="space-y-2">
                     {menu.second_courses.map((course) => (
-                      <li key={course.id} className="flex items-center justify-between">
-                        <span>{course.name}</span>
-                        <span className="text-sm text-muted-foreground">
-                          Order: {course.display_order}
-                        </span>
+                      <li key={course.id}>
+                        {renderCourse(course, menu.id, 'second')}
                       </li>
                     ))}
                   </ul>
@@ -174,17 +343,6 @@ export default function DailyMenuPage() {
             </CardContent>
           </Card>
         ))}
-
-        <Button 
-          className="fixed bottom-6 right-6"
-          size="lg"
-          onClick={() => {
-            // Add logic to create new menu
-          }}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add New Menu
-        </Button>
       </div>
     </div>
   );
