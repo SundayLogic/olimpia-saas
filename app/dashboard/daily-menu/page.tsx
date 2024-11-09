@@ -1,4 +1,3 @@
-// app/dashboard/daily-menu/page.tsx
 'use client';
 
 import { useState, useEffect } from "react";
@@ -7,42 +6,78 @@ import { useToast } from "@/components/ui/use-toast";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Button } from "@/components/ui/button";
 import { Loader2, Plus } from "lucide-react";
-import { DailyMenuEditor } from "@/components/daily-menu/DailyMenuEditor";
-import { MenuList } from "@/components/daily-menu/MenuList";
+
+interface DailyMenu {
+  id: number;
+  date: string;
+  price: number;
+  active: boolean;
+  created_at: string;
+}
 
 interface MenuItem {
-  id: string;
+  id: number;
+  daily_menu_id: number;
   name: string;
-  description: string;
-  price: number;
-  category: string;
-  is_available: boolean;
+  display_order: number;
+}
+
+interface FullDailyMenu extends DailyMenu {
+  first_courses: MenuItem[];
+  second_courses: MenuItem[];
 }
 
 export default function DailyMenuPage() {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [menus, setMenus] = useState<FullDailyMenu[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const { toast } = useToast();
   const supabase = createClientComponentClient();
 
-  const loadMenuItems = async () => {
+  const loadMenus = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('daily_menu')
+      
+      // First, get all daily menus
+      const { data: dailyMenus, error: menusError } = await supabase
+        .from('daily_menus')
         .select('*')
-        .order('category', { ascending: true });
+        .order('date', { ascending: false });
 
-      if (error) throw error;
+      if (menusError) throw menusError;
 
-      setMenuItems(data || []);
+      // For each menu, get its courses
+      const fullMenus = await Promise.all(dailyMenus.map(async (menu) => {
+        // Get first courses
+        const { data: firstCourses, error: firstCoursesError } = await supabase
+          .from('daily_menu_first_courses')
+          .select('*')
+          .eq('daily_menu_id', menu.id)
+          .order('display_order');
+
+        if (firstCoursesError) throw firstCoursesError;
+
+        // Get second courses
+        const { data: secondCourses, error: secondCoursesError } = await supabase
+          .from('daily_menu_second_courses')
+          .select('*')
+          .eq('daily_menu_id', menu.id)
+          .order('display_order');
+
+        if (secondCoursesError) throw secondCoursesError;
+
+        return {
+          ...menu,
+          first_courses: firstCourses || [],
+          second_courses: secondCourses || [],
+        };
+      }));
+
+      setMenus(fullMenus);
     } catch (error) {
-      console.error('Error loading menu items:', error);
+      console.error('Error loading menus:', error);
       toast({
         title: "Error",
-        description: "Failed to load menu items",
+        description: "Failed to load daily menus",
         variant: "destructive",
       });
     } finally {
@@ -51,89 +86,15 @@ export default function DailyMenuPage() {
   };
 
   useEffect(() => {
-    loadMenuItems();
+    loadMenus();
   }, []);
-
-  const handleAddNew = () => {
-    setSelectedItem(null);
-    setIsEditing(true);
-  };
-
-  const handleEdit = (item: MenuItem) => {
-    setSelectedItem(item);
-    setIsEditing(true);
-  };
-
-  const handleSave = async (item: Partial<MenuItem>) => {
-    try {
-      if (selectedItem?.id) {
-        // Update existing item
-        const { error } = await supabase
-          .from('daily_menu')
-          .update(item)
-          .eq('id', selectedItem.id);
-
-        if (error) throw error;
-
-        toast({
-          title: "Success",
-          description: "Menu item updated successfully",
-        });
-      } else {
-        // Insert new item
-        const { error } = await supabase
-          .from('daily_menu')
-          .insert([item]);
-
-        if (error) throw error;
-
-        toast({
-          title: "Success",
-          description: "Menu item added successfully",
-        });
-      }
-
-      setIsEditing(false);
-      loadMenuItems();
-    } catch (error) {
-      console.error('Error saving menu item:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save menu item",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('daily_menu')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Menu item deleted successfully",
-      });
-
-      loadMenuItems();
-    } catch (error) {
-      console.error('Error deleting menu item:', error);
-      toast({
-        title: "Error",
-        description: "Failed to delete menu item",
-        variant: "destructive",
-      });
-    }
-  };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="container mx-auto py-10">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
       </div>
     );
   }
@@ -143,35 +104,87 @@ export default function DailyMenuPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Daily Menu Management</h1>
         <p className="text-muted-foreground">
-          Manage your restaurant&apos;s daily menu items
+          Manage your restaurant&apos;s daily menus
         </p>
       </div>
 
       <div className="grid gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Menu Items</CardTitle>
-            <Button onClick={handleAddNew} className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Add New Item
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {isEditing ? (
-              <DailyMenuEditor
-                item={selectedItem}
-                onSave={handleSave}
-                onCancel={() => setIsEditing(false)}
-              />
-            ) : (
-              <MenuList
-                items={menuItems}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-              />
-            )}
-          </CardContent>
-        </Card>
+        {menus.map((menu) => (
+          <Card key={menu.id}>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>
+                Menu for {new Date(menu.date).toLocaleDateString()}
+                <span className="ml-2 text-sm text-muted-foreground">
+                  {menu.price.toFixed(2)}€
+                </span>
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant={menu.active ? "default" : "secondary"}
+                  onClick={async () => {
+                    const { error } = await supabase
+                      .from('daily_menus')
+                      .update({ active: !menu.active })
+                      .eq('id', menu.id);
+
+                    if (error) {
+                      toast({
+                        title: "Error",
+                        description: "Failed to update menu status",
+                        variant: "destructive",
+                      });
+                    } else {
+                      loadMenus();
+                    }
+                  }}
+                >
+                  {menu.active ? 'Active' : 'Inactive'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-2 gap-8">
+                <div>
+                  <h3 className="font-semibold mb-4">First Courses</h3>
+                  <ul className="space-y-2">
+                    {menu.first_courses.map((course) => (
+                      <li key={course.id} className="flex items-center justify-between">
+                        <span>{course.name}</span>
+                        <span className="text-sm text-muted-foreground">
+                          Order: {course.display_order}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-4">Second Courses</h3>
+                  <ul className="space-y-2">
+                    {menu.second_courses.map((course) => (
+                      <li key={course.id} className="flex items-center justify-between">
+                        <span>{course.name}</span>
+                        <span className="text-sm text-muted-foreground">
+                          Order: {course.display_order}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+
+        <Button 
+          className="fixed bottom-6 right-6"
+          size="lg"
+          onClick={() => {
+            // Add logic to create new menu
+          }}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Add New Menu
+        </Button>
       </div>
     </div>
   );
