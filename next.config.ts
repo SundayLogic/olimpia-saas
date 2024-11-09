@@ -1,11 +1,13 @@
 const nextConfig = {
-  reactStrictMode: true,
-  poweredByHeader: false,
-  typescript: {
-    ignoreBuildErrors: false,
-  },
   images: {
-    domains: ['kvfrbrkjfdgepqdmxwqg.supabase.co'],
+    unoptimized: true, // This will bypass Next.js image optimization
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**kvfrbrkjfdgepqdmxwqg.supabase.co',
+        pathname: '**',
+      },
+    ],
   },
 };
 
