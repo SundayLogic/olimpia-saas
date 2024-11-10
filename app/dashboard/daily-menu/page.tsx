@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
 import { useState, useCallback, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Loader2, CalendarDays, ListTodo } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { DateSelection } from "@/components/daily-menu/MenuDateSelection";
@@ -43,13 +43,18 @@ interface MenuTemplate {
   created_at?: string;
 }
 
-type ScheduleStep = 'select-date' | 'select-menu' | 'customize' | 'confirm';
+type ScheduleStep = "select-date" | "select-menu" | "customize" | "confirm";
 
 export default function DailyMenuPage() {
-  const [activeTab, setActiveTab] = useState<'current' | 'schedule'>('current');
-  const [currentStep, setCurrentStep] = useState<ScheduleStep>('select-date');
-  const [selectedDates, setSelectedDates] = useState<{ from: Date; to: Date } | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<MenuTemplate | null>(null);
+  const [activeTab, setActiveTab] = useState<"current" | "schedule">("current");
+  const [currentStep, setCurrentStep] = useState<ScheduleStep>("select-date");
+  const [selectedDates, setSelectedDates] = useState<{
+    from: Date;
+    to: Date;
+  } | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<MenuTemplate | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [menus, setMenus] = useState<DailyMenu[]>([]);
   const { toast } = useToast();
@@ -58,41 +63,44 @@ export default function DailyMenuPage() {
   const loadMenus = useCallback(async () => {
     try {
       setIsLoading(true);
-      
+
       const { data: dailyMenus, error: menusError } = await supabase
-        .from('daily_menus')
-        .select('*')
-        .order('date', { ascending: false });
+        .from("daily_menus")
+        .select("*")
+        .order("date", { ascending: false });
 
       if (menusError) throw menusError;
 
-      const fullMenus = await Promise.all(dailyMenus.map(async (menu) => {
-        const [firstCoursesResponse, secondCoursesResponse] = await Promise.all([
-          supabase
-            .from('daily_menu_first_courses')
-            .select('*')
-            .eq('daily_menu_id', menu.id)
-            .order('display_order'),
-          supabase
-            .from('daily_menu_second_courses')
-            .select('*')
-            .eq('daily_menu_id', menu.id)
-            .order('display_order')
-        ]);
+      const fullMenus = await Promise.all(
+        dailyMenus.map(async (menu) => {
+          const [firstCoursesResponse, secondCoursesResponse] =
+            await Promise.all([
+              supabase
+                .from("daily_menu_first_courses")
+                .select("*")
+                .eq("daily_menu_id", menu.id)
+                .order("display_order"),
+              supabase
+                .from("daily_menu_second_courses")
+                .select("*")
+                .eq("daily_menu_id", menu.id)
+                .order("display_order"),
+            ]);
 
-        if (firstCoursesResponse.error) throw firstCoursesResponse.error;
-        if (secondCoursesResponse.error) throw secondCoursesResponse.error;
+          if (firstCoursesResponse.error) throw firstCoursesResponse.error;
+          if (secondCoursesResponse.error) throw secondCoursesResponse.error;
 
-        return {
-          ...menu,
-          first_courses: firstCoursesResponse.data || [],
-          second_courses: secondCoursesResponse.data || [],
-        };
-      }));
+          return {
+            ...menu,
+            first_courses: firstCoursesResponse.data || [],
+            second_courses: secondCoursesResponse.data || [],
+          };
+        })
+      );
 
       setMenus(fullMenus);
     } catch (error) {
-      console.error('Error:', error);
+      console.error("Error:", error);
       toast({
         title: "Error",
         description: "Failed to load menus",
@@ -117,51 +125,59 @@ export default function DailyMenuPage() {
 
   const validateTemplate = (template: MenuTemplate) => {
     if (!template.first_courses.length) {
-      throw new Error('Template must have at least one first course');
+      throw new Error("Template must have at least one first course");
     }
     if (!template.second_courses.length) {
-      throw new Error('Template must have at least one second course');
+      throw new Error("Template must have at least one second course");
     }
   };
 
   const handleNextStep = () => {
     try {
       switch (currentStep) {
-        case 'select-date':
+        case "select-date":
           if (!selectedDates) {
-            throw new Error('Please select dates first');
+            throw new Error("Please select dates first");
           }
-          setCurrentStep('select-menu');
+          setCurrentStep("select-menu");
           break;
-        case 'select-menu':
+        case "select-menu":
           if (!selectedTemplate) {
-            throw new Error('Please select a menu template');
+            throw new Error("Please select a menu template");
           }
           validateTemplate(selectedTemplate);
-          setCurrentStep('customize');
+          setCurrentStep("customize");
           break;
-        case 'customize':
+        case "customize":
           if (!selectedTemplate) {
-            throw new Error('Please select a menu template');
+            throw new Error("Please select a menu template");
           }
           validateTemplate(selectedTemplate);
-          setCurrentStep('confirm');
+          setCurrentStep("confirm");
           break;
-        case 'confirm':
+        case "confirm":
           handleScheduleComplete();
           break;
       }
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : 'An error occurred',
+        description:
+          error instanceof Error ? error.message : "An error occurred",
         variant: "destructive",
       });
     }
   };
 
   const handleScheduleComplete = async () => {
-    if (!selectedDates || !selectedTemplate) return;
+    if (!selectedDates || !selectedTemplate) {
+      toast({
+        title: "Error",
+        description: "Missing dates or template",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       const start = selectedDates.from;
@@ -169,41 +185,91 @@ export default function DailyMenuPage() {
       const currentDate = new Date(start);
 
       while (currentDate <= end) {
+        console.log(
+          "Creating menu for:",
+          currentDate.toISOString().split("T")[0]
+        );
+
+        // Create the daily menu
         const { data: newMenu, error: menuError } = await supabase
-          .from('daily_menus')
-          .insert({
-            date: currentDate.toISOString().split('T')[0],
-            price: 13.00,
-            active: true,
-          })
+          .from("daily_menus")
+          .insert([
+            {
+              date: currentDate.toISOString().split("T")[0],
+              price: 13.0,
+              active: true,
+            },
+          ])
           .select()
           .single();
 
-        if (menuError) throw menuError;
+        if (menuError) {
+          console.error("Error creating menu:", {
+            code: menuError.code,
+            message: menuError.message,
+            details: menuError.details,
+            hint: menuError.hint,
+          });
+          throw new Error(`Failed to create menu: ${menuError.message}`);
+        }
 
-        const firstCourses = selectedTemplate.first_courses.map(course => ({
+        if (!newMenu?.id) {
+          throw new Error("No menu ID returned from creation");
+        }
+
+        console.log("Menu created successfully:", newMenu);
+
+        // Prepare courses data
+        const firstCourses = selectedTemplate.first_courses.map((course) => ({
           daily_menu_id: newMenu.id,
           name: course.name,
           display_order: course.display_order,
         }));
 
-        const secondCourses = selectedTemplate.second_courses.map(course => ({
+        const secondCourses = selectedTemplate.second_courses.map((course) => ({
           daily_menu_id: newMenu.id,
           name: course.name,
           display_order: course.display_order,
         }));
 
-        const [firstCoursesError, secondCoursesError] = await Promise.all([
-          supabase.from('daily_menu_first_courses').insert(firstCourses),
-          supabase.from('daily_menu_second_courses').insert(secondCourses),
-        ]);
+        // Insert first courses
+        const { error: firstCoursesError } = await supabase
+          .from("daily_menu_first_courses")
+          .insert(firstCourses);
 
-        if (firstCoursesError.error) throw firstCoursesError.error;
-        if (secondCoursesError.error) throw secondCoursesError.error;
+        if (firstCoursesError) {
+          console.error("Error inserting first courses:", {
+            code: firstCoursesError.code,
+            message: firstCoursesError.message,
+            details: firstCoursesError.details,
+            hint: firstCoursesError.hint,
+          });
+          throw new Error(
+            `Failed to insert first courses: ${firstCoursesError.message}`
+          );
+        }
 
+        // Insert second courses
+        const { error: secondCoursesError } = await supabase
+          .from("daily_menu_second_courses")
+          .insert(secondCourses);
+
+        if (secondCoursesError) {
+          console.error("Error inserting second courses:", {
+            code: secondCoursesError.code,
+            message: secondCoursesError.message,
+            details: secondCoursesError.details,
+            hint: secondCoursesError.hint,
+          });
+          throw new Error(
+            `Failed to insert second courses: ${secondCoursesError.message}`
+          );
+        }
+
+        // Move to next day
         currentDate.setDate(currentDate.getDate() + 1);
       }
-      
+
       toast({
         title: "Success",
         description: "Menu scheduled successfully",
@@ -211,14 +277,21 @@ export default function DailyMenuPage() {
 
       setSelectedDates(null);
       setSelectedTemplate(null);
-      setCurrentStep('select-date');
-      setActiveTab('current');
+      setCurrentStep("select-date");
+      setActiveTab("current");
       await loadMenus();
     } catch (error) {
-      console.error('Error scheduling menu:', error);
+      console.error("Error scheduling menu:", {
+        error,
+        type: typeof error,
+        isError: error instanceof Error,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+
       toast({
         title: "Error",
-        description: "Failed to schedule menu",
+        description:
+          error instanceof Error ? error.message : "Failed to schedule menu",
         variant: "destructive",
       });
     }
@@ -226,18 +299,18 @@ export default function DailyMenuPage() {
 
   const renderScheduleContent = () => {
     switch (currentStep) {
-      case 'select-date':
+      case "select-date":
         return (
           <DateSelection
             onDateSelect={handleDateSelect}
             onNext={handleNextStep}
-            existingMenus={menus.map(menu => ({
+            existingMenus={menus.map((menu) => ({
               date: menu.date,
               active: menu.active,
             }))}
           />
         );
-      case 'select-menu':
+      case "select-menu":
         return (
           <MenuTemplateSelection
             selectedDates={selectedDates}
@@ -245,7 +318,7 @@ export default function DailyMenuPage() {
             onEdit={handleTemplateSelect}
           />
         );
-      case 'customize':
+      case "customize":
         return (
           <Card>
             <CardContent className="pt-6">
@@ -253,20 +326,26 @@ export default function DailyMenuPage() {
                 <div>
                   <h2 className="text-xl font-semibold">Customize Menu</h2>
                   <p className="text-muted-foreground">
-                    Selected dates: {selectedDates?.from.toLocaleDateString()} - {selectedDates?.to.toLocaleDateString()}
+                    Selected dates: {selectedDates?.from.toLocaleDateString()} -{" "}
+                    {selectedDates?.to.toLocaleDateString()}
                   </p>
                 </div>
                 <Button onClick={handleNextStep}>Continue</Button>
               </div>
               {selectedTemplate && (
                 <div>
-                  <p className="mb-4 font-medium">Template: {selectedTemplate.name}</p>
+                  <p className="mb-4 font-medium">
+                    Template: {selectedTemplate.name}
+                  </p>
                   <div className="grid md:grid-cols-2 gap-8">
                     <div>
                       <h3 className="font-semibold mb-2">First Courses</h3>
                       <ul className="space-y-1">
-                        {selectedTemplate.first_courses.map(course => (
-                          <li key={course.id} className="p-2 rounded-md hover:bg-muted">
+                        {selectedTemplate.first_courses.map((course) => (
+                          <li
+                            key={course.id}
+                            className="p-2 rounded-md hover:bg-muted"
+                          >
                             {course.name}
                           </li>
                         ))}
@@ -275,8 +354,11 @@ export default function DailyMenuPage() {
                     <div>
                       <h3 className="font-semibold mb-2">Second Courses</h3>
                       <ul className="space-y-1">
-                        {selectedTemplate.second_courses.map(course => (
-                          <li key={course.id} className="p-2 rounded-md hover:bg-muted">
+                        {selectedTemplate.second_courses.map((course) => (
+                          <li
+                            key={course.id}
+                            className="p-2 rounded-md hover:bg-muted"
+                          >
                             {course.name}
                           </li>
                         ))}
@@ -288,7 +370,7 @@ export default function DailyMenuPage() {
             </CardContent>
           </Card>
         );
-      case 'confirm':
+      case "confirm":
         return (
           <Card>
             <CardContent className="pt-6">
@@ -296,20 +378,26 @@ export default function DailyMenuPage() {
                 <div>
                   <h2 className="text-xl font-semibold">Confirm Schedule</h2>
                   <p className="text-muted-foreground">
-                    Selected dates: {selectedDates?.from.toLocaleDateString()} - {selectedDates?.to.toLocaleDateString()}
+                    Selected dates: {selectedDates?.from.toLocaleDateString()} -{" "}
+                    {selectedDates?.to.toLocaleDateString()}
                   </p>
                 </div>
                 <Button onClick={handleScheduleComplete}>Schedule Menu</Button>
               </div>
               {selectedTemplate && (
                 <div>
-                  <p className="font-medium mb-4">Selected Template: {selectedTemplate.name}</p>
+                  <p className="font-medium mb-4">
+                    Selected Template: {selectedTemplate.name}
+                  </p>
                   <div className="grid md:grid-cols-2 gap-8">
                     <div>
                       <h3 className="font-semibold mb-2">First Courses</h3>
                       <ul className="space-y-1 text-sm">
-                        {selectedTemplate.first_courses.map(course => (
-                          <li key={course.id} className="p-2 rounded-md hover:bg-muted">
+                        {selectedTemplate.first_courses.map((course) => (
+                          <li
+                            key={course.id}
+                            className="p-2 rounded-md hover:bg-muted"
+                          >
                             {course.name}
                           </li>
                         ))}
@@ -318,8 +406,11 @@ export default function DailyMenuPage() {
                     <div>
                       <h3 className="font-semibold mb-2">Second Courses</h3>
                       <ul className="space-y-1 text-sm">
-                        {selectedTemplate.second_courses.map(course => (
-                          <li key={course.id} className="p-2 rounded-md hover:bg-muted">
+                        {selectedTemplate.second_courses.map((course) => (
+                          <li
+                            key={course.id}
+                            className="p-2 rounded-md hover:bg-muted"
+                          >
                             {course.name}
                           </li>
                         ))}
@@ -355,7 +446,10 @@ export default function DailyMenuPage() {
         </p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'current' | 'schedule')}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as "current" | "schedule")}
+      >
         <TabsList className="mb-4">
           <TabsTrigger value="current" className="flex items-center gap-2">
             <ListTodo className="h-4 w-4" />
@@ -379,9 +473,7 @@ export default function DailyMenuPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="schedule">
-          {renderScheduleContent()}
-        </TabsContent>
+        <TabsContent value="schedule">{renderScheduleContent()}</TabsContent>
       </Tabs>
     </div>
   );
