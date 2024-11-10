@@ -10,6 +10,7 @@
     "ui": "shadcn-ui"
   },
   "dependencies": {
+    "@hello-pangea/dnd": "^17.0.0",
     "@hookform/resolvers": "^3.9.1",
     "@radix-ui/react-alert-dialog": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.2",
