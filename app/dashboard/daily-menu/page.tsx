@@ -11,6 +11,9 @@ import { MenuTemplateSelection } from "@/components/daily-menu/MenuTemplateSelec
 import { Button } from "@/components/ui/button";
 import { CurrentMenuList } from "@/components/daily-menu/CurrentMenuList";
 
+/**
+ * Interface representing a base menu item.
+ */
 interface BaseMenuItem {
   id: number;
   daily_menu_id: number;
@@ -18,6 +21,9 @@ interface BaseMenuItem {
   display_order: number;
 }
 
+/**
+ * Interface representing a daily menu.
+ */
 interface DailyMenu {
   id: number;
   date: string;
@@ -28,12 +34,18 @@ interface DailyMenu {
   second_courses: BaseMenuItem[];
 }
 
+/**
+ * Interface representing a template menu item.
+ */
 interface TemplateMenuItem {
   id: number;
   name: string;
   display_order: number;
 }
 
+/**
+ * Interface representing a menu template.
+ */
 interface MenuTemplate {
   id: string;
   name: string;
@@ -43,8 +55,14 @@ interface MenuTemplate {
   created_at?: string;
 }
 
+/**
+ * Type representing the current step in the scheduling process.
+ */
 type ScheduleStep = "select-date" | "select-menu" | "customize" | "confirm";
 
+/**
+ * The main component for managing daily menus.
+ */
 export default function DailyMenuPage() {
   const [activeTab, setActiveTab] = useState<"current" | "schedule">("current");
   const [currentStep, setCurrentStep] = useState<ScheduleStep>("select-date");
@@ -55,11 +73,21 @@ export default function DailyMenuPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<MenuTemplate | null>(
     null
   );
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [menus, setMenus] = useState<DailyMenu[]>([]);
   const { toast } = useToast();
   const supabase = createClientComponentClient();
 
+  /**
+   * Function to verify the integrity and completeness of the menu template data.
+   * @param template - The menu template to validate.
+   * @returns An array of error messages. If empty, the template is valid.
+   */
+  
+
+  /**
+   * Function to load existing menus from Supabase.
+   */
   const loadMenus = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -100,7 +128,7 @@ export default function DailyMenuPage() {
 
       setMenus(fullMenus);
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error loading menus:", error);
       toast({
         title: "Error",
         description: "Failed to load menus",
@@ -115,14 +143,36 @@ export default function DailyMenuPage() {
     loadMenus();
   }, [loadMenus]);
 
+  /**
+   * Handler for date selection.
+   * @param dates - The selected date range.
+   */
   const handleDateSelect = (dates: { from: Date; to: Date } | null) => {
-    setSelectedDates(dates);
+    if (dates) {
+      // Ensure the dates are set to midnight for consistent comparison
+      const from = new Date(dates.from);
+      const to = new Date(dates.to || dates.from); // If no 'to' date, use 'from' date
+      from.setHours(0, 0, 0, 0);
+      to.setHours(0, 0, 0, 0);
+
+      setSelectedDates({ from, to });
+    } else {
+      setSelectedDates(null);
+    }
   };
 
+  /**
+   * Handler for template selection.
+   * @param template - The selected menu template.
+   */
   const handleTemplateSelect = (template: MenuTemplate) => {
     setSelectedTemplate(template);
   };
 
+  /**
+   * Validates the selected menu template to ensure it meets required criteria.
+   * @param template - The menu template to validate.
+   */
   const validateTemplate = (template: MenuTemplate) => {
     if (!template.first_courses.length) {
       throw new Error("Template must have at least one first course");
@@ -132,6 +182,9 @@ export default function DailyMenuPage() {
     }
   };
 
+  /**
+   * Handler to navigate to the next step in the scheduling process.
+   */
   const handleNextStep = () => {
     try {
       switch (currentStep) {
@@ -169,6 +222,10 @@ export default function DailyMenuPage() {
     }
   };
 
+  /**
+   * Function to handle the completion of the scheduling process.
+   * Validates the template, checks date ranges, creates menus and their courses with error handling.
+   */
   const handleScheduleComplete = async () => {
     if (!selectedDates || !selectedTemplate) {
       toast({
@@ -180,123 +237,175 @@ export default function DailyMenuPage() {
     }
 
     try {
-      const start = selectedDates.from;
-      const end = selectedDates.to;
-      const currentDate = new Date(start);
+      setIsLoading(true);
 
-      while (currentDate <= end) {
-        console.log(
-          "Creating menu for:",
-          currentDate.toISOString().split("T")[0]
-        );
+      // Use local time instead of server time
+      const serverDate = new Date();
+      serverDate.setUTCHours(0, 0, 0, 0);
 
-        // Create the daily menu
-        const { data: newMenu, error: menuError } = await supabase
-          .from("daily_menus")
-          .insert([
-            {
-              date: currentDate.toISOString().split("T")[0],
-              price: 13.0,
-              active: true,
-            },
-          ])
-          .select()
-          .single();
+      const start = new Date(selectedDates.from);
+      const end = new Date(selectedDates.to);
 
-        if (menuError) {
-          console.error("Error creating menu:", {
-            code: menuError.code,
-            message: menuError.message,
-            details: menuError.details,
-            hint: menuError.hint,
-          });
-          throw new Error(`Failed to create menu: ${menuError.message}`);
-        }
+      // Set time to midnight UTC for comparison
+      start.setUTCHours(0, 0, 0, 0);
+      end.setUTCHours(0, 0, 0, 0);
 
-        if (!newMenu?.id) {
-          throw new Error("No menu ID returned from creation");
-        }
+      // Calculate max date (7 days from now)
+      const maxDate = new Date(serverDate);
+      maxDate.setUTCDate(maxDate.getUTCDate() + 7);
 
-        console.log("Menu created successfully:", newMenu);
+      console.log("Date validation:", {
+        serverDate: serverDate.toISOString(),
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        maxAllowedDate: maxDate.toISOString(),
+      });
 
-        // Prepare courses data
-        const firstCourses = selectedTemplate.first_courses.map((course) => ({
-          daily_menu_id: newMenu.id,
-          name: course.name,
-          display_order: course.display_order,
-        }));
+      // Validate date range
+      if (start < serverDate || end > maxDate) {
+        toast({
+          title: "Error",
+          description:
+            "Menus can only be created for dates between today and 7 days from now",
+          variant: "destructive",
+        });
+        return;
+      }
 
-        const secondCourses = selectedTemplate.second_courses.map((course) => ({
-          daily_menu_id: newMenu.id,
-          name: course.name,
-          display_order: course.display_order,
-        }));
+      const processDate = new Date(start);
+      let successCount = 0;
 
-        // Insert first courses
-        const { error: firstCoursesError } = await supabase
-          .from("daily_menu_first_courses")
-          .insert(firstCourses);
+      while (processDate <= end) {
+        const dateStr = processDate.toISOString().split("T")[0];
+        console.log("Processing date:", dateStr);
 
-        if (firstCoursesError) {
-          console.error("Error inserting first courses:", {
-            code: firstCoursesError.code,
-            message: firstCoursesError.message,
-            details: firstCoursesError.details,
-            hint: firstCoursesError.hint,
-          });
+        try {
+          // First check if menu exists
+          const { data: existingMenu, error: checkError } = await supabase
+            .from("daily_menus")
+            .select("id")
+            .eq("date", dateStr)
+            .single();
+
+          if (checkError && checkError.code !== "PGRST116") {
+            // Not found error code
+            console.error("Menu check error:", checkError);
+            throw new Error(checkError.message);
+          }
+
+          if (existingMenu) {
+            console.log(`Menu already exists for ${dateStr}, skipping...`);
+            processDate.setUTCDate(processDate.getUTCDate() + 1);
+            continue;
+          }
+
+          // Create menu with explicit data
+          const menuData = {
+            date: dateStr,
+            price: 13.0,
+            active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
+          console.log("Creating menu with data:", menuData);
+
+          const { data: newMenu, error: menuError } = await supabase
+            .from("daily_menus")
+            .insert([menuData])
+            .select()
+            .single();
+
+          if (menuError) {
+            console.error("Menu creation error:", menuError);
+            throw new Error(menuError.message);
+          }
+
+          if (!newMenu) {
+            throw new Error("Menu created but no data returned");
+          }
+
+          console.log("Menu created:", newMenu);
+
+          // Create first courses
+          const firstCoursesData = selectedTemplate.first_courses.map(
+            (course, index) => ({
+              daily_menu_id: newMenu.id,
+              name: course.name.trim(),
+              display_order: course.display_order || index + 1,
+              created_at: new Date().toISOString(),
+            })
+          );
+
+          // Create second courses
+          const secondCoursesData = selectedTemplate.second_courses.map(
+            (course, index) => ({
+              daily_menu_id: newMenu.id,
+              name: course.name.trim(),
+              display_order: course.display_order || index + 1,
+              created_at: new Date().toISOString(),
+            })
+          );
+
+          // Insert courses in parallel
+          const [firstCoursesResult, secondCoursesResult] = await Promise.all([
+            supabase.from("daily_menu_first_courses").insert(firstCoursesData),
+            supabase
+              .from("daily_menu_second_courses")
+              .insert(secondCoursesData),
+          ]);
+
+          if (firstCoursesResult.error || secondCoursesResult.error) {
+            // If either fails, delete the menu and throw error
+            await supabase.from("daily_menus").delete().eq("id", newMenu.id);
+            console.error("Courses insertion error:", {
+              firstCoursesError: firstCoursesResult.error,
+              secondCoursesError: secondCoursesResult.error,
+            });
+            throw new Error("Failed to create courses");
+          }
+
+          console.log(`Successfully created menu for ${dateStr}`);
+          successCount++;
+        } catch (error) {
+          console.error(`Error processing date ${dateStr}:`, error);
           throw new Error(
-            `Failed to insert first courses: ${firstCoursesError.message}`
+            `Failed to create menu for ${dateStr}: ${error instanceof Error ? error.message : "Unknown error"}`
           );
         }
 
-        // Insert second courses
-        const { error: secondCoursesError } = await supabase
-          .from("daily_menu_second_courses")
-          .insert(secondCourses);
-
-        if (secondCoursesError) {
-          console.error("Error inserting second courses:", {
-            code: secondCoursesError.code,
-            message: secondCoursesError.message,
-            details: secondCoursesError.details,
-            hint: secondCoursesError.hint,
-          });
-          throw new Error(
-            `Failed to insert second courses: ${secondCoursesError.message}`
-          );
-        }
-
-        // Move to next day
-        currentDate.setDate(currentDate.getDate() + 1);
+        processDate.setUTCDate(processDate.getUTCDate() + 1);
       }
 
       toast({
         title: "Success",
-        description: "Menu scheduled successfully",
+        description: `Successfully created ${successCount} menu(s)`,
       });
 
+      // Reset state and refresh
       setSelectedDates(null);
       setSelectedTemplate(null);
       setCurrentStep("select-date");
       setActiveTab("current");
-      await loadMenus();
+      await loadMenus(); // Refresh the menu list
     } catch (error) {
-      console.error("Error scheduling menu:", {
-        error,
-        type: typeof error,
-        isError: error instanceof Error,
-        message: error instanceof Error ? error.message : "Unknown error",
-      });
-
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to schedule menu";
+      console.error("Schedule error:", error);
       toast({
         title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to schedule menu",
+        description: errorMessage,
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  /**
+   * Function to render the content of the scheduling tab based on the current step.
+   * @returns JSX element representing the current step's UI.
+   */
   const renderScheduleContent = () => {
     switch (currentStep) {
       case "select-date":
@@ -382,7 +491,16 @@ export default function DailyMenuPage() {
                     {selectedDates?.to.toLocaleDateString()}
                   </p>
                 </div>
-                <Button onClick={handleScheduleComplete}>Schedule Menu</Button>
+                <Button onClick={handleScheduleComplete} disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Scheduling...
+                    </>
+                  ) : (
+                    "Schedule Menu"
+                  )}
+                </Button>
               </div>
               {selectedTemplate && (
                 <div>
@@ -427,7 +545,11 @@ export default function DailyMenuPage() {
     }
   };
 
-  if (isLoading) {
+  /**
+   * Renders a loading spinner while data is being fetched or operations are in progress.
+   */
+  if (isLoading && currentStep !== "confirm") {
+    // Avoid hiding loader during scheduling
     return (
       <div className="container mx-auto py-10">
         <div className="flex items-center justify-center h-64">
@@ -437,6 +559,9 @@ export default function DailyMenuPage() {
     );
   }
 
+  /**
+   * Main render of the component, displaying navigation tabs and corresponding content.
+   */
   return (
     <div className="container mx-auto py-10">
       <div className="mb-8">
