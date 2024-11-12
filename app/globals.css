@@ -57,3 +57,17 @@
     @apply bg-background text-foreground;
   }
 }
+@layer components {
+  .menu-group-header {
+    @apply transition-colors hover:bg-muted/80;
+  }
+  
+  .badge-success {
+    @apply bg-green-100 text-green-800 hover:bg-green-200;
+  }
+}
+@layer components {
+  .badge-success {
+    @apply bg-green-100 text-green-800 hover:bg-green-200;
+  }
+}

@@ -1,28 +1,27 @@
 // components/daily-menu/CurrentMenuList.tsx
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { format } from 'date-fns';
+import { useState, useMemo } from "react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import { 
   DragDropContext, 
   Draggable, 
   Droppable, 
   DropResult 
-} from '@hello-pangea/dnd';
-import { 
-  createClientComponentClient 
-} from '@supabase/auth-helpers-nextjs';
+} from "@hello-pangea/dnd";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { 
   Pencil, 
   Trash2, 
   Plus, 
   GripVertical, 
-  X 
-} from 'lucide-react';
+  X,
+} from "lucide-react";
 
-import { 
-  Button 
-} from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { 
   Table, 
   TableBody, 
@@ -38,18 +37,10 @@ import {
   DialogTitle, 
   DialogFooter 
 } from "@/components/ui/dialog";
-import { 
-  Input 
-} from "@/components/ui/input";
-import { 
-  Label 
-} from "@/components/ui/label";
-import { 
-  Switch 
-} from "@/components/ui/switch";
-import { 
-  useToast 
-} from "@/components/ui/use-toast";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/components/ui/use-toast";
 import { 
   AlertDialog, 
   AlertDialogAction, 
@@ -60,6 +51,13 @@ import {
   AlertDialogHeader, 
   AlertDialogTitle 
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { MenuHeader } from "./MenuHeader"; // Ensure this path is correct
 
 interface MenuItem {
   id: number;
@@ -84,14 +82,71 @@ interface CurrentMenuListProps {
 }
 
 export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
+  // Existing state
   const [isEditing, setIsEditing] = useState(false);
   const [menuToDelete, setMenuToDelete] = useState<number | null>(null);
   const [editedMenu, setEditedMenu] = useState<DailyMenu | null>(null);
-  const [newFirstCourse, setNewFirstCourse] = useState('');
-  const [newSecondCourse, setNewSecondCourse] = useState('');
+  const [newFirstCourse, setNewFirstCourse] = useState("");
+  const [newSecondCourse, setNewSecondCourse] = useState("");
+
+  // New state for search and filter
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
   const { toast } = useToast();
   const supabase = createClientComponentClient();
 
+  /**
+   * **Filtering Logic**
+   * Filters the menus based on search term and status filter.
+   */
+  const filteredMenus = useMemo(() => {
+    return menus.filter(menu => {
+      // Search Filter (search by date)
+      const matchesSearch = searchTerm === "" || 
+        format(new Date(menu.date), 'PP', { locale: es })
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase());
+      
+      // Status Filter
+      const matchesStatus = statusFilter === "all" || 
+        (statusFilter === "active" ? menu.active : !menu.active);
+      
+      return matchesSearch && matchesStatus;
+    });
+  }, [menus, searchTerm, statusFilter]);
+
+  /**
+   * Handler to toggle the active status of a menu.
+   */
+  const handleStatusChange = async (menu: DailyMenu, checked: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('daily_menus')
+        .update({ active: checked })
+        .eq('id', menu.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Status updated",
+        description: `Menu for ${format(new Date(menu.date), 'PP', { locale: es })} is now ${checked ? 'active' : 'inactive'}`,
+      });
+
+      onMenuUpdate();
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update menu status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  /**
+   * Handler for editing a menu.
+   */
   const handleEditMenu = (menu: DailyMenu) => {
     setEditedMenu({
       ...menu,
@@ -101,6 +156,9 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
     setIsEditing(true);
   };
 
+  /**
+   * Function to handle drag and drop reordering of courses.
+   */
   const handleDragEnd = async (result: DropResult) => {
     if (!editedMenu) return;
     
@@ -125,6 +183,9 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
     });
   };
 
+  /**
+   * Function to handle saving edited menu details.
+   */
   const handleSaveMenu = async () => {
     if (!editedMenu) return;
 
@@ -185,6 +246,9 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
     }
   };
 
+  /**
+   * Function to handle deleting a menu.
+   */
   const handleDeleteMenu = async () => {
     if (!menuToDelete) return;
 
@@ -230,6 +294,9 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
     }
   };
 
+  /**
+   * Function to handle adding a new course.
+   */
   const handleAddCourse = async (type: 'first' | 'second') => {
     if (!editedMenu) return;
 
@@ -278,6 +345,9 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
     }
   };
 
+  /**
+   * Function to handle deleting a course.
+   */
   const handleDeleteCourse = async (courseId: number, type: 'first' | 'second') => {
     if (!editedMenu) return;
 
@@ -310,66 +380,99 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
   };
 
   return (
-    <div className="space-y-4">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Price</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {menus.map((menu) => (
-            <TableRow key={menu.id}>
-              <TableCell>{format(new Date(menu.date), 'PP')}</TableCell>
-              <TableCell>{menu.price.toFixed(2)}€</TableCell>
-              <TableCell>
-                <Switch
-                  checked={menu.active}
-                  onCheckedChange={async (checked) => {
-                    const { error } = await supabase
-                      .from('daily_menus')
-                      .update({ active: checked })
-                      .eq('id', menu.id);
+    <div className="space-y-6">
+      {/* **Menu Header for Search and Filter** */}
+      <MenuHeader 
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        totalMenus={filteredMenus.length}
+      />
 
-                    if (error) {
-                      toast({
-                        title: "Error",
-                        description: "Failed to update menu status",
-                        variant: "destructive",
-                      });
-                    } else {
-                      onMenuUpdate();
-                    }
-                  }}
-                />
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEditMenu(menu)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setMenuToDelete(menu.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Price</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {filteredMenus.length === 0 ? (
+              <TableRow>
+                <TableCell 
+                  colSpan={4} 
+                  className="h-32 text-center text-muted-foreground"
+                >
+                  No menus found
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredMenus.map((menu) => (
+                <TableRow key={menu.id}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium">
+                        {format(new Date(menu.date), 'PP', { locale: es })}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {menu.first_courses.length + menu.second_courses.length} courses
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>{menu.price.toFixed(2)}€</TableCell>
+                  <TableCell>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge 
+                            variant={menu.active ? "success" : "secondary"} // Using 'success' variant
+                            className="cursor-pointer"
+                            onClick={() => handleStatusChange(menu, !menu.active)}
+                          >
+                            <span className="flex items-center gap-2">
+                              <span className={`h-2 w-2 rounded-full ${
+                                menu.active ? "bg-green-500" : "bg-gray-400"
+                              }`} />
+                              {menu.active ? "Active" : "Inactive"}
+                            </span>
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>Click to toggle status</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditMenu(menu)}
+                        aria-label={`Edit menu for ${format(new Date(menu.date), 'PP', { locale: es })}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setMenuToDelete(menu.id)}
+                        aria-label={`Delete menu for ${format(new Date(menu.date), 'PP', { locale: es })}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Card>
 
-      {/* Edit Menu Dialog */}
+      {/* **Edit Menu Dialog** */}
       <Dialog open={isEditing} onOpenChange={(open) => !open && setIsEditing(false)}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
@@ -450,6 +553,7 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleDeleteCourse(course.id, 'first')}
+                                    aria-label={`Delete course ${course.name}`}
                                   >
                                     <X className="h-4 w-4" />
                                   </Button>
@@ -471,6 +575,7 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
                         variant="outline"
                         size="sm"
                         onClick={() => handleAddCourse('first')}
+                        aria-label="Add new first course"
                       >
                         <Plus className="h-4 w-4" />
                       </Button>
@@ -520,6 +625,7 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleDeleteCourse(course.id, 'second')}
+                                    aria-label={`Delete course ${course.name}`}
                                   >
                                     <X className="h-4 w-4" />
                                   </Button>
@@ -541,6 +647,7 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
                         variant="outline"
                         size="sm"
                         onClick={() => handleAddCourse('second')}
+                        aria-label="Add new second course"
                       >
                         <Plus className="h-4 w-4" />
                       </Button>
@@ -557,6 +664,7 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
                       ...editedMenu,
                       active: checked
                     })}
+                    aria-label="Toggle menu active status"
                   />
                   <Label>Active</Label>
                 </div>
@@ -574,7 +682,7 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Menu Alert Dialog */}
+      {/* **Delete Menu Alert Dialog** */}
       <AlertDialog open={!!menuToDelete} onOpenChange={() => setMenuToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
