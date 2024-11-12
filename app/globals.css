@@ -71,3 +71,42 @@
     @apply bg-green-100 text-green-800 hover:bg-green-200;
   }
 }
+@layer components {
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+  }
+
+  .calendar-day {
+    @apply relative aspect-square flex items-center justify-center text-sm transition-all;
+  }
+
+  .calendar-day:hover:not(:disabled) {
+    @apply bg-primary/10;
+  }
+
+  .calendar-day[aria-selected="true"] {
+    @apply bg-primary text-primary-foreground;
+  }
+
+  .calendar-day.day-range-start {
+    @apply rounded-l-md;
+  }
+
+  .calendar-day.day-range-end {
+    @apply rounded-r-md;
+  }
+
+  .calendar-day.day-range-middle {
+    @apply bg-accent/50;
+  }
+
+  .calendar-navigation {
+    @apply flex items-center justify-between mb-4;
+  }
+
+  .calendar-month-title {
+    @apply text-lg font-semibold;
+  }
+}
