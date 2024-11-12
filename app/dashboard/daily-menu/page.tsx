@@ -78,6 +78,7 @@ export default function DailyMenuPage() {
    * @param template - The menu template to validate.
    * @returns An array of error messages. If empty, the template is valid.
    */
+  
 
   /**
    * Function to load existing menus from Supabase.
@@ -227,9 +228,9 @@ export default function DailyMenuPage() {
     }
 
     try {
+      console.log("Starting schedule process...");
       setIsLoading(true);
 
-      // Create dates in Spanish timezone
       const spainTimeFormatter = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Europe/Madrid',
         year: 'numeric',
@@ -242,44 +243,32 @@ export default function DailyMenuPage() {
       const spainCurrentDate = new Date(spainTimeFormatter.format(serverDate));
       spainCurrentDate.setHours(0, 0, 0, 0);
 
-      const start = new Date(spainTimeFormatter.format(selectedDates.from));
-      const end = new Date(spainTimeFormatter.format(selectedDates.to));
-
-      // Set time to midnight
+      // Create new Date objects for start and end
+      const start = new Date(selectedDates.from);
+      const end = new Date(selectedDates.to);
       start.setHours(0, 0, 0, 0);
       end.setHours(0, 0, 0, 0);
 
-      // Calculate max date (7 days from now) in Spain's timezone
-      const maxDate = new Date(spainCurrentDate);
-      maxDate.setDate(maxDate.getDate() + 7);
-
-      console.log("Date validation:", {
-        spainCurrentDate: spainCurrentDate.toISOString(),
-        startDate: start.toISOString(),
-        endDate: end.toISOString(),
-        maxAllowedDate: maxDate.toISOString(),
+      console.log("Date Range:", {
+        start: start.toISOString(),
+        end: end.toISOString(),
+        isRange: start.getTime() !== end.getTime()
       });
 
-      // Validate date range
-      if (start < spainCurrentDate || end > maxDate) {
-        toast({
-          title: "Error",
-          description: "Menus can only be created for dates between today and 7 days from now (Spain time)",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      let processDate = new Date(start);
+      let currentDate = new Date(start);
       let successCount = 0;
+      const totalDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-      while (processDate <= end) {
-        // Format date in Spanish timezone
-        const dateStr = spainTimeFormatter.format(processDate);
-        console.log("Processing date:", dateStr);
+      console.log(`Processing ${totalDays} days...`);
+
+      // Process each date
+      while (currentDate.getTime() <= end.getTime()) {
+        const dateStr = spainTimeFormatter.format(currentDate);
+        console.log(`Processing day ${successCount + 1} of ${totalDays}: ${dateStr}`);
 
         try {
-          // First check if menu exists
+          // Check for existing menu
+          console.log("Checking for existing menu...");
           const { data: existingMenu, error: checkError } = await supabase
             .from("daily_menus")
             .select("id")
@@ -293,86 +282,74 @@ export default function DailyMenuPage() {
 
           if (existingMenu) {
             console.log(`Menu already exists for ${dateStr}, skipping...`);
-            processDate.setDate(processDate.getDate() + 1);
-            continue;
+          } else {
+            console.log("Creating new menu...");
+            // Create menu
+            const menuData = {
+              date: dateStr,
+              price: 13.0,
+              active: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+
+            const { data: newMenu, error: menuError } = await supabase
+              .from("daily_menus")
+              .insert([menuData])
+              .select()
+              .single();
+
+            if (menuError) {
+              console.error("Menu creation error:", menuError);
+              throw new Error(menuError.message);
+            }
+
+            console.log("Creating courses...");
+            // Create courses data
+            const firstCoursesData = selectedTemplate.first_courses.map((course, index) => ({
+              daily_menu_id: newMenu.id,
+              name: course.name.trim(),
+              display_order: course.display_order || index + 1,
+              created_at: new Date().toISOString(),
+            }));
+
+            const secondCoursesData = selectedTemplate.second_courses.map((course, index) => ({
+              daily_menu_id: newMenu.id,
+              name: course.name.trim(),
+              display_order: course.display_order || index + 1,
+              created_at: new Date().toISOString(),
+            }));
+
+            // Insert courses
+            const coursesPromises = await Promise.all([
+              supabase.from("daily_menu_first_courses").insert(firstCoursesData),
+              supabase.from("daily_menu_second_courses").insert(secondCoursesData),
+            ]);
+
+            const hasErrors = coursesPromises.some(result => result.error);
+            if (hasErrors) {
+              console.error("Course creation errors:", coursesPromises);
+              // Cleanup the menu if course creation failed
+              await supabase.from("daily_menus").delete().eq("id", newMenu.id);
+              throw new Error("Failed to create courses");
+            }
+
+            successCount++;
+            console.log(`Successfully created menu ${successCount} of ${totalDays}`);
           }
-
-          // Create menu with explicit data in Spain's timezone
-          const menuData = {
-            date: dateStr,
-            price: 13.0,
-            active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-
-          console.log("Creating menu with data:", menuData);
-
-          const { data: newMenu, error: menuError } = await supabase
-            .from("daily_menus")
-            .insert([menuData])
-            .select()
-            .single();
-
-          if (menuError) {
-            console.error("Menu creation error:", menuError);
-            throw new Error(menuError.message);
-          }
-
-          if (!newMenu) {
-            throw new Error("Menu created but no data returned");
-          }
-
-          console.log("Menu created:", newMenu);
-
-          // Create first courses
-          const firstCoursesData = selectedTemplate.first_courses.map((course, index) => ({
-            daily_menu_id: newMenu.id,
-            name: course.name.trim(),
-            display_order: course.display_order || index + 1,
-            created_at: new Date().toISOString()
-          }));
-
-          // Create second courses
-          const secondCoursesData = selectedTemplate.second_courses.map((course, index) => ({
-            daily_menu_id: newMenu.id,
-            name: course.name.trim(),
-            display_order: course.display_order || index + 1,
-            created_at: new Date().toISOString()
-          }));
-
-          // Insert courses in parallel
-          const [firstCoursesResult, secondCoursesResult] = await Promise.all([
-            supabase.from("daily_menu_first_courses").insert(firstCoursesData),
-            supabase.from("daily_menu_second_courses").insert(secondCoursesData)
-          ]);
-
-          if (firstCoursesResult.error || secondCoursesResult.error) {
-            // If either fails, delete the menu and throw error
-            await supabase.from("daily_menus").delete().eq("id", newMenu.id);
-            console.error("Courses insertion error:", {
-              firstCoursesError: firstCoursesResult.error,
-              secondCoursesError: secondCoursesResult.error
-            });
-            throw new Error("Failed to create courses");
-          }
-
-          console.log(`Successfully created menu for ${dateStr}`);
-          successCount++;
 
         } catch (error) {
-          console.error(`Error processing date ${dateStr}:`, error);
-          throw new Error(
-            `Failed to create menu for ${dateStr}: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`
-          );
+          console.error("Error in menu creation loop:", error);
+          throw error;
         }
 
-        // Increment the date
-        processDate.setDate(processDate.getDate() + 1);
+        // Move to next date - IMPORTANT: Create a new date object
+        const nextDate = new Date(currentDate);
+        nextDate.setDate(currentDate.getDate() + 1);
+        currentDate = nextDate;
       }
 
+      console.log(`Completed processing ${successCount} menus`);
       toast({
         title: "Success",
         description: `Successfully created ${successCount} menu(s)`,
@@ -383,12 +360,11 @@ export default function DailyMenuPage() {
       setSelectedTemplate(null);
       setCurrentStep("select-date");
       setActiveTab("current");
-      await loadMenus(); // Refresh the menu list
+      await loadMenus();
 
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to schedule menu";
-      console.error("Schedule error:", error);
+      console.error("Final error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to schedule menu";
       toast({
         title: "Error",
         description: errorMessage,
