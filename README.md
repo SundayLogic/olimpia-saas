@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-11-12 11:04:39
+Generated on: 2024-11-14 18:07:13
 
 ## Documented Directories:
 - app/
@@ -59,6 +59,7 @@ src/
             │   ├── CurrentMenuList.tsx
             │   ├── DailyMenuEditor.tsx
             │   ├── MenuDateSelection.tsx
+            │   ├── MenuHeader.tsx
             │   ├── MenuList.tsx
             │   ├── MenuTemplateSelection.tsx
             ├── data/
@@ -74,6 +75,7 @@ src/
             │   ├── utils.ts
             ├── ui/
             │   ├── alert-dialog.tsx
+            │   ├── badge.tsx
             │   ├── button.tsx
             │   ├── calendar.tsx
             │   ├── card.tsx
@@ -101,6 +103,7 @@ src/
             │   ├── types.ts
         │   
         │   ├── utils.ts
+        ├── types/
 
 middleware.ts/
     ├── middleware.ts/
@@ -453,7 +456,7 @@ export default function DailyMenuPage() {
   const [currentStep, setCurrentStep] = useState<ScheduleStep>('select-date');
   const [selectedDates, setSelectedDates] = useState<{ from: Date; to: Date } | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<MenuTemplate | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [menus, setMenus] = useState<DailyMenu[]>([]);
   const { toast } = useToast();
   const supabase = createClientComponentClient();
@@ -463,38 +466,7 @@ export default function DailyMenuPage() {
    * @param template - The menu template to validate.
    * @returns An array of error messages. If empty, the template is valid.
    */
-  const verifyTemplateData = (template: MenuTemplate): string[] => {
-    const errors: string[] = [];
-    
-    if (!template.id) errors.push('Template ID is missing');
-    if (!template.name) errors.push('Template name is missing');
-    
-    // Verify first courses
-    if (!Array.isArray(template.first_courses)) {
-      errors.push('First courses must be an array');
-    } else {
-      template.first_courses.forEach((course, index) => {
-        if (!course.name) errors.push(`First course ${index + 1} is missing a name`);
-        if (typeof course.display_order !== 'number') {
-          console.log('Missing display order for first course, will use index');
-        }
-      });
-    }
-
-    // Verify second courses
-    if (!Array.isArray(template.second_courses)) {
-      errors.push('Second courses must be an array');
-    } else {
-      template.second_courses.forEach((course, index) => {
-        if (!course.name) errors.push(`Second course ${index + 1} is missing a name`);
-        if (typeof course.display_order !== 'number') {
-          console.log('Missing display order for second course, will use index');
-        }
-      });
-    }
-
-    return errors;
-  };
+  
 
   /**
    * Function to load existing menus from Supabase.
@@ -631,7 +603,7 @@ export default function DailyMenuPage() {
 
   /**
    * Function to handle the completion of the scheduling process.
-   * Validates the template, checks date ranges against server time, creates menus and their courses with error handling.
+   * Validates the template, checks date ranges in Spain's timezone, creates menus and their courses with error handling.
    */
   const handleScheduleComplete = async () => {
     if (!selectedDates || !selectedTemplate) {
@@ -644,149 +616,128 @@ export default function DailyMenuPage() {
     }
 
     try {
+      console.log("Starting schedule process...");
       setIsLoading(true);
 
-      // First get server timestamp to ensure we're using server time
-      const { data: serverTimeData, error: serverTimeError } = await supabase
-        .rpc('get_server_time');
-
-      if (serverTimeError || !serverTimeData) {
-        console.error('Error fetching server time:', serverTimeError);
-        toast({
-          title: "Error",
-          description: "Failed to fetch server time",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const serverDate = new Date(serverTimeData);
-      serverDate.setUTCHours(0, 0, 0, 0);
-
-      const start = new Date(selectedDates.from);
-      const end = new Date(selectedDates.to);
-
-      // Set time to midnight UTC
-      start.setUTCHours(0, 0, 0, 0);
-      end.setUTCHours(0, 0, 0, 0);
-
-      // Calculate max date based on server time
-      const maxDate = new Date(serverDate);
-      maxDate.setUTCDate(maxDate.getUTCDate() + 7);
-
-      console.log('Date validation:', {
-        serverDate: serverDate.toISOString(),
-        startDate: start.toISOString(),
-        endDate: end.toISOString(),
-        maxAllowedDate: maxDate.toISOString()
+      const spainTimeFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Madrid',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
       });
 
-      // Validate date range against server time
-      if (start < serverDate || end > maxDate) {
-        toast({
-          title: "Error",
-          description: "Menus can only be created for dates between today and 7 days from now",
-          variant: "destructive",
-        });
-        return;
-      }
+      // Get current date in Spain
+      const serverDate = new Date();
+      const spainCurrentDate = new Date(spainTimeFormatter.format(serverDate));
+      spainCurrentDate.setHours(0, 0, 0, 0);
 
-      let processDate = new Date(start);
+      // Create new Date objects for start and end
+      const start = new Date(selectedDates.from);
+      const end = new Date(selectedDates.to);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
+
+      console.log("Date Range:", {
+        start: start.toISOString(),
+        end: end.toISOString(),
+        isRange: start.getTime() !== end.getTime()
+      });
+
+      let currentDate = new Date(start);
       let successCount = 0;
+      const totalDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-      while (processDate <= end) {
-        const dateStr = processDate.toISOString().split('T')[0];
-        console.log('Processing date:', dateStr);
+      console.log(`Processing ${totalDays} days...`);
+
+      // Process each date
+      while (currentDate.getTime() <= end.getTime()) {
+        const dateStr = spainTimeFormatter.format(currentDate);
+        console.log(`Processing day ${successCount + 1} of ${totalDays}: ${dateStr}`);
 
         try {
-          // First check if menu exists
+          // Check for existing menu
+          console.log("Checking for existing menu...");
           const { data: existingMenu, error: checkError } = await supabase
-            .from('daily_menus')
-            .select('id')
-            .eq('date', dateStr)
+            .from("daily_menus")
+            .select("id")
+            .eq("date", dateStr)
             .single();
 
-          if (checkError && checkError.code !== 'PGRST116') { // Assuming PGRST116 is 'no data found'
-            console.error('Menu check error:', checkError);
+          if (checkError && checkError.code !== "PGRST116") { // Not found error code
+            console.error("Menu check error:", checkError);
             throw new Error(checkError.message);
           }
 
           if (existingMenu) {
             console.log(`Menu already exists for ${dateStr}, skipping...`);
-            processDate.setUTCDate(processDate.getUTCDate() + 1);
-            continue;
+          } else {
+            console.log("Creating new menu...");
+            // Create menu
+            const menuData = {
+              date: dateStr,
+              price: 13.0,
+              active: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+
+            const { data: newMenu, error: menuError } = await supabase
+              .from("daily_menus")
+              .insert([menuData])
+              .select()
+              .single();
+
+            if (menuError) {
+              console.error("Menu creation error:", menuError);
+              throw new Error(menuError.message);
+            }
+
+            console.log("Creating courses...");
+            // Create courses data
+            const firstCoursesData = selectedTemplate.first_courses.map((course, index) => ({
+              daily_menu_id: newMenu.id,
+              name: course.name.trim(),
+              display_order: course.display_order || index + 1,
+              created_at: new Date().toISOString(),
+            }));
+
+            const secondCoursesData = selectedTemplate.second_courses.map((course, index) => ({
+              daily_menu_id: newMenu.id,
+              name: course.name.trim(),
+              display_order: course.display_order || index + 1,
+              created_at: new Date().toISOString(),
+            }));
+
+            // Insert courses
+            const coursesPromises = await Promise.all([
+              supabase.from("daily_menu_first_courses").insert(firstCoursesData),
+              supabase.from("daily_menu_second_courses").insert(secondCoursesData),
+            ]);
+
+            const hasErrors = coursesPromises.some(result => result.error);
+            if (hasErrors) {
+              console.error("Course creation errors:", coursesPromises);
+              // Cleanup the menu if course creation failed
+              await supabase.from("daily_menus").delete().eq("id", newMenu.id);
+              throw new Error("Failed to create courses");
+            }
+
+            successCount++;
+            console.log(`Successfully created menu ${successCount} of ${totalDays}`);
           }
-
-          // Create menu with explicit data
-          const menuData = {
-            date: dateStr,
-            price: 13.0,
-            active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          };
-
-          console.log('Creating menu with data:', menuData);
-
-          const { data: newMenu, error: menuError } = await supabase
-            .from('daily_menus')
-            .insert([menuData])
-            .select()
-            .single();
-
-          if (menuError) {
-            console.error('Menu creation error:', menuError);
-            throw new Error(menuError.message);
-          }
-
-          if (!newMenu) {
-            throw new Error('Menu created but no data returned');
-          }
-
-          console.log('Menu created:', newMenu);
-
-          // Create courses in a transaction-like sequence
-          const firstCoursesData = selectedTemplate.first_courses.map((course, index) => ({
-            daily_menu_id: newMenu.id,
-            name: course.name.trim(),
-            display_order: course.display_order || index + 1,
-            created_at: new Date().toISOString()
-          }));
-
-          const secondCoursesData = selectedTemplate.second_courses.map((course, index) => ({
-            daily_menu_id: newMenu.id,
-            name: course.name.trim(),
-            display_order: course.display_order || index + 1,
-            created_at: new Date().toISOString()
-          }));
-
-          // Insert courses
-          const [firstCoursesResult, secondCoursesResult] = await Promise.all([
-            supabase.from('daily_menu_first_courses').insert(firstCoursesData),
-            supabase.from('daily_menu_second_courses').insert(secondCoursesData)
-          ]);
-
-          if (firstCoursesResult.error || secondCoursesResult.error) {
-            // Rollback if either fails
-            await supabase.from('daily_menus').delete().eq('id', newMenu.id);
-            console.error('Courses insertion error:', {
-              firstCoursesError: firstCoursesResult.error,
-              secondCoursesError: secondCoursesResult.error
-            });
-            throw new Error('Failed to create courses');
-          }
-
-          console.log(`Successfully created menu for ${dateStr}`);
-          successCount++;
 
         } catch (error) {
-          console.error(`Error processing date ${dateStr}:`, error);
-          throw new Error(`Failed to create menu for ${dateStr}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          console.error("Error in menu creation loop:", error);
+          throw error;
         }
 
-        processDate.setUTCDate(processDate.getUTCDate() + 1);
+        // Move to next date - IMPORTANT: Create a new date object
+        const nextDate = new Date(currentDate);
+        nextDate.setDate(currentDate.getDate() + 1);
+        currentDate = nextDate;
       }
 
+      console.log(`Completed processing ${successCount} menus`);
       toast({
         title: "Success",
         description: `Successfully created ${successCount} menu(s)`,
@@ -800,8 +751,8 @@ export default function DailyMenuPage() {
       await loadMenus();
 
     } catch (error) {
+      console.error("Final error:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to schedule menu";
-      console.error('Schedule error:', error);
       toast({
         title: "Error",
         description: errorMessage,
@@ -891,7 +842,19 @@ export default function DailyMenuPage() {
                     Selected dates: {selectedDates?.from.toLocaleDateString()} - {selectedDates?.to.toLocaleDateString()}
                   </p>
                 </div>
-                <Button onClick={handleScheduleComplete}>Schedule Menu</Button>
+                <Button 
+                  onClick={handleScheduleComplete}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Scheduling...
+                    </>
+                  ) : (
+                    "Schedule Menu"
+                  )}
+                </Button>
               </div>
               {selectedTemplate && (
                 <div>
@@ -931,7 +894,7 @@ export default function DailyMenuPage() {
   /**
    * Renders a loading spinner while data is being fetched or operations are in progress.
    */
-  if (isLoading) {
+  if (isLoading && currentStep !== 'confirm') { // Avoid hiding loader during scheduling
     return (
       <div className="container mx-auto py-10">
         <div className="flex items-center justify-center h-64">
@@ -1518,6 +1481,59 @@ Error reading file: 'utf-8' codec can't decode byte 0x96 in position 50: invalid
     @apply bg-background text-foreground;
   }
 }
+@layer components {
+  .menu-group-header {
+    @apply transition-colors hover:bg-muted/80;
+  }
+  
+  .badge-success {
+    @apply bg-green-100 text-green-800 hover:bg-green-200;
+  }
+}
+@layer components {
+  .badge-success {
+    @apply bg-green-100 text-green-800 hover:bg-green-200;
+  }
+}
+@layer components {
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+  }
+
+  .calendar-day {
+    @apply relative aspect-square flex items-center justify-center text-sm transition-all;
+  }
+
+  .calendar-day:hover:not(:disabled) {
+    @apply bg-primary/10;
+  }
+
+  .calendar-day[aria-selected="true"] {
+    @apply bg-primary text-primary-foreground;
+  }
+
+  .calendar-day.day-range-start {
+    @apply rounded-l-md;
+  }
+
+  .calendar-day.day-range-end {
+    @apply rounded-r-md;
+  }
+
+  .calendar-day.day-range-middle {
+    @apply bg-accent/50;
+  }
+
+  .calendar-navigation {
+    @apply flex items-center justify-between mb-4;
+  }
+
+  .calendar-month-title {
+    @apply text-lg font-semibold;
+  }
+}
 ```
 
 ### app/layout.tsx
@@ -2071,30 +2087,29 @@ export function SignUpForm() {
 
 ```typescript
 // components/daily-menu/CurrentMenuList.tsx
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { format } from 'date-fns';
+import { useState, useMemo } from "react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import { 
   DragDropContext, 
   Draggable, 
   Droppable, 
   DropResult 
-} from '@hello-pangea/dnd';
-import { 
-  createClientComponentClient 
-} from '@supabase/auth-helpers-nextjs';
+} from "@hello-pangea/dnd";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { 
   Pencil, 
   Trash2, 
   Plus, 
   GripVertical, 
-  X 
-} from 'lucide-react';
+  X,
+} from "lucide-react";
 
-import { 
-  Button 
-} from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { 
   Table, 
   TableBody, 
@@ -2110,18 +2125,10 @@ import {
   DialogTitle, 
   DialogFooter 
 } from "@/components/ui/dialog";
-import { 
-  Input 
-} from "@/components/ui/input";
-import { 
-  Label 
-} from "@/components/ui/label";
-import { 
-  Switch 
-} from "@/components/ui/switch";
-import { 
-  useToast 
-} from "@/components/ui/use-toast";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/components/ui/use-toast";
 import { 
   AlertDialog, 
   AlertDialogAction, 
@@ -2132,6 +2139,13 @@ import {
   AlertDialogHeader, 
   AlertDialogTitle 
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { MenuHeader } from "./MenuHeader"; // Ensure this path is correct
 
 interface MenuItem {
   id: number;
@@ -2156,14 +2170,71 @@ interface CurrentMenuListProps {
 }
 
 export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
+  // Existing state
   const [isEditing, setIsEditing] = useState(false);
   const [menuToDelete, setMenuToDelete] = useState<number | null>(null);
   const [editedMenu, setEditedMenu] = useState<DailyMenu | null>(null);
-  const [newFirstCourse, setNewFirstCourse] = useState('');
-  const [newSecondCourse, setNewSecondCourse] = useState('');
+  const [newFirstCourse, setNewFirstCourse] = useState("");
+  const [newSecondCourse, setNewSecondCourse] = useState("");
+
+  // New state for search and filter
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
   const { toast } = useToast();
   const supabase = createClientComponentClient();
 
+  /**
+   * **Filtering Logic**
+   * Filters the menus based on search term and status filter.
+   */
+  const filteredMenus = useMemo(() => {
+    return menus.filter(menu => {
+      // Search Filter (search by date)
+      const matchesSearch = searchTerm === "" || 
+        format(new Date(menu.date), 'PP', { locale: es })
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase());
+      
+      // Status Filter
+      const matchesStatus = statusFilter === "all" || 
+        (statusFilter === "active" ? menu.active : !menu.active);
+      
+      return matchesSearch && matchesStatus;
+    });
+  }, [menus, searchTerm, statusFilter]);
+
+  /**
+   * Handler to toggle the active status of a menu.
+   */
+  const handleStatusChange = async (menu: DailyMenu, checked: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('daily_menus')
+        .update({ active: checked })
+        .eq('id', menu.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Status updated",
+        description: `Menu for ${format(new Date(menu.date), 'PP', { locale: es })} is now ${checked ? 'active' : 'inactive'}`,
+      });
+
+      onMenuUpdate();
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update menu status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  /**
+   * Handler for editing a menu.
+   */
   const handleEditMenu = (menu: DailyMenu) => {
     setEditedMenu({
       ...menu,
@@ -2173,6 +2244,9 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
     setIsEditing(true);
   };
 
+  /**
+   * Function to handle drag and drop reordering of courses.
+   */
   const handleDragEnd = async (result: DropResult) => {
     if (!editedMenu) return;
     
@@ -2197,6 +2271,9 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
     });
   };
 
+  /**
+   * Function to handle saving edited menu details.
+   */
   const handleSaveMenu = async () => {
     if (!editedMenu) return;
 
@@ -2257,6 +2334,9 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
     }
   };
 
+  /**
+   * Function to handle deleting a menu.
+   */
   const handleDeleteMenu = async () => {
     if (!menuToDelete) return;
 
@@ -2302,6 +2382,9 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
     }
   };
 
+  /**
+   * Function to handle adding a new course.
+   */
   const handleAddCourse = async (type: 'first' | 'second') => {
     if (!editedMenu) return;
 
@@ -2350,6 +2433,9 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
     }
   };
 
+  /**
+   * Function to handle deleting a course.
+   */
   const handleDeleteCourse = async (courseId: number, type: 'first' | 'second') => {
     if (!editedMenu) return;
 
@@ -2382,66 +2468,99 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
   };
 
   return (
-    <div className="space-y-4">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Price</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {menus.map((menu) => (
-            <TableRow key={menu.id}>
-              <TableCell>{format(new Date(menu.date), 'PP')}</TableCell>
-              <TableCell>{menu.price.toFixed(2)}€</TableCell>
-              <TableCell>
-                <Switch
-                  checked={menu.active}
-                  onCheckedChange={async (checked) => {
-                    const { error } = await supabase
-                      .from('daily_menus')
-                      .update({ active: checked })
-                      .eq('id', menu.id);
+    <div className="space-y-6">
+      {/* **Menu Header for Search and Filter** */}
+      <MenuHeader 
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        totalMenus={filteredMenus.length}
+      />
 
-                    if (error) {
-                      toast({
-                        title: "Error",
-                        description: "Failed to update menu status",
-                        variant: "destructive",
-                      });
-                    } else {
-                      onMenuUpdate();
-                    }
-                  }}
-                />
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEditMenu(menu)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setMenuToDelete(menu.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Price</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {filteredMenus.length === 0 ? (
+              <TableRow>
+                <TableCell 
+                  colSpan={4} 
+                  className="h-32 text-center text-muted-foreground"
+                >
+                  No menus found
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredMenus.map((menu) => (
+                <TableRow key={menu.id}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium">
+                        {format(new Date(menu.date), 'PP', { locale: es })}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {menu.first_courses.length + menu.second_courses.length} courses
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>{menu.price.toFixed(2)}€</TableCell>
+                  <TableCell>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge 
+                            variant={menu.active ? "success" : "secondary"} // Using 'success' variant
+                            className="cursor-pointer"
+                            onClick={() => handleStatusChange(menu, !menu.active)}
+                          >
+                            <span className="flex items-center gap-2">
+                              <span className={`h-2 w-2 rounded-full ${
+                                menu.active ? "bg-green-500" : "bg-gray-400"
+                              }`} />
+                              {menu.active ? "Active" : "Inactive"}
+                            </span>
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>Click to toggle status</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditMenu(menu)}
+                        aria-label={`Edit menu for ${format(new Date(menu.date), 'PP', { locale: es })}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setMenuToDelete(menu.id)}
+                        aria-label={`Delete menu for ${format(new Date(menu.date), 'PP', { locale: es })}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Card>
 
-      {/* Edit Menu Dialog */}
+      {/* **Edit Menu Dialog** */}
       <Dialog open={isEditing} onOpenChange={(open) => !open && setIsEditing(false)}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
@@ -2522,6 +2641,7 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleDeleteCourse(course.id, 'first')}
+                                    aria-label={`Delete course ${course.name}`}
                                   >
                                     <X className="h-4 w-4" />
                                   </Button>
@@ -2543,6 +2663,7 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
                         variant="outline"
                         size="sm"
                         onClick={() => handleAddCourse('first')}
+                        aria-label="Add new first course"
                       >
                         <Plus className="h-4 w-4" />
                       </Button>
@@ -2592,6 +2713,7 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleDeleteCourse(course.id, 'second')}
+                                    aria-label={`Delete course ${course.name}`}
                                   >
                                     <X className="h-4 w-4" />
                                   </Button>
@@ -2613,6 +2735,7 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
                         variant="outline"
                         size="sm"
                         onClick={() => handleAddCourse('second')}
+                        aria-label="Add new second course"
                       >
                         <Plus className="h-4 w-4" />
                       </Button>
@@ -2629,6 +2752,7 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
                       ...editedMenu,
                       active: checked
                     })}
+                    aria-label="Toggle menu active status"
                   />
                   <Label>Active</Label>
                 </div>
@@ -2646,7 +2770,7 @@ export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Menu Alert Dialog */}
+      {/* **Delete Menu Alert Dialog** */}
       <AlertDialog open={!!menuToDelete} onOpenChange={() => setMenuToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -2834,20 +2958,32 @@ export function DailyMenuEditor({ item, onSave, onCancel }: DailyMenuEditorProps
 ### src/components/daily-menu/MenuDateSelection.tsx
 
 ```typescript
+// components/daily-menu/DateSelection.tsx
 'use client';
 
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { 
+  Card, 
+  CardContent, 
+  CardHeader, 
+  CardTitle, 
+  CardDescription 
+} from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { DateRange } from "react-day-picker";
-import { format, isAfter, isBefore } from "date-fns";
+import { format, isAfter, isBefore, addDays } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   Calendar as CalendarIcon,
   ArrowRight,
   X,
   AlertCircle,
+  Info,
+  Loader2,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import {
   Tooltip,
@@ -2855,28 +2991,82 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+
+// Calendar Styles
+const calendarStyles = {
+  months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+  month: "space-y-4",
+  caption: "flex justify-center pt-1 relative items-center gap-2",
+  caption_label: "text-sm font-medium",
+  nav: "flex items-center gap-1",
+  nav_button: cn(
+    "inline-flex items-center justify-center rounded-md text-sm font-medium shadow-sm transition-colors",
+    "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 hover:bg-muted",
+    "disabled:pointer-events-none disabled:opacity-30"
+  ),
+  nav_button_previous: "absolute left-1",
+  nav_button_next: "absolute right-1",
+  table: "w-full border-collapse space-y-1",
+  head_row: "flex",
+  head_cell: cn(
+    "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem] capitalize"
+  ),
+  row: "flex w-full mt-2",
+  cell: cn(
+    "relative p-0 text-center text-sm focus-within:relative focus-within:z-20",
+    "first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md",
+    "[&:has([aria-selected].day-outside)]:bg-accent/50",
+    "[&:has([aria-selected].day-range-end)]:rounded-r-md"
+  ),
+  day: cn(
+    "inline-flex items-center justify-center rounded-md text-sm transition-colors",
+    "h-9 w-9 p-0 font-normal hover:bg-accent hover:text-accent-foreground",
+    "aria-selected:opacity-100 hover:bg-primary/10",
+    "disabled:pointer-events-none disabled:opacity-30",
+    "focus:bg-primary focus:text-primary-foreground focus:outline-none"
+  ),
+  day_range_start: "day-range-start",
+  day_range_end: "day-range-end",
+  day_selected: cn(
+    "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
+    "focus:bg-primary focus:text-primary-foreground"
+  ),
+  day_today: "bg-accent/50 text-accent-foreground",
+  day_outside: cn(
+    "day-outside text-muted-foreground opacity-50",
+    "aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30"
+  ),
+  day_disabled: "text-muted-foreground opacity-30",
+  day_range_middle: cn(
+    "aria-selected:bg-accent aria-selected:text-accent-foreground",
+    "hover:bg-accent/50 hover:text-accent-foreground"
+  ),
+  day_hidden: "invisible",
+};
 
 interface DateSelectionProps {
   onDateSelect: (dates: { from: Date; to: Date } | null) => void;
   onNext: () => void;
   existingMenus?: { date: string; active: boolean }[];
+  isLoading?: boolean;
 }
 
 type SelectionMode = 'single' | 'range';
 
-export function DateSelection({ onDateSelect, onNext, existingMenus = [] }: DateSelectionProps) {
+type CalendarComponentProps = {
+  mode: "single" | "range";
+};
+export function DateSelection({ 
+  onDateSelect, 
+  onNext, 
+  existingMenus = [],
+  isLoading = false 
+}: DateSelectionProps) {
   const [mode, setMode] = useState<SelectionMode>('single');
   const [selected, setSelected] = useState<DateRange | undefined>();
   const [error, setError] = useState<string | null>(null);
 
-  // Convert existingMenus dates to Date objects for calendar
   const existingMenuDates = existingMenus.map(menu => ({
     date: new Date(menu.date),
     active: menu.active
@@ -2886,27 +3076,46 @@ export function DateSelection({ onDateSelect, onNext, existingMenus = [] }: Date
     setSelected(range);
     setError(null);
 
-    if (range?.from) {
-      // For single day selection, set the 'to' date same as 'from'
-      const effectiveRange = {
-        from: range.from,
-        to: mode === 'single' ? range.from : range.to || range.from
-      };
-      
-      // Validate if selected dates already have menus
-      const conflictingDates = existingMenuDates.filter(menuDate => 
-        isAfter(menuDate.date, effectiveRange.from) && 
-        isBefore(menuDate.date, effectiveRange.to)
-      );
-
-      if (conflictingDates.length > 0) {
-        setError('Some selected dates already have menus scheduled');
-      }
-
-      onDateSelect(effectiveRange);
-    } else {
+    if (!range?.from) {
       onDateSelect(null);
+      return;
     }
+
+    const effectiveRange = {
+      from: range.from,
+      to: mode === 'single' ? range.from : range.to || range.from
+    };
+    
+    const conflictingDates = existingMenuDates.filter(menuDate => 
+      menuDate.date.toDateString() === effectiveRange.from.toDateString() ||
+      (effectiveRange.to && 
+       menuDate.date.toDateString() === effectiveRange.to.toDateString())
+    );
+
+    if (conflictingDates.length > 0) {
+      setError('Selected dates already have menus scheduled');
+      return;
+    }
+
+    onDateSelect(effectiveRange);
+  };
+
+  const handleQuickSelect = (date: Date, days: number = 0) => {
+    const from = date;
+    const to = days > 0 ? addDays(date, days) : date;
+
+    const conflictingDates = existingMenuDates.filter(menuDate => 
+      isAfter(menuDate.date, from) && isBefore(menuDate.date, to)
+    );
+
+    if (conflictingDates.length > 0) {
+      setError('Some selected dates already have menus scheduled');
+      return;
+    }
+
+    const newRange = { from, to };
+    setSelected(newRange);
+    onDateSelect(newRange);
   };
 
   const handleClearSelection = () => {
@@ -2923,26 +3132,161 @@ export function DateSelection({ onDateSelect, onNext, existingMenus = [] }: Date
     onNext();
   };
 
-  const footer = (
-    <div className="flex items-center gap-4 text-sm pt-4">
-      <div className="flex items-center gap-2">
-        <div className="w-3 h-3 rounded-full bg-[#86efac]" />
-        <span>Active Menu</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="w-3 h-3 rounded-full bg-[#cbd5e1]" />
-        <span>Inactive Menu</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="w-3 h-3 rounded-full bg-primary/20" />
-        <span>Selected</span>
-      </div>
-    </div>
-  );
+  const CalendarComponent = ({ mode }: CalendarComponentProps) => {
+    if (mode === "single") {
+      return (
+        <Calendar
+          mode="single"
+          selected={selected?.from}
+          onSelect={(date: Date | undefined) => 
+            handleSelect(date ? { from: date } : undefined)
+          }
+          numberOfMonths={2}
+          disabled={{ before: new Date() }}
+          modifiers={{
+            booked: existingMenuDates.map(m => m.date),
+            active: existingMenuDates.filter(m => m.active).map(m => m.date),
+            today: new Date(),
+          }}
+          modifiersStyles={{
+            booked: { 
+              backgroundColor: '#cbd5e1',
+              color: '#1e293b',
+              transform: 'scale(0.95)',
+              transition: 'all 0.2s ease'
+            },
+            active: { 
+              backgroundColor: '#86efac',
+              color: '#065f46',
+              transform: 'scale(0.95)',
+              transition: 'all 0.2s ease'
+            },
+            today: {
+              fontWeight: 'bold',
+              border: '2px solid currentColor'
+            }
+          }}
+          locale={es}
+          showOutsideDays={false}
+          className="rounded-md border-none"
+          classNames={{
+            ...calendarStyles,
+            day_today: cn(
+              calendarStyles.day_today,
+              "font-semibold border-2 border-primary"
+            ),
+            day_selected: cn(
+              calendarStyles.day_selected,
+              "hover:bg-primary/90 transition-all duration-200"
+            )
+          }}
+          components={{
+            IconLeft: ({ ...props }) => (
+              <ChevronLeft className="h-4 w-4 stroke-2" {...props} />
+            ),
+            IconRight: ({ ...props }) => (
+              <ChevronRight className="h-4 w-4 stroke-2" {...props} />
+            ),
+            DayContent: ({ date }: { date: Date }) => (
+              <div
+                className={cn(
+                  "relative h-9 w-9 flex items-center justify-center",
+                  "hover:bg-accent/20 rounded-md transition-colors",
+                  existingMenuDates.some(m => 
+                    m.date.toDateString() === date.toDateString()
+                  ) && "cursor-not-allowed"
+                )}
+              >
+                {date.getDate()}
+                {existingMenuDates.some(m => 
+                  m.date.toDateString() === date.toDateString() && m.active
+                ) && (
+                  <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-emerald-500" />
+                )}
+              </div>
+            ),
+          }}
+        />
+      );
+    }
+
+    return (
+      <Calendar
+        mode="range"
+        selected={selected}
+        onSelect={handleSelect}
+        numberOfMonths={2}
+        disabled={{ before: new Date() }}
+        modifiers={{
+          booked: existingMenuDates.map(m => m.date),
+          active: existingMenuDates.filter(m => m.active).map(m => m.date),
+          today: new Date(),
+        }}
+        modifiersStyles={{
+          booked: { 
+            backgroundColor: '#cbd5e1',
+            color: '#1e293b',
+            transform: 'scale(0.95)',
+            transition: 'all 0.2s ease'
+          },
+          active: { 
+            backgroundColor: '#86efac',
+            color: '#065f46',
+            transform: 'scale(0.95)',
+            transition: 'all 0.2s ease'
+          },
+          today: {
+            fontWeight: 'bold',
+            border: '2px solid currentColor'
+          }
+        }}
+        locale={es}
+        showOutsideDays={false}
+        className="rounded-md border-none"
+        classNames={{
+          ...calendarStyles,
+          day_today: cn(
+            calendarStyles.day_today,
+            "font-semibold border-2 border-primary"
+          ),
+          day_selected: cn(
+            calendarStyles.day_selected,
+            "hover:bg-primary/90 transition-all duration-200"
+          )
+        }}
+        components={{
+          IconLeft: ({ ...props }) => (
+            <ChevronLeft className="h-4 w-4 stroke-2" {...props} />
+          ),
+          IconRight: ({ ...props }) => (
+            <ChevronRight className="h-4 w-4 stroke-2" {...props} />
+          ),
+          DayContent: ({ date }: { date: Date }) => (
+            <div
+              className={cn(
+                "relative h-9 w-9 flex items-center justify-center",
+                "hover:bg-accent/20 rounded-md transition-colors",
+                existingMenuDates.some(m => 
+                  m.date.toDateString() === date.toDateString()
+                ) && "cursor-not-allowed"
+              )}
+            >
+              {date.getDate()}
+              {existingMenuDates.some(m => 
+                m.date.toDateString() === date.toDateString() && m.active
+              ) && (
+                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-emerald-500" />
+              )}
+            </div>
+          ),
+        }}
+      />
+    );
+  };
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="border-2">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -2951,125 +3295,158 @@ export function DateSelection({ onDateSelect, onNext, existingMenus = [] }: Date
                 Choose when you want to schedule the menu
               </CardDescription>
             </div>
-            <Select
-              value={mode}
-              onValueChange={(value: SelectionMode) => {
-                setMode(value);
+            <Badge
+              variant={mode === "single" ? "default" : "secondary"}
+              className="px-4 py-1 text-sm cursor-pointer hover:bg-primary/90"
+              onClick={() => {
+                setMode(mode === "single" ? "range" : "single");
                 handleClearSelection();
               }}
             >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Selection mode" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="single">Single Day</SelectItem>
-                <SelectItem value="range">Date Range</SelectItem>
-              </SelectContent>
-            </Select>
+              {mode === "single" ? "Single Day" : "Date Range"}
+            </Badge>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleQuickSelect(new Date())}
+              disabled={isLoading}
+            >
+              Today
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleQuickSelect(addDays(new Date(), 1))}
+              disabled={isLoading}
+            >
+              Tomorrow
+            </Button>
+            {mode === "range" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleQuickSelect(new Date(), 6)}
+                disabled={isLoading}
+              >
+                Next 7 Days
+              </Button>
+            )}
           </div>
         </CardHeader>
+
         <CardContent>
-          <div className="space-y-4">
-            {/* Selected dates display */}
+          <div className="space-y-6">
             {selected?.from && (
-              <div className="flex items-center gap-2 text-sm">
-                <CalendarIcon className="h-4 w-4" />
-                <span>
-                  {format(selected.from, 'PPP', { locale: es })}
-                  {selected.to && mode === 'range' && (
-                    <>
-                      <ArrowRight className="inline mx-2 h-4 w-4" />
-                      {format(selected.to, 'PPP', { locale: es })}
-                    </>
-                  )}
-                </span>
+              <div className="flex items-center justify-between bg-muted/50 p-3 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">
+                    {format(selected.from, "PPP", { locale: es })}
+                    {selected.to && mode === "range" && (
+                      <>
+                        <ArrowRight className="inline mx-2 h-4 w-4" />
+                        {format(selected.to, "PPP", { locale: es })}
+                      </>
+                    )}
+                  </span>
+                </div>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={handleClearSelection}
+                  className="h-8 w-8 p-0"
+                  disabled={isLoading}
                 >
                   <X className="h-4 w-4" />
                 </Button>
               </div>
             )}
 
-            {/* Calendar */}
-            <div className="border rounded-lg p-4">
-              {mode === 'single' ? (
-                <Calendar
-                  mode="single"
-                  selected={selected?.from}
-                  onSelect={date => handleSelect(date ? { from: date } : undefined)}
-                  numberOfMonths={2}
-                  disabled={{ before: new Date() }}
-                  modifiers={{
-                    booked: existingMenuDates.map(m => m.date),
-                    active: existingMenuDates.filter(m => m.active).map(m => m.date),
-                  }}
-                  modifiersStyles={{
-                    booked: { backgroundColor: '#cbd5e1' },
-                    active: { backgroundColor: '#86efac' },
-                  }}
-                  locale={es}
-                  showOutsideDays={false}
-                  className="rounded-md border"
-                  footer={footer}
-                />
-              ) : (
-                <Calendar
-                  mode="range"
-                  selected={selected}
-                  onSelect={handleSelect}
-                  numberOfMonths={2}
-                  disabled={{ before: new Date() }}
-                  modifiers={{
-                    booked: existingMenuDates.map(m => m.date),
-                    active: existingMenuDates.filter(m => m.active).map(m => m.date),
-                  }}
-                  modifiersStyles={{
-                    booked: { backgroundColor: '#cbd5e1' },
-                    active: { backgroundColor: '#86efac' },
-                  }}
-                  locale={es}
-                  showOutsideDays={false}
-                  className="rounded-md border"
-                  footer={footer}
-                />
-              )}
+            <div className="border rounded-lg p-6 bg-card">
+              <div className="flex items-start gap-4 mb-6">
+                <Info className="h-4 w-4 text-muted-foreground mt-1 flex-shrink-0" />
+                <p className="text-sm text-muted-foreground">
+                  Select {mode === "single" ? "a date" : "a date range"} to
+                  schedule the menu. Green dates indicate active menus, and gray
+                  dates indicate inactive menus.
+                </p>
+              </div>
+
+              <div className="relative">
+                {isLoading && (
+                  <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-50 rounded-lg">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+
+                <CalendarComponent mode={mode} />
+
+                <div className="flex flex-wrap items-center gap-4 text-sm mt-6 pt-4 border-t">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-[#86efac]" />
+                    <span className="text-muted-foreground">Active Menu</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-[#cbd5e1]" />
+                    <span className="text-muted-foreground">Inactive Menu</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-primary/20" />
+                    <span className="text-muted-foreground">Selected</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Error message */}
             {error && (
-              <div className="flex items-center gap-2 text-sm text-destructive">
+              <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-lg">
                 <AlertCircle className="h-4 w-4" />
                 {error}
               </div>
             )}
 
-            {/* Action buttons */}
-            <div className="flex justify-end gap-4">
-              <Button
-                variant="outline"
-                onClick={handleClearSelection}
-                disabled={!selected?.from}
-              >
-                Clear
-              </Button>
+            <div className="flex justify-end gap-4 pt-2">
+              {selected?.from && (
+                <Button
+                  variant="outline"
+                  onClick={handleClearSelection}
+                  disabled={isLoading}
+                >
+                  Clear Selection
+                </Button>
+              )}
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div>
                       <Button
                         onClick={handleNext}
-                        disabled={!selected?.from}
+                        disabled={!selected?.from || isLoading}
+                        className="min-w-[120px]"
                       >
-                        Next Step
-                        <ArrowRight className="ml-2 h-4 w-4" />
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Processing...
+                          </>
+                        ) : !selected?.from ? (
+                          "Select Date"
+                        ) : (
+                          <>
+                            Next Step
+                            <ArrowRight className="ml-2 h-4 w-4" />
+                          </>
+                        )}
                       </Button>
                     </div>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {!selected?.from ? 'Please select a date first' : 'Proceed to menu selection'}
+                    {!selected?.from
+                      ? "Please select a date first"
+                      : "Proceed to menu selection"}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -3077,6 +3454,89 @@ export function DateSelection({ onDateSelect, onNext, existingMenus = [] }: Date
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+```
+
+### src/components/daily-menu/MenuHeader.tsx
+
+```typescript
+// components/daily-menu/MenuHeader.tsx
+import { Search } from "lucide-react";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+
+interface MenuHeaderProps {
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
+  statusFilter: "all" | "active" | "inactive";
+  onStatusFilterChange: (value: "all" | "active" | "inactive") => void;
+  totalMenus: number;
+}
+
+export function MenuHeader({ 
+  searchTerm, 
+  onSearchChange, 
+  statusFilter, 
+  onStatusFilterChange,
+  totalMenus 
+}: MenuHeaderProps) {
+  return (
+    <div className="mb-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-semibold tracking-tight">Current Menus</h2>
+          <p className="text-sm text-muted-foreground">
+            {totalMenus} {totalMenus === 1 ? 'menu' : 'menus'} available
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="relative col-span-3">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search by date..."
+            value={searchTerm}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="pl-8 w-full"
+          />
+        </div>
+        
+        <Select
+          value={statusFilter}
+          onValueChange={(value: "all" | "active" | "inactive") => 
+            onStatusFilterChange(value)
+          }
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Filter by status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Menus</SelectItem>
+            <SelectItem value="active">Active Menus</SelectItem>
+            <SelectItem value="inactive">Inactive Menus</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {searchTerm && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span>
+            Found {totalMenus} {totalMenus === 1 ? 'result' : 'results'} for &quot;<span className="font-medium">{searchTerm}</span>&quot;
+          </span>
+          {totalMenus > 0 && statusFilter !== 'all' && (
+            <span>with status &quot;<span className="font-medium">{statusFilter}</span>&quot;</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -4627,6 +5087,48 @@ export {
   AlertDialogAction,
   AlertDialogCancel,
 }
+```
+
+### src/components/ui/badge.tsx
+
+```typescript
+import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "@/lib/utils"
+
+const badgeVariants = cva(
+  "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  {
+    variants: {
+      variant: {
+        default:
+          "border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80",
+        secondary:
+          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        destructive:
+          "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
+        outline: "text-foreground",
+        success:
+          "border-transparent bg-emerald-100 text-emerald-800 shadow hover:bg-emerald-100/80", // Added success variant
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+export interface BadgeProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof badgeVariants> {}
+
+function Badge({ className, variant, ...props }: BadgeProps) {
+  return (
+    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+  )
+}
+
+export { Badge, badgeVariants }
 ```
 
 ### src/components/ui/button.tsx
