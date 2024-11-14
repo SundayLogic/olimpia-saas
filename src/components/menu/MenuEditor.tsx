@@ -4,8 +4,18 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, Image as ImageIcon } from "lucide-react";
-import type { MenuEditorProps } from "@/types/menu";
+import Image from "next/image";
+import { Loader2, Image as ImageIcon, Check, X } from "lucide-react";
+import type { MenuEditorProps, MenuItem} from "@/types/menu";
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -15,7 +25,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import ImageSelector from "@/components/menu/ImageSelector";
+import { cn } from "@/lib/utils";
 
 // Form Schema
 const menuItemSchema = z.object({
@@ -27,18 +51,25 @@ const menuItemSchema = z.object({
   allergens: z.array(z.string()).optional(),
 });
 
+type FormValues = z.infer<typeof menuItemSchema>;
+
 const MenuEditor: React.FC<MenuEditorProps> = ({
   item,
   type,
   onSave,
   onCancel,
   categories,
-  allergens
+  allergens = []
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showImageSelector, setShowImageSelector] = useState(false);
+  const [isSelectingImage, setIsSelectingImage] = useState(false);
+  const [openAllergens, setOpenAllergens] = useState(false);
 
-  const form = useForm({
+  const defaultAllergens = type === 'menu' 
+    ? ((item as MenuItem)?.allergens || [])
+    : [];
+
+  const form = useForm<FormValues>({
     resolver: zodResolver(menuItemSchema),
     defaultValues: {
       name: item?.name || "",
@@ -46,11 +77,13 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
       price: item?.price || 0,
       category_id: item?.category_id || "",
       image_path: item?.image_path || "",
-      allergens: type === 'menu' ? (item as any)?.allergens || [] : undefined,
+      allergens: defaultAllergens,
     }
   });
 
-  const handleSubmit = async (data: z.infer<typeof menuItemSchema>) => {
+  const selectedAllergens = form.watch('allergens') || [];
+
+  const handleSubmit = async (data: FormValues) => {
     try {
       setIsSubmitting(true);
       await onSave(data);
@@ -59,134 +92,252 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
     }
   };
 
+  const handleImageSelect = (imagePath: string) => {
+    form.setValue('image_path', imagePath);
+    setIsSelectingImage(false);
+  };
+
   return (
-    <form onSubmit={form.handleSubmit(handleSubmit)} className="p-6 space-y-6">
-      {/* Image Selection */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Imagen</label>
-        <div className="flex gap-4 items-center">
-          {form.watch("image_path") ? (
-            <div className="relative w-20 h-20 rounded overflow-hidden">
-              <img
-                src={form.watch("image_path")}
-                alt="Selected"
-                className="object-cover w-full h-full"
-              />
-            </div>
-          ) : (
-            <div className="w-20 h-20 bg-gray-100 rounded flex items-center justify-center">
-              <ImageIcon className="w-8 h-8 text-gray-400" />
-            </div>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="p-6 space-y-6">
+        {/* Image Selection */}
+        <FormField
+          control={form.control}
+          name="image_path"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Imagen</FormLabel>
+              <div className="flex gap-4 items-center">
+                {field.value ? (
+                  <div className="relative w-20 h-20 rounded overflow-hidden">
+                    <Image
+                      src={field.value}
+                      alt="Selected"
+                      fill
+                      className="object-cover"
+                      sizes="80px"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-20 h-20 bg-gray-100 rounded flex items-center justify-center">
+                    <ImageIcon className="w-8 h-8 text-gray-400" />
+                  </div>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsSelectingImage(true)}
+                >
+                  Seleccionar Imagen
+                </Button>
+              </div>
+              <FormMessage />
+            </FormItem>
           )}
+        />
+
+        {/* Basic Information */}
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Nombre</FormLabel>
+                <FormControl>
+                  <Input placeholder="Nombre del item" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="price"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Precio</FormLabel>
+                <FormControl>
+                  <Input 
+                    type="number" 
+                    step="0.01" 
+                    placeholder="0.00" 
+                    {...field}
+                    onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Category Selection */}
+        <FormField
+          control={form.control}
+          name="category_id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Categoría</FormLabel>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona una categoría" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Description */}
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Descripción</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Descripción del item"
+                  rows={3}
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Allergens Multi-select */}
+        {type === 'menu' && (
+          <FormField
+            control={form.control}
+            name="allergens"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Alérgenos</FormLabel>
+                <Popover open={openAllergens} onOpenChange={setOpenAllergens}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className={cn(
+                        "w-full justify-between",
+                        !field.value?.length && "text-muted-foreground"
+                      )}
+                    >
+                      {field.value?.length
+                        ? `${field.value.length} seleccionados`
+                        : "Seleccionar alérgenos"}
+                      <X
+                        className={cn(
+                          "ml-2 h-4 w-4 shrink-0 opacity-50",
+                          openAllergens && "rotate-90"
+                        )}
+                      />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Buscar alérgenos..." />
+                      <CommandEmpty>No se encontraron alérgenos.</CommandEmpty>
+                      <CommandGroup>
+                        {allergens.map((allergen) => (
+                          <CommandItem
+                            key={allergen.id}
+                            onSelect={() => {
+                              const values = field.value || [];
+                              const newValues = values.includes(allergen.id)
+                                ? values.filter(id => id !== allergen.id)
+                                : [...values, allergen.id];
+                              field.onChange(newValues);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedAllergens.includes(allergen.id)
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              )}
+                            />
+                            {allergen.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {selectedAllergens.map((allergenId) => {
+                    const allergen = allergens.find(a => a.id === allergenId);
+                    return allergen && (
+                      <Badge
+                        key={allergen.id}
+                        variant="secondary"
+                        className="cursor-pointer"
+                        onClick={() => {
+                          const values = field.value || [];
+                          field.onChange(values.filter(id => id !== allergen.id));
+                        }}
+                      >
+                        {allergen.name}
+                        <X className="ml-1 h-3 w-3" />
+                      </Badge>
+                    );
+                  })}
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex justify-end gap-4">
           <Button
             type="button"
             variant="outline"
-            onClick={() => setShowImageSelector(true)}
+            onClick={onCancel}
+            disabled={isSubmitting}
           >
-            Seleccionar Imagen
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Guardando...
+              </>
+            ) : (
+              'Guardar'
+            )}
           </Button>
         </div>
-      </div>
+      </form>
 
-      {/* Basic Information */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Nombre</label>
-          <Input
-            {...form.register("name")}
-            placeholder="Nombre del item"
-            error={form.formState.errors.name?.message}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Precio</label>
-          <Input
-            type="number"
-            step="0.01"
-            {...form.register("price")}
-            placeholder="0.00"
-            error={form.formState.errors.price?.message}
-          />
-        </div>
-      </div>
-
-      {/* Category Selection */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Categoría</label>
-        <Select
-          value={form.watch("category_id")}
-          onValueChange={(value) => form.setValue("category_id", value)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Selecciona una categoría" />
-          </SelectTrigger>
-          <SelectContent>
-            {categories.map((category) => (
-              <SelectItem key={category.id} value={category.id}>
-                {category.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Description */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Descripción</label>
-        <Textarea
-          {...form.register("description")}
-          placeholder="Descripción del item"
-          rows={3}
-          error={form.formState.errors.description?.message}
+      {/* Image Selector Modal */}
+      {isSelectingImage && (
+        <ImageSelector 
+          onSelect={handleImageSelect}
+          onClose={() => setIsSelectingImage(false)}
+          categoryId={form.watch('category_id')}
         />
-      </div>
-
-      {/* Allergens (Only for menu items) */}
-      {type === 'menu' && allergens && (
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Alérgenos</label>
-          <Select
-            value={form.watch("allergens")}
-            onValueChange={(value) => form.setValue("allergens", value)}
-            multiple
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecciona los alérgenos" />
-            </SelectTrigger>
-            <SelectContent>
-              {allergens.map((allergen) => (
-                <SelectItem key={allergen.id} value={allergen.id}>
-                  {allergen.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
       )}
-
-      {/* Action Buttons */}
-      <div className="flex justify-end gap-4">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onCancel}
-          disabled={isSubmitting}
-        >
-          Cancelar
-        </Button>
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Guardando...
-            </>
-          ) : (
-            'Guardar'
-          )}
-        </Button>
-      </div>
-    </form>
+    </Form>
   );
 };
 
