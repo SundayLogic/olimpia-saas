@@ -10,20 +10,23 @@ import type {
 
 const supabase = createClientComponentClient();
 
+// Types for real-time subscriptions
+interface RealtimePayload<T> {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: T;
+  old: {
+    id: string;
+  };
+}
+
 // Menu Items Operations
-export const getMenuItems = async (categoryId?: string) => {
-  let query = supabase
+export const getMenuItems = async () => {
+  const { data, error } = await supabase
     .from('menu_items')
     .select(`
       *,
       allergens (id, name)
     `);
-
-  if (categoryId) {
-    query = query.eq('category_id', categoryId);
-  }
-
-  const { data, error } = await query;
 
   if (error) throw error;
   return data as MenuItem[];
@@ -41,7 +44,7 @@ export const createMenuItem = async (data: MenuItemFormData) => {
     .single();
 
   if (error) throw error;
-  return item;
+  return item as MenuItem;
 };
 
 export const updateMenuItem = async (id: string, data: Partial<MenuItemFormData>) => {
@@ -56,7 +59,7 @@ export const updateMenuItem = async (id: string, data: Partial<MenuItemFormData>
     .single();
 
   if (error) throw error;
-  return item;
+  return item as MenuItem;
 };
 
 export const deleteMenuItem = async (id: string) => {
@@ -69,14 +72,10 @@ export const deleteMenuItem = async (id: string) => {
 };
 
 // Wine Operations
-export const getWines = async (categoryId?: string) => {
-  let query = supabase.from('wines').select('*');
-
-  if (categoryId) {
-    query = query.eq('category_id', categoryId);
-  }
-
-  const { data, error } = await query;
+export const getWines = async () => {
+  const { data, error } = await supabase
+    .from('wines')
+    .select('*');
 
   if (error) throw error;
   return data as Wine[];
@@ -94,7 +93,7 @@ export const createWine = async (data: WineFormData) => {
     .single();
 
   if (error) throw error;
-  return wine;
+  return wine as Wine;
 };
 
 export const updateWine = async (id: string, data: Partial<WineFormData>) => {
@@ -109,7 +108,7 @@ export const updateWine = async (id: string, data: Partial<WineFormData>) => {
     .single();
 
   if (error) throw error;
-  return wine;
+  return wine as Wine;
 };
 
 export const deleteWine = async (id: string) => {
@@ -144,12 +143,18 @@ export const getAllergens = async () => {
 };
 
 // Real-time subscriptions
-export const subscribeToMenuChanges = (callback: (payload: any) => void) => {
+export const subscribeToMenuChanges = (
+  callback: (payload: RealtimePayload<MenuItem>) => void
+): (() => void) => {
   const channel = supabase.channel('menu_changes')
-    .on(
+    .on<MenuItem>(
       'postgres_changes',
-      { event: '*', schema: 'public', table: 'menu_items' },
-      callback
+      { 
+        event: '*', 
+        schema: 'public', 
+        table: 'menu_items' 
+      },
+      (payload) => callback(payload as RealtimePayload<MenuItem>)
     )
     .subscribe();
 
@@ -158,12 +163,18 @@ export const subscribeToMenuChanges = (callback: (payload: any) => void) => {
   };
 };
 
-export const subscribeToWineChanges = (callback: (payload: any) => void) => {
+export const subscribeToWineChanges = (
+  callback: (payload: RealtimePayload<Wine>) => void
+): (() => void) => {
   const channel = supabase.channel('wine_changes')
-    .on(
+    .on<Wine>(
       'postgres_changes',
-      { event: '*', schema: 'public', table: 'wines' },
-      callback
+      { 
+        event: '*', 
+        schema: 'public', 
+        table: 'wines' 
+      },
+      (payload) => callback(payload as RealtimePayload<Wine>)
     )
     .subscribe();
 
