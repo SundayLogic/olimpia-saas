@@ -1,11 +1,12 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-11-16 12:08:57
+Generated on: 2024-11-16 19:18:33
 
 ## Documented Directories:
 - app/
 - src/
 - middleware.ts
+- public/
 
 ## Directory Structure
 
@@ -117,6 +118,18 @@ src/
 
 middleware.ts/
     ├── middleware.ts/
+
+public/
+    ├── public/
+        ├── images/
+        │   ├── placeholder-menu-item.jpg
+        │   ├── placeholder-wine.jpg
+    │   
+    │   ├── file.svg
+    │   ├── globe.svg
+    │   ├── next.svg
+    │   ├── vercel.svg
+    │   ├── window.svg
 
 ```
 
@@ -1130,44 +1143,36 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import MenuNav from "@/components/menu/MenuNav";
 import MenuSearch from "@/components/menu/MenuSearch";
 import MenuCard from "@/components/menu/MenuCard";
-import type { 
-  MenuItem, 
-  Wine, 
-  Category, 
-  Allergen,
-  MenuItemFormData,
-  WineFormData 
-} from "@/types/menu";
-
 import {
-  getMenuItems,
-  getWines,
   getCategories,
   getAllergens,
+  getMenuItems,
+  getWines,
   createMenuItem,
-  updateMenuItem,
-  deleteMenuItem,
   createWine,
+  updateMenuItem,
   updateWine,
+  deleteMenuItem,
   deleteWine,
   subscribeToMenuChanges,
   subscribeToWineChanges,
 } from "@/lib/supabase/menu";
+import type {
+  MenuItem,
+  Wine,
+  Category,
+  Allergen,
+  MenuItemFormData,
+  WineFormData,
+  RealtimePayload,
+} from "@/types/menu";
 
-type TabType = 'menu' | 'wine';
+type TabType = "menu" | "wine";
 
 type EditFormData = {
   menu: MenuItemFormData;
   wine: WineFormData;
 }[TabType];
-
-interface RealtimePayload<T> {
-  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  new: T;
-  old: {
-    id: string;
-  };
-}
 
 interface LoadingState {
   auth: boolean;
@@ -1186,23 +1191,21 @@ interface ErrorState {
 }
 
 export default function MenuPage() {
-  // State
+  // State management with correct types
   const [activeTab, setActiveTab] = useState<TabType>("menu");
-  const [activeCategory, setActiveCategory] = useState<string>("");
+  const [activeCategory, setActiveCategory] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
-  // Loading and Error States
   const [loadingState, setLoadingState] = useState<LoadingState>({
     auth: true,
     categories: true,
     allergens: true,
     menuItems: true,
-    wines: true
+    wines: true,
   });
   const [errorState, setErrorState] = useState<ErrorState>({});
 
-  // Data states
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [wines, setWines] = useState<Wine[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -1215,21 +1218,24 @@ export default function MenuPage() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const { data: { session }, error: authError } = await supabase.auth.getSession();
-        
+        const {
+          data: { session },
+          error: authError,
+        } = await supabase.auth.getSession();
+
         if (authError) throw authError;
-        if (!session) throw new Error('No authenticated session');
-        
-        console.log('Auth successful:', session.user.email);
-        setLoadingState(prev => ({ ...prev, auth: false }));
-        
+        if (!session) throw new Error("No authenticated session");
+
+        console.log("Auth successful:", session.user.email);
+        setLoadingState((prev) => ({ ...prev, auth: false }));
       } catch (error) {
-        console.error('Auth error:', error);
-        setErrorState(prev => ({
+        console.error("Auth error:", error);
+        setErrorState((prev) => ({
           ...prev,
-          auth: error instanceof Error ? error.message : 'Authentication failed'
+          auth:
+            error instanceof Error ? error.message : "Authentication failed",
         }));
-        setLoadingState(prev => ({ ...prev, auth: false }));
+        setLoadingState((prev) => ({ ...prev, auth: false }));
       }
     };
 
@@ -1239,7 +1245,7 @@ export default function MenuPage() {
   // Data fetching
   useEffect(() => {
     const loadData = async () => {
-      if (errorState.auth) return; // Don't load data if auth failed
+      if (errorState.auth) return;
 
       const fetchData = async <T,>(
         key: keyof LoadingState,
@@ -1247,68 +1253,77 @@ export default function MenuPage() {
         setter: (data: T) => void
       ) => {
         try {
-          setLoadingState(prev => ({ ...prev, [key]: true }));
+          setLoadingState((prev) => ({ ...prev, [key]: true }));
           const data = await fetcher();
           setter(data);
-          setLoadingState(prev => ({ ...prev, [key]: false }));
+          setLoadingState((prev) => ({ ...prev, [key]: false }));
         } catch (error) {
           console.error(`Error fetching ${key}:`, error);
-          setErrorState(prev => ({
+          setErrorState((prev) => ({
             ...prev,
-            [key]: error instanceof Error ? error.message : `Failed to load ${key}`
+            [key]:
+              error instanceof Error ? error.message : `Failed to load ${key}`,
           }));
-          setLoadingState(prev => ({ ...prev, [key]: false }));
+          setLoadingState((prev) => ({ ...prev, [key]: false }));
         }
       };
 
       await Promise.all([
-        fetchData('categories', getCategories, setCategories),
-        fetchData('allergens', getAllergens, setAllergens),
-        fetchData('menuItems', getMenuItems, setMenuItems),
-        fetchData('wines', getWines, setWines)
+        fetchData("categories", getCategories, setCategories),
+        fetchData("allergens", getAllergens, setAllergens),
+        fetchData("menuItems", getMenuItems, setMenuItems),
+        fetchData("wines", getWines, setWines),
       ]);
     };
 
     loadData();
   }, [errorState.auth]);
 
-  // Realtime subscriptions
+  // Real-time subscriptions
   useEffect(() => {
-    if (Object.keys(errorState).length > 0) return; // Don't subscribe if there are errors
+    if (Object.keys(errorState).length > 0) return;
 
-    const menuUnsubscribe = subscribeToMenuChanges((payload: RealtimePayload<MenuItem>) => {
-      const { eventType, new: newRecord, old: oldRecord } = payload;
-      
-      setMenuItems(current => {
-        switch (eventType) {
-          case 'INSERT':
-            return [...current, newRecord];
-          case 'UPDATE':
-            return current.map(item => item.id === oldRecord.id ? newRecord : item);
-          case 'DELETE':
-            return current.filter(item => item.id !== oldRecord.id);
-          default:
-            return current;
-        }
-      });
-    });
+    const menuUnsubscribe = subscribeToMenuChanges(
+      (payload: RealtimePayload<MenuItem>) => {
+        const { eventType, new: newRecord, old } = payload;
 
-    const wineUnsubscribe = subscribeToWineChanges((payload: RealtimePayload<Wine>) => {
-      const { eventType, new: newRecord, old: oldRecord } = payload;
-      
-      setWines(current => {
-        switch (eventType) {
-          case 'INSERT':
-            return [...current, newRecord];
-          case 'UPDATE':
-            return current.map(wine => wine.id === oldRecord.id ? newRecord : wine);
-          case 'DELETE':
-            return current.filter(wine => wine.id !== oldRecord.id);
-          default:
-            return current;
-        }
-      });
-    });
+        setMenuItems((current) => {
+          switch (eventType) {
+            case "INSERT":
+              return [...current, newRecord];
+            case "UPDATE":
+              return current.map((item) =>
+                item.id === old.id ? newRecord : item
+              );
+            case "DELETE":
+              return current.filter((item) => item.id !== old.id);
+            default:
+              return current;
+          }
+        });
+      }
+    );
+
+    const wineUnsubscribe = subscribeToWineChanges(
+      (payload: RealtimePayload<Wine>) => {
+        const { eventType, new: newRecord, old } = payload;
+
+        setWines((current) => {
+          switch (eventType) {
+            case "INSERT":
+              return [...current, newRecord];
+            case "UPDATE":
+              return current.map((wine) =>
+                wine.id === old.id ? newRecord : wine
+              );
+            case "DELETE":
+              return current.filter((wine) => wine.id !== old.id);
+            default:
+              return current;
+          }
+        });
+      }
+    );
 
     return () => {
       menuUnsubscribe();
@@ -1319,10 +1334,12 @@ export default function MenuPage() {
   // Filtered items
   const filteredItems = useMemo(() => {
     const items = activeTab === "menu" ? menuItems : wines;
-    return items.filter(item => {
-      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          item.description.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = !activeCategory || item.category_id === activeCategory;
+    return items.filter((item) => {
+      const matchesSearch =
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.description.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory =
+        !activeCategory || item.category_id === activeCategory;
       return matchesSearch && matchesCategory;
     });
   }, [activeTab, menuItems, wines, searchQuery, activeCategory]);
@@ -1335,23 +1352,25 @@ export default function MenuPage() {
           name: "Nuevo plato",
           description: "Descripción del plato",
           price: 0,
-          category_id: activeCategory || categories[0]?.id,
+          category_id: activeCategory || categories[0]?.id || 0,
           image_path: "",
           allergens: [],
+          active: true,
         });
         setEditingId(newItem.id);
       } else {
         const newWine = await createWine({
           name: "Nuevo vino",
           description: "Descripción del vino",
-          price: 0,
-          category_id: activeCategory || categories[0]?.id,
-          image_path: "",
+          bottle_price: 0,
+          glass_price: 0,
+          category_id: activeCategory || categories[0]?.id || 0,
+          active: true,
         });
         setEditingId(newWine.id);
       }
     } catch (error) {
-      console.error('Error creating item:', error);
+      console.error("Error creating item:", error);
       toast({
         title: "Error",
         description: "Failed to create item",
@@ -1360,7 +1379,7 @@ export default function MenuPage() {
     }
   };
 
-  const handleEdit = async (id: string, data: EditFormData) => {
+  const handleEdit = async (id: number, data: EditFormData) => {
     try {
       if (activeTab === "menu") {
         await updateMenuItem(id, data as MenuItemFormData);
@@ -1373,7 +1392,7 @@ export default function MenuPage() {
         description: "Item updated successfully",
       });
     } catch (error) {
-      console.error('Error updating item:', error);
+      console.error("Error updating item:", error);
       toast({
         title: "Error",
         description: "Failed to update item",
@@ -1382,7 +1401,7 @@ export default function MenuPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: number) => {
     try {
       if (activeTab === "menu") {
         await deleteMenuItem(id);
@@ -1394,7 +1413,7 @@ export default function MenuPage() {
         description: "Item deleted successfully",
       });
     } catch (error) {
-      console.error('Error deleting item:', error);
+      console.error("Error deleting item:", error);
       toast({
         title: "Error",
         description: "Failed to delete item",
@@ -1403,7 +1422,6 @@ export default function MenuPage() {
     }
   };
 
-  // Auth error state
   if (errorState.auth) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -1411,7 +1429,7 @@ export default function MenuPage() {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <p className="text-lg font-semibold mb-2">Authentication Error</p>
           <p className="text-gray-600 mb-4">{errorState.auth}</p>
-          <Button onClick={() => window.location.href = '/login'}>
+          <Button onClick={() => (window.location.href = "/login")}>
             Return to Login
           </Button>
         </div>
@@ -1419,7 +1437,6 @@ export default function MenuPage() {
     );
   }
 
-  // General loading state
   const isLoading = Object.values(loadingState).some(Boolean);
   if (isLoading) {
     return (
@@ -1432,7 +1449,6 @@ export default function MenuPage() {
     );
   }
 
-  // Any other error state
   const hasErrors = Object.keys(errorState).length > 0;
   if (hasErrors) {
     return (
@@ -1441,11 +1457,9 @@ export default function MenuPage() {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <p className="text-lg font-semibold mb-2">Error Loading Data</p>
           <p className="text-gray-600 mb-4">
-            {Object.values(errorState).filter(Boolean).join(', ')}
+            {Object.values(errorState).filter(Boolean).join(", ")}
           </p>
-          <Button onClick={() => window.location.reload()}>
-            Try Again
-          </Button>
+          <Button onClick={() => window.location.reload()}>Try Again</Button>
         </div>
       </div>
     );
@@ -1453,8 +1467,8 @@ export default function MenuPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Tabs 
-        value={activeTab} 
+      <Tabs
+        value={activeTab}
         onValueChange={(value: string) => setActiveTab(value as TabType)}
       >
         <div className="sticky top-0 z-50 bg-white border-b">
@@ -1472,8 +1486,10 @@ export default function MenuPage() {
             <MenuSearch
               onSearch={setSearchQuery}
               onCategoryFilter={setActiveCategory}
-              categories={categories.filter(cat => 
-                activeTab === "menu" ? !cat.name.toLowerCase().includes('vino') : cat.name.toLowerCase().includes('vino')
+              categories={categories.filter((cat) =>
+                activeTab === "menu"
+                  ? !cat.name.toLowerCase().includes("vino")
+                  : cat.name.toLowerCase().includes("vino")
               )}
             />
           </div>
@@ -1481,8 +1497,10 @@ export default function MenuPage() {
 
         <div className="container mx-auto px-4 py-8">
           <MenuNav
-            categories={categories.filter(cat => 
-              activeTab === "menu" ? !cat.name.toLowerCase().includes('vino') : cat.name.toLowerCase().includes('vino')
+            categories={categories.filter((cat) =>
+              activeTab === "menu"
+                ? !cat.name.toLowerCase().includes("vino")
+                : cat.name.toLowerCase().includes("vino")
             )}
             activeCategory={activeCategory}
             onCategoryChange={setActiveCategory}
@@ -1506,7 +1524,7 @@ export default function MenuPage() {
                   onDelete={handleDelete}
                   categories={categories}
                   allergens={activeTab === "menu" ? allergens : undefined}
-                  isEditing={editingId === item.id}
+                  isEditing={item.id === editingId}
                   onEditToggle={setEditingId}
                 />
               ))}
@@ -1523,6 +1541,7 @@ export default function MenuPage() {
     </div>
   );
 }
+
 ```
 
 ### app/dashboard/users/page.tsx
@@ -5612,14 +5631,18 @@ export default ImageSelector;
 ```typescript
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { Edit2, Trash2, Euro } from "lucide-react";
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import type { MenuCardProps, MenuItem, Wine } from "@/types/menu";
 import MenuEditor from "./MenuEditor";
 
-// Typography System
+// Constants for placeholder images
+const PLACEHOLDER_MENU_ITEM = '/images/placeholder-menu-item.jpg';
+const PLACEHOLDER_WINE = '/images/placeholder-wine.jpg';
+
 const typography = {
   display: {
     title: "font-garamond text-2xl sm:text-3xl leading-tight tracking-tight",
@@ -5653,16 +5676,86 @@ const MenuCard: React.FC<MenuCardProps> = ({
   onEditToggle
 }) => {
   const [isDeleting, setIsDeleting] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string>(PLACEHOLDER_MENU_ITEM);
+  const supabase = createClientComponentClient();
 
-  // Type guard to check if item is a MenuItem
   const isMenuItem = (item: MenuItem | Wine): item is MenuItem => {
     return 'allergens' in item;
   };
 
-  // Type guard to check if item is a Wine
   const isWine = (item: MenuItem | Wine): item is Wine => {
     return 'bottle_price' in item;
   };
+
+  // Create and use layout effect to prevent initial image flash
+  useEffect(() => {
+    if (isEditing) {
+      return;
+    }
+
+    const loadImage = async () => {
+      if (!isMenuItem(item)) {
+        setImageUrl(PLACEHOLDER_WINE);
+        return;
+      }
+
+      try {
+        const category = categories.find(c => c.id === item.category_id);
+        if (!category) {
+          setImageUrl(PLACEHOLDER_MENU_ITEM);
+          return;
+        }
+
+        const folderName = category.name.toLowerCase().replace(/\s+/g, '-');
+        
+        const { data: files, error: listError } = await supabase
+          .storage
+          .from('menu-images')
+          .list(folderName);
+
+        if (listError || !files || files.length === 0) {
+          setImageUrl(PLACEHOLDER_MENU_ITEM);
+          return;
+        }
+
+        const matchingFile = files.find(file => {
+          const fileName = file.name.split('.')[0].toLowerCase();
+          const itemName = item.name.toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-z0-9]/g, '-');
+          
+          return fileName.includes(itemName) || itemName.includes(fileName);
+        });
+
+        if (!matchingFile) {
+          setImageUrl(PLACEHOLDER_MENU_ITEM);
+          return;
+        }
+
+        const { data } = await supabase
+          .storage
+          .from('menu-images')
+          .createSignedUrl(`${folderName}/${matchingFile.name}`, 3600);
+
+        if (data?.signedUrl) {
+          setImageUrl(data.signedUrl);
+          
+          await supabase
+            .from('menu_items')
+            .update({ image_path: matchingFile.name })
+            .eq('id', item.id);
+        } else {
+          setImageUrl(PLACEHOLDER_MENU_ITEM);
+        }
+      } catch (error) {
+        console.error('Error loading image:', error);
+        setImageUrl(PLACEHOLDER_MENU_ITEM);
+      }
+    };
+
+    loadImage();
+  }, [item, categories, supabase, isEditing]);
 
   const handleDelete = async () => {
     try {
@@ -5673,12 +5766,9 @@ const MenuCard: React.FC<MenuCardProps> = ({
     }
   };
 
-  const getDisplayImage = () => {
-    if (isMenuItem(item)) {
-      return item.image_path || '/placeholder-menu-item.jpg';
-    }
-    // For wines, always return placeholder since they don't have images
-    return '/placeholder-wine.jpg';
+  const getCategory = () => {
+    const category = categories.find(c => c.id === item.category_id);
+    return category?.name || 'Sin categoría';
   };
 
   const getDisplayPrice = () => {
@@ -5691,21 +5781,10 @@ const MenuCard: React.FC<MenuCardProps> = ({
     return '0.00';
   };
 
-  const getCategory = () => {
-    const category = categories.find(c => c.id === item.category_id);
-    return category?.name || 'Sin categoría';
-  };
-
-  return (
-    <motion.div
-      layout
-      variants={motionVariants.card}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      className="group relative bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300"
-    >
-      {isEditing ? (
+  // Render MenuEditor separately to avoid image loading issues
+  if (isEditing) {
+    return (
+      <div className="bg-white rounded-lg overflow-hidden shadow-sm">
         <MenuEditor
           item={item}
           type={type}
@@ -5717,94 +5796,97 @@ const MenuCard: React.FC<MenuCardProps> = ({
           categories={categories}
           allergens={allergens}
         />
-      ) : (
-        <>
-          {/* Image Container */}
-          <div className="relative aspect-[4/3] overflow-hidden">
-            <Image
-              src={getDisplayImage()}
-              alt={item.name}
-              fill
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
-              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            />
-            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          </div>
+      </div>
+    );
+  }
 
-          {/* Content */}
-          <div className="p-6">
-            {/* Category Label */}
-            <span className={`${typography.label} text-muted-foreground`}>
-              {getCategory()}
+  return (
+    <motion.div
+      layout
+      variants={motionVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      className="group relative bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300"
+    >
+      <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
+        <Image
+          src={imageUrl}
+          alt={item.name}
+          fill
+          priority
+          className="object-cover transition-transform duration-300 group-hover:scale-105"
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          onError={() => setImageUrl(PLACEHOLDER_MENU_ITEM)}
+        />
+        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      </div>
+
+      <div className="p-6">
+        <span className={`${typography.label} text-muted-foreground`}>
+          {getCategory()}
+        </span>
+
+        <div className="flex justify-between items-start mt-2 mb-4">
+          <h3 className={typography.display.title}>{item.name}</h3>
+          <span className="flex items-center text-xl font-light">
+            <Euro className="h-4 w-4 mr-1" />
+            {getDisplayPrice()}
+          </span>
+        </div>
+
+        <p className={`${typography.body.base} text-muted-foreground`}>
+          {item.description}
+        </p>
+
+        {type === 'menu' && allergens && isMenuItem(item) && item.allergens && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {item.allergens.map((allergenId) => {
+              const allergen = allergens.find(a => a.id === allergenId);
+              return allergen && (
+                <span
+                  key={allergen.id}
+                  className="px-2 py-1 text-xs bg-secondary/10 rounded-full"
+                >
+                  {allergen.name}
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {isWine(item) && (
+          <div className="mt-4">
+            <span className="text-sm font-medium">
+              Copa: €{item.glass_price.toFixed(2)}
             </span>
-
-            {/* Title and Price */}
-            <div className="flex justify-between items-start mt-2 mb-4">
-              <h3 className={typography.display.title}>{item.name}</h3>
-              <span className="flex items-center text-xl font-light">
-                <Euro className="h-4 w-4 mr-1" />
-                {getDisplayPrice()}
-              </span>
-            </div>
-
-            {/* Description */}
-            <p className={`${typography.body.base} text-muted-foreground`}>
-              {item.description}
-            </p>
-
-            {/* Allergens (Only for menu items) */}
-            {type === 'menu' && allergens && isMenuItem(item) && item.allergens && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {item.allergens.map((allergenId) => {
-                  const allergen = allergens.find(a => a.id === allergenId);
-                  return allergen && (
-                    <span
-                      key={allergen.id}
-                      className="px-2 py-1 text-xs bg-secondary/10 rounded-full"
-                    >
-                      {allergen.name}
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Additional Wine Info */}
-            {isWine(item) && (
-              <div className="mt-4">
-                <span className="text-sm font-medium">
-                  Copa: €{item.glass_price.toFixed(2)}
-                </span>
-              </div>
-            )}
           </div>
+        )}
+      </div>
 
-          {/* Action Buttons */}
-          <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-            <button
-              onClick={() => onEditToggle(item.id)}
-              className="p-2 rounded-full bg-white/90 hover:bg-white shadow-sm transition-colors duration-200"
-              aria-label="Edit item"
-            >
-              <Edit2 className="h-4 w-4" />
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="p-2 rounded-full bg-white/90 hover:bg-red-500 hover:text-white shadow-sm transition-colors duration-200"
-              aria-label="Delete item"
-            >
-              {isDeleting ? (
-                <span className="animate-spin">
-                  <Trash2 className="h-4 w-4" />
-                </span>
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-            </button>
-          </div>
-        </>
-      )}
+      <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <button
+          onClick={() => onEditToggle(item.id)}
+          className="p-2 rounded-full bg-white/90 hover:bg-white shadow-sm transition-colors duration-200"
+          aria-label="Edit item"
+        >
+          <Edit2 className="h-4 w-4" />
+        </button>
+        <button
+          onClick={handleDelete}
+          disabled={isDeleting}
+          className="p-2 rounded-full bg-white/90 hover:bg-red-500 hover:text-white shadow-sm transition-colors duration-200"
+          aria-label="Delete item"
+        >
+          {isDeleting ? (
+            <span className="animate-spin">
+              <Trash2 className="h-4 w-4" />
+            </span>
+          ) : (
+            <Trash2 className="h-4 w-4" />
+          )}
+        </button>
+      </div>
     </motion.div>
   );
 };
@@ -9835,5 +9917,47 @@ export interface RealtimePayload<T> {
     id: number;  // Changed to number
   };
 }
+```
+
+### public/images/placeholder-menu-item.jpg
+
+```jpg
+Error reading file: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+```
+
+### public/images/placeholder-wine.jpg
+
+```jpg
+Error reading file: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+```
+
+### public/file.svg
+
+```svg
+<svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
+```
+
+### public/globe.svg
+
+```svg
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>
+```
+
+### public/next.svg
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 394 80"><path fill="#000" d="M262 0h68.5v12.7h-27.2v66.6h-13.6V12.7H262V0ZM149 0v12.7H94v20.4h44.3v12.6H94v21h55v12.6H80.5V0h68.7zm34.3 0h-17.8l63.8 79.4h17.9l-32-39.7 32-39.6h-17.9l-23 28.6-23-28.6zm18.3 56.7-9-11-27.1 33.7h17.8l18.3-22.7z"/><path fill="#000" d="M81 79.3 17 0H0v79.3h13.6V17l50.2 62.3H81Zm252.6-.4c-1 0-1.8-.4-2.5-1s-1.1-1.6-1.1-2.6.3-1.8 1-2.5 1.6-1 2.6-1 1.8.3 2.5 1a3.4 3.4 0 0 1 .6 4.3 3.7 3.7 0 0 1-3 1.8zm23.2-33.5h6v23.3c0 2.1-.4 4-1.3 5.5a9.1 9.1 0 0 1-3.8 3.5c-1.6.8-3.5 1.3-5.7 1.3-2 0-3.7-.4-5.3-1s-2.8-1.8-3.7-3.2c-.9-1.3-1.4-3-1.4-5h6c.1.8.3 1.6.7 2.2s1 1.2 1.6 1.5c.7.4 1.5.5 2.4.5 1 0 1.8-.2 2.4-.6a4 4 0 0 0 1.6-1.8c.3-.8.5-1.8.5-3V45.5zm30.9 9.1a4.4 4.4 0 0 0-2-3.3 7.5 7.5 0 0 0-4.3-1.1c-1.3 0-2.4.2-3.3.5-.9.4-1.6 1-2 1.6a3.5 3.5 0 0 0-.3 4c.3.5.7.9 1.3 1.2l1.8 1 2 .5 3.2.8c1.3.3 2.5.7 3.7 1.2a13 13 0 0 1 3.2 1.8 8.1 8.1 0 0 1 3 6.5c0 2-.5 3.7-1.5 5.1a10 10 0 0 1-4.4 3.5c-1.8.8-4.1 1.2-6.8 1.2-2.6 0-4.9-.4-6.8-1.2-2-.8-3.4-2-4.5-3.5a10 10 0 0 1-1.7-5.6h6a5 5 0 0 0 3.5 4.6c1 .4 2.2.6 3.4.6 1.3 0 2.5-.2 3.5-.6 1-.4 1.8-1 2.4-1.7a4 4 0 0 0 .8-2.4c0-.9-.2-1.6-.7-2.2a11 11 0 0 0-2.1-1.4l-3.2-1-3.8-1c-2.8-.7-5-1.7-6.6-3.2a7.2 7.2 0 0 1-2.4-5.7 8 8 0 0 1 1.7-5 10 10 0 0 1 4.3-3.5c2-.8 4-1.2 6.4-1.2 2.3 0 4.4.4 6.2 1.2 1.8.8 3.2 2 4.3 3.4 1 1.4 1.5 3 1.5 5h-5.8z"/></svg>
+```
+
+### public/vercel.svg
+
+```svg
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
+```
+
+### public/window.svg
+
+```svg
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
 ```
 
