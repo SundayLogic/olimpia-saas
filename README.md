@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-11-15 21:29:31
+Generated on: 2024-11-16 12:08:57
 
 ## Documented Directories:
 - app/
@@ -1123,7 +1123,7 @@ import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, AlertCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
@@ -1169,14 +1169,38 @@ interface RealtimePayload<T> {
   };
 }
 
+interface LoadingState {
+  auth: boolean;
+  categories: boolean;
+  allergens: boolean;
+  menuItems: boolean;
+  wines: boolean;
+}
+
+interface ErrorState {
+  auth?: string;
+  categories?: string;
+  allergens?: string;
+  menuItems?: string;
+  wines?: string;
+}
+
 export default function MenuPage() {
   // State
   const [activeTab, setActiveTab] = useState<TabType>("menu");
   const [activeCategory, setActiveCategory] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isError, setIsError] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Loading and Error States
+  const [loadingState, setLoadingState] = useState<LoadingState>({
+    auth: true,
+    categories: true,
+    allergens: true,
+    menuItems: true,
+    wines: true
+  });
+  const [errorState, setErrorState] = useState<ErrorState>({});
 
   // Data states
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -1187,83 +1211,80 @@ export default function MenuPage() {
   const { toast } = useToast();
   const supabase = createClientComponentClient();
 
-  // Initial data fetch with improved error handling
+  // Auth check
   useEffect(() => {
-    const loadInitialData = async () => {
+    const checkAuth = async () => {
       try {
-        setIsLoading(true);
-        setIsError(false);
-
-        // Check auth state
         const { data: { session }, error: authError } = await supabase.auth.getSession();
-        if (authError) {
-          console.error('Auth error:', authError);
-          throw new Error('Authentication error');
-        }
-
-        console.log('Auth state:', {
-          isAuthenticated: !!session,
-          user: session?.user?.email
-        });
-
-        // Fetch data in sequence to better identify issues
-        console.log('Fetching categories...');
-        const categoryData = await getCategories();
-        setCategories(categoryData);
-
-        console.log('Fetching allergens...');
-        const allergenData = await getAllergens();
-        setAllergens(allergenData);
-
-        console.log('Fetching menu items...');
-        const menuData = await getMenuItems();
-        setMenuItems(menuData);
-
-        console.log('Fetching wines...');
-        const wineData = await getWines();
-        setWines(wineData);
-
-        console.log('Data loaded successfully', {
-          categories: categoryData?.length,
-          allergens: allergenData?.length,
-          menuItems: menuData?.length,
-          wines: wineData?.length
-        });
-
+        
+        if (authError) throw authError;
+        if (!session) throw new Error('No authenticated session');
+        
+        console.log('Auth successful:', session.user.email);
+        setLoadingState(prev => ({ ...prev, auth: false }));
+        
       } catch (error) {
-        setIsError(true);
-        console.error('Error loading data:', {
-          error,
-          message: error instanceof Error ? error.message : 'Unknown error'
-        });
-        toast({
-          title: "Error",
-          description: "Failed to load menu data. Please try again.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
+        console.error('Auth error:', error);
+        setErrorState(prev => ({
+          ...prev,
+          auth: error instanceof Error ? error.message : 'Authentication failed'
+        }));
+        setLoadingState(prev => ({ ...prev, auth: false }));
       }
     };
 
-    loadInitialData();
-  }, [supabase, toast]);
+    checkAuth();
+  }, [supabase.auth]);
+
+  // Data fetching
+  useEffect(() => {
+    const loadData = async () => {
+      if (errorState.auth) return; // Don't load data if auth failed
+
+      const fetchData = async <T,>(
+        key: keyof LoadingState,
+        fetcher: () => Promise<T>,
+        setter: (data: T) => void
+      ) => {
+        try {
+          setLoadingState(prev => ({ ...prev, [key]: true }));
+          const data = await fetcher();
+          setter(data);
+          setLoadingState(prev => ({ ...prev, [key]: false }));
+        } catch (error) {
+          console.error(`Error fetching ${key}:`, error);
+          setErrorState(prev => ({
+            ...prev,
+            [key]: error instanceof Error ? error.message : `Failed to load ${key}`
+          }));
+          setLoadingState(prev => ({ ...prev, [key]: false }));
+        }
+      };
+
+      await Promise.all([
+        fetchData('categories', getCategories, setCategories),
+        fetchData('allergens', getAllergens, setAllergens),
+        fetchData('menuItems', getMenuItems, setMenuItems),
+        fetchData('wines', getWines, setWines)
+      ]);
+    };
+
+    loadData();
+  }, [errorState.auth]);
 
   // Realtime subscriptions
   useEffect(() => {
-    if (isError) return; // Don't set up subscriptions if there was an error
+    if (Object.keys(errorState).length > 0) return; // Don't subscribe if there are errors
 
     const menuUnsubscribe = subscribeToMenuChanges((payload: RealtimePayload<MenuItem>) => {
       const { eventType, new: newRecord, old: oldRecord } = payload;
       
-      setMenuItems((current) => {
+      setMenuItems(current => {
         switch (eventType) {
           case 'INSERT':
             return [...current, newRecord];
           case 'UPDATE':
-            return current.map(item => 
-              item.id === oldRecord.id ? newRecord : item
-            );
+            return current.map(item => item.id === oldRecord.id ? newRecord : item);
           case 'DELETE':
             return current.filter(item => item.id !== oldRecord.id);
           default:
@@ -1275,14 +1296,12 @@ export default function MenuPage() {
     const wineUnsubscribe = subscribeToWineChanges((payload: RealtimePayload<Wine>) => {
       const { eventType, new: newRecord, old: oldRecord } = payload;
       
-      setWines((current) => {
+      setWines(current => {
         switch (eventType) {
           case 'INSERT':
             return [...current, newRecord];
           case 'UPDATE':
-            return current.map(wine => 
-              wine.id === oldRecord.id ? newRecord : wine
-            );
+            return current.map(wine => wine.id === oldRecord.id ? newRecord : wine);
           case 'DELETE':
             return current.filter(wine => wine.id !== oldRecord.id);
           default:
@@ -1295,9 +1314,9 @@ export default function MenuPage() {
       menuUnsubscribe();
       wineUnsubscribe();
     };
-  }, [isError]);
+  }, [errorState]);
 
-  // Filtered items with memoization
+  // Filtered items
   const filteredItems = useMemo(() => {
     const items = activeTab === "menu" ? menuItems : wines;
     return items.filter(item => {
@@ -1348,6 +1367,7 @@ export default function MenuPage() {
       } else {
         await updateWine(id, data as WineFormData);
       }
+      setEditingId(null);
       toast({
         title: "Success",
         description: "Item updated successfully",
@@ -1383,7 +1403,24 @@ export default function MenuPage() {
     }
   };
 
-  // Loading state
+  // Auth error state
+  if (errorState.auth) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <p className="text-lg font-semibold mb-2">Authentication Error</p>
+          <p className="text-gray-600 mb-4">{errorState.auth}</p>
+          <Button onClick={() => window.location.href = '/login'}>
+            Return to Login
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // General loading state
+  const isLoading = Object.values(loadingState).some(Boolean);
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -1395,12 +1432,17 @@ export default function MenuPage() {
     );
   }
 
-  // Error state
-  if (isError) {
+  // Any other error state
+  const hasErrors = Object.keys(errorState).length > 0;
+  if (hasErrors) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <p className="text-red-500 mb-4">Failed to load menu data</p>
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <p className="text-lg font-semibold mb-2">Error Loading Data</p>
+          <p className="text-gray-600 mb-4">
+            {Object.values(errorState).filter(Boolean).join(', ')}
+          </p>
           <Button onClick={() => window.location.reload()}>
             Try Again
           </Button>
@@ -5380,11 +5422,11 @@ interface Image {
   url: string;
   updatedAt: string;
 }
-
+// components/menu/ImageSelector.tsx
 interface ImageSelectorProps {
   onSelect: (imagePath: string) => void;
   onClose: () => void;
-  categoryId: string;
+  categoryId: string; // This needs to be string for SelectItem compatibility
 }
 
 const ImageSelector = ({ onSelect, onClose, categoryId }: ImageSelectorProps) => {
@@ -5617,6 +5659,11 @@ const MenuCard: React.FC<MenuCardProps> = ({
     return 'allergens' in item;
   };
 
+  // Type guard to check if item is a Wine
+  const isWine = (item: MenuItem | Wine): item is Wine => {
+    return 'bottle_price' in item;
+  };
+
   const handleDelete = async () => {
     try {
       setIsDeleting(true);
@@ -5624,6 +5671,29 @@ const MenuCard: React.FC<MenuCardProps> = ({
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  const getDisplayImage = () => {
+    if (isMenuItem(item)) {
+      return item.image_path || '/placeholder-menu-item.jpg';
+    }
+    // For wines, always return placeholder since they don't have images
+    return '/placeholder-wine.jpg';
+  };
+
+  const getDisplayPrice = () => {
+    if (isMenuItem(item)) {
+      return item.price.toFixed(2);
+    }
+    if (isWine(item)) {
+      return `${item.bottle_price.toFixed(2)}`;
+    }
+    return '0.00';
+  };
+
+  const getCategory = () => {
+    const category = categories.find(c => c.id === item.category_id);
+    return category?.name || 'Sin categoría';
   };
 
   return (
@@ -5652,7 +5722,7 @@ const MenuCard: React.FC<MenuCardProps> = ({
           {/* Image Container */}
           <div className="relative aspect-[4/3] overflow-hidden">
             <Image
-              src={item.image_path || '/placeholder-image.jpg'}
+              src={getDisplayImage()}
               alt={item.name}
               fill
               className="object-cover transition-transform duration-300 group-hover:scale-105"
@@ -5664,8 +5734,8 @@ const MenuCard: React.FC<MenuCardProps> = ({
           {/* Content */}
           <div className="p-6">
             {/* Category Label */}
-            <span className={`${typography.label} text-olimpia-text-light`}>
-              {categories.find(c => c.id === item.category_id)?.name || 'Sin categoría'}
+            <span className={`${typography.label} text-muted-foreground`}>
+              {getCategory()}
             </span>
 
             {/* Title and Price */}
@@ -5673,29 +5743,38 @@ const MenuCard: React.FC<MenuCardProps> = ({
               <h3 className={typography.display.title}>{item.name}</h3>
               <span className="flex items-center text-xl font-light">
                 <Euro className="h-4 w-4 mr-1" />
-                {item.price.toFixed(2)}
+                {getDisplayPrice()}
               </span>
             </div>
 
             {/* Description */}
-            <p className={`${typography.body.base} text-olimpia-text-secondary`}>
+            <p className={`${typography.body.base} text-muted-foreground`}>
               {item.description}
             </p>
 
             {/* Allergens (Only for menu items) */}
             {type === 'menu' && allergens && isMenuItem(item) && item.allergens && (
               <div className="mt-4 flex flex-wrap gap-2">
-                {item.allergens.map((allergenId: string) => {
+                {item.allergens.map((allergenId) => {
                   const allergen = allergens.find(a => a.id === allergenId);
                   return allergen && (
                     <span
                       key={allergen.id}
-                      className="px-2 py-1 text-xs bg-olimpia-secondary/10 rounded-full"
+                      className="px-2 py-1 text-xs bg-secondary/10 rounded-full"
                     >
                       {allergen.name}
                     </span>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Additional Wine Info */}
+            {isWine(item) && (
+              <div className="mt-4">
+                <span className="text-sm font-medium">
+                  Copa: €{item.glass_price.toFixed(2)}
+                </span>
               </div>
             )}
           </div>
@@ -5705,6 +5784,7 @@ const MenuCard: React.FC<MenuCardProps> = ({
             <button
               onClick={() => onEditToggle(item.id)}
               className="p-2 rounded-full bg-white/90 hover:bg-white shadow-sm transition-colors duration-200"
+              aria-label="Edit item"
             >
               <Edit2 className="h-4 w-4" />
             </button>
@@ -5712,6 +5792,7 @@ const MenuCard: React.FC<MenuCardProps> = ({
               onClick={handleDelete}
               disabled={isDeleting}
               className="p-2 rounded-full bg-white/90 hover:bg-red-500 hover:text-white shadow-sm transition-colors duration-200"
+              aria-label="Delete item"
             >
               {isDeleting ? (
                 <span className="animate-spin">
@@ -5742,7 +5823,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Image from "next/image";
 import { Loader2, Image as ImageIcon, Check, X } from "lucide-react";
-import type { MenuEditorProps, MenuItem} from "@/types/menu";
+import type { MenuEditorProps, MenuItem, Wine, MenuItemFormData, WineFormData } from "@/types/menu";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -5777,17 +5858,26 @@ import { Badge } from "@/components/ui/badge";
 import ImageSelector from "@/components/menu/ImageSelector";
 import { cn } from "@/lib/utils";
 
-// Form Schema
+// Form Schemas
 const menuItemSchema = z.object({
   name: z.string().min(1, "El nombre es requerido"),
   description: z.string().min(1, "La descripción es requerida"),
   price: z.coerce.number().min(0, "El precio debe ser mayor a 0"),
-  category_id: z.string().min(1, "La categoría es requerida"),
-  image_path: z.string().min(1, "La imagen es requerida"),
-  allergens: z.array(z.string()).optional(),
+  category_id: z.coerce.number().min(1, "La categoría es requerida"),
+  image_path: z.string().optional(),
+  allergens: z.array(z.coerce.number()).optional(),
 });
 
-type FormValues = z.infer<typeof menuItemSchema>;
+const wineSchema = z.object({
+  name: z.string().min(1, "El nombre es requerido"),
+  description: z.string().min(1, "La descripción es requerida"),
+  bottle_price: z.coerce.number().min(0, "El precio de botella debe ser mayor a 0"),
+  glass_price: z.coerce.number().min(0, "El precio de copa debe ser mayor a 0"),
+  category_id: z.coerce.number().min(1, "La categoría es requerida"),
+});
+
+type MenuItemFormValues = z.infer<typeof menuItemSchema>;
+type WineFormValues = z.infer<typeof wineSchema>;
 
 const MenuEditor: React.FC<MenuEditorProps> = ({
   item,
@@ -5801,76 +5891,108 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
   const [isSelectingImage, setIsSelectingImage] = useState(false);
   const [openAllergens, setOpenAllergens] = useState(false);
 
-  const defaultAllergens = type === 'menu' 
-    ? ((item as MenuItem)?.allergens || [])
+  const isMenuItem = (item: MenuItem | Wine): item is MenuItem => {
+    return 'allergens' in item;
+  };
+
+  const isWine = (item: MenuItem | Wine): item is Wine => {
+    return 'bottle_price' in item;
+  };
+
+  const defaultAllergens = type === 'menu' && isMenuItem(item) 
+    ? item.allergens
     : [];
 
-  const form = useForm<FormValues>({
-    resolver: zodResolver(menuItemSchema),
-    defaultValues: {
-      name: item?.name || "",
-      description: item?.description || "",
-      price: item?.price || 0,
-      category_id: item?.category_id || "",
-      image_path: item?.image_path || "",
+  const form = useForm<MenuItemFormValues | WineFormValues>({
+    resolver: zodResolver(type === 'menu' ? menuItemSchema : wineSchema),
+    defaultValues: type === 'menu' ? {
+      name: item.name,
+      description: item.description,
+      price: isMenuItem(item) ? item.price : 0,
+      category_id: item.category_id,
+      image_path: isMenuItem(item) && item.image_path ? item.image_path : undefined,
       allergens: defaultAllergens,
+    } : {
+      name: item.name,
+      description: item.description,
+      bottle_price: isWine(item) ? item.bottle_price : 0,
+      glass_price: isWine(item) ? item.glass_price : 0,
+      category_id: item.category_id,
     }
   });
 
-  const selectedAllergens = form.watch('allergens') || [];
+  const selectedAllergens = type === 'menu' ? (form.watch('allergens') || []) : [];
 
-  const handleSubmit = async (data: FormValues) => {
+  const handleSubmit = async (data: MenuItemFormValues | WineFormValues) => {
     try {
       setIsSubmitting(true);
-      await onSave(data);
+      if (type === 'menu') {
+        const menuData: MenuItemFormData = {
+          ...data as MenuItemFormValues,
+          category_id: Number(data.category_id),
+          allergens: (data as MenuItemFormValues).allergens?.map(Number) || [],
+          image_path: (data as MenuItemFormValues).image_path || ''
+        };
+        await onSave(menuData);
+      } else {
+        const wineData: WineFormData = {
+          ...data as WineFormValues,
+          category_id: Number(data.category_id)
+        };
+        await onSave(wineData);
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleImageSelect = (imagePath: string) => {
-    form.setValue('image_path', imagePath);
+    if (type === 'menu') {
+      form.setValue('image_path', imagePath);
+    }
     setIsSelectingImage(false);
   };
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="p-6 space-y-6">
-        {/* Image Selection */}
-        <FormField
-          control={form.control}
-          name="image_path"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Imagen</FormLabel>
-              <div className="flex gap-4 items-center">
-                {field.value ? (
-                  <div className="relative w-20 h-20 rounded overflow-hidden">
-                    <Image
-                      src={field.value}
-                      alt="Selected"
-                      fill
-                      className="object-cover"
-                      sizes="80px"
-                    />
-                  </div>
-                ) : (
-                  <div className="w-20 h-20 bg-gray-100 rounded flex items-center justify-center">
-                    <ImageIcon className="w-8 h-8 text-gray-400" />
-                  </div>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsSelectingImage(true)}
-                >
-                  Seleccionar Imagen
-                </Button>
-              </div>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* Image Selection - Only for menu items */}
+        {type === 'menu' && (
+          <FormField
+            control={form.control}
+            name="image_path"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Imagen</FormLabel>
+                <div className="flex gap-4 items-center">
+                  {field.value ? (
+                    <div className="relative w-20 h-20 rounded overflow-hidden">
+                      <Image
+                        src={field.value}
+                        alt="Selected"
+                        fill
+                        className="object-cover"
+                        sizes="80px"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 bg-gray-100 rounded flex items-center justify-center">
+                      <ImageIcon className="w-8 h-8 text-gray-400" />
+                    </div>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsSelectingImage(true)}
+                  >
+                    Seleccionar Imagen
+                  </Button>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         {/* Basic Information */}
         <div className="grid grid-cols-2 gap-4">
@@ -5888,25 +6010,68 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="price"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Precio</FormLabel>
-                <FormControl>
-                  <Input 
-                    type="number" 
-                    step="0.01" 
-                    placeholder="0.00" 
-                    {...field}
-                    onChange={(e) => field.onChange(parseFloat(e.target.value))}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {type === 'menu' ? (
+            <FormField
+              control={form.control}
+              name="price"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Precio</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="0.00" 
+                      {...field}
+                      onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          ) : (
+            <>
+              <FormField
+                control={form.control}
+                name="bottle_price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Precio Botella</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        step="0.01" 
+                        placeholder="0.00" 
+                        {...field}
+                        onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="glass_price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Precio Copa</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        step="0.01" 
+                        placeholder="0.00" 
+                        {...field}
+                        onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </>
+          )}
         </div>
 
         {/* Category Selection */}
@@ -5917,8 +6082,8 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
             <FormItem>
               <FormLabel>Categoría</FormLabel>
               <Select
-                onValueChange={field.onChange}
-                value={field.value}
+                onValueChange={(value) => field.onChange(Number(value))}
+                value={field.value?.toString()}
               >
                 <FormControl>
                   <SelectTrigger>
@@ -5927,7 +6092,10 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                 </FormControl>
                 <SelectContent>
                   {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
+                    <SelectItem 
+                      key={category.id} 
+                      value={category.id.toString()}
+                    >
                       {category.name}
                     </SelectItem>
                   ))}
@@ -5957,7 +6125,7 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
           )}
         />
 
-        {/* Allergens Multi-select */}
+        {/* Allergens Multi-select - Only for menu items */}
         {type === 'menu' && (
           <FormField
             control={form.control}
@@ -6005,7 +6173,7 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                             <Check
                               className={cn(
                                 "mr-2 h-4 w-4",
-                                selectedAllergens.includes(allergen.id)
+                                (field.value || []).includes(allergen.id)
                                   ? "opacity-100"
                                   : "opacity-0"
                               )}
@@ -6066,11 +6234,11 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
       </form>
 
       {/* Image Selector Modal */}
-      {isSelectingImage && (
+      {isSelectingImage && type === 'menu' && (
         <ImageSelector 
           onSelect={handleImageSelect}
           onClose={() => setIsSelectingImage(false)}
-          categoryId={form.watch('category_id')}
+          categoryId={form.watch('category_id').toString()}
         />
       )}
     </Form>
@@ -6239,7 +6407,7 @@ const MenuSearch: React.FC<MenuSearchProps> = ({
   categories
 }) => {
   const [searchValue, setSearchValue] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   const handleSearch = (value: string) => {
     setSearchValue(value);
@@ -6248,13 +6416,18 @@ const MenuSearch: React.FC<MenuSearchProps> = ({
 
   const handleCategoryChange = (value: string) => {
     setSelectedCategory(value);
-    onCategoryFilter(value === "all" ? "" : value);
+    // Convert to number for API call, but handle "all" case
+    if (value === "all") {
+      onCategoryFilter(null);
+    } else {
+      onCategoryFilter(parseInt(value, 10));
+    }
   };
 
   return (
     <div className="flex flex-col sm:flex-row gap-4 p-4 bg-white/50 backdrop-blur-sm rounded-lg">
       <div className="relative flex-grow">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-olimpia-text-light h-4 w-4" />
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
         <Input
           type="text"
           placeholder="Buscar..."
@@ -6274,7 +6447,10 @@ const MenuSearch: React.FC<MenuSearchProps> = ({
         <SelectContent>
           <SelectItem value="all">Todas las categorías</SelectItem>
           {categories.map((category) => (
-            <SelectItem key={category.id} value={category.id}>
+            <SelectItem 
+              key={category.id} 
+              value={category.id.toString()}
+            >
               {category.name}
             </SelectItem>
           ))}
@@ -8931,112 +9107,139 @@ export const getSupabaseClient = () => {
 
 ```typescript
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { PostgrestError} from "@supabase/supabase-js";
 import type { 
   MenuItem, 
   Wine, 
   Category, 
   Allergen, 
   MenuItemFormData, 
-  WineFormData 
+  WineFormData,
+  RealtimePayload
 } from "@/types/menu";
+import type { Database } from "@/lib/supabase/types";
 
-const supabase = createClientComponentClient();
-
-// Types for real-time subscriptions
-interface RealtimePayload<T> {
-  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  new: T;
-  old: {
-    id: string;
-  };
-}
-
+// Define more specific types for the database responses
 interface MenuItemWithRelations {
-  id: string;
+  id: number;
   name: string;
   description: string;
   price: number;
-  category_id: string;
-  image_path: string;
-  is_daily_menu: boolean;
+  category_id: number;
+  image_url: string | null;
+  image_path: string | null;
+  image_alt: string | null;
+  image_thumbnail_path: string | null;
+  active: boolean;
   created_at: string;
   updated_at: string;
   menu_item_allergens: {
     allergen: {
-      id: string;
+      id: number;
       name: string;
-      created_at: string;
-      updated_at: string;
     };
   }[];
 }
 
+interface WineWithRelations {
+  id: number;
+  name: string;
+  description: string;
+  bottle_price: number;
+  glass_price: number;
+  category_id: number;
+  active: boolean;
+  created_at: string;
+  wine_categories: {
+    id: number;
+    name: string;
+    display_order: number;
+  } | null;
+}
+
+const supabase = createClientComponentClient<Database>();
+
+// Helper function to check auth
+const checkAuth = async () => {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error) throw new Error(`Authentication error: ${error.message}`);
+  if (!session) throw new Error('No authenticated session');
+  return session;
+};
+
+// Helper to handle Supabase errors
+const handleSupabaseError = (error: PostgrestError, operation: string): never => {
+  console.error(`Error in ${operation}:`, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint
+  });
+  throw new Error(`${operation} failed: ${error.message}`);
+};
+
 // Menu Items Operations
-export const getMenuItems = async () => {
+export const getMenuItems = async (): Promise<MenuItem[]> => {
   try {
+    await checkAuth();
     console.log('Fetching menu items...');
+
     const { data, error } = await supabase
       .from('menu_items')
       .select(`
         *,
-        menu_item_allergens(
+        menu_item_allergens!inner(
           allergen:allergens(*)
         )
-      `);
+      `)
+      .order('name');
 
-    if (error) {
-      console.error('Error fetching menu items:', error);
-      throw error;
-    }
+    if (error) handleSupabaseError(error, 'getMenuItems');
+    if (!data) return [];
 
-    // Transform the data to match the MenuItem type
-    const transformedData = data?.map((item: MenuItemWithRelations) => ({
-      id: item.id,
-      name: item.name,
-      description: item.description,
-      price: item.price,
-      category_id: item.category_id,
-      image_path: item.image_path,
-      is_daily_menu: item.is_daily_menu,
-      created_at: item.created_at,
-      updated_at: item.updated_at,
+    const transformedData = data.map((item: MenuItemWithRelations) => ({
+      ...item,
       allergens: item.menu_item_allergens.map(relation => relation.allergen.id)
     }));
 
-    console.log('Fetched menu items:', transformedData);
-    return transformedData as MenuItem[];
+    console.log(`Successfully fetched ${transformedData.length} menu items`);
+    return transformedData;
   } catch (error) {
-    console.error('Error in getMenuItems:', error);
-    throw error;
+    if (error instanceof Error) {
+      console.error('Error in getMenuItems:', error.message);
+      throw new Error(`Failed to get menu items: ${error.message}`);
+    }
+    throw new Error('An unknown error occurred while getting menu items');
   }
 };
 
-export const createMenuItem = async (data: MenuItemFormData) => {
+export const createMenuItem = async (data: MenuItemFormData): Promise<MenuItem> => {
   try {
-    console.log('Creating menu item with data:', data);
-    const { data: item, error } = await supabase
+    await checkAuth();
+    console.log('Creating menu item:', data);
+
+    const { data: item, error: itemError } = await supabase
       .from('menu_items')
       .insert([{
         name: data.name,
         description: data.description,
         price: data.price,
         category_id: data.category_id,
-        image_path: data.image_path,
-        is_daily_menu: false,
+        image_url: data.image_url || null,
+        image_path: data.image_path || null,
+        image_alt: data.image_alt || null,
+        image_thumbnail_path: data.image_thumbnail_path || null,
+        active: data.active ?? true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }])
       .select()
       .single();
 
-    if (error) {
-      console.error('Error creating menu item:', error);
-      throw error;
-    }
+    if (itemError) handleSupabaseError(itemError, 'createMenuItem');
+    if (!item) throw new Error('Failed to create menu item');
 
-    // Create allergen relationships if provided
     if (data.allergens?.length) {
-      console.log('Creating allergen relationships...');
       const allergenRelations = data.allergens.map(allergenId => ({
         menu_item_id: item.id,
         allergen_id: allergenId
@@ -9047,61 +9250,56 @@ export const createMenuItem = async (data: MenuItemFormData) => {
         .insert(allergenRelations);
 
       if (allergenError) {
-        console.error('Error creating allergen relationships:', allergenError);
-        throw allergenError;
+        await supabase.from('menu_items').delete().eq('id', item.id);
+        handleSupabaseError(allergenError, 'createMenuItem allergens');
       }
     }
 
-    return { 
-      ...item, 
-      allergens: data.allergens || [] 
-    } as MenuItem;
+    return {
+      ...item,
+      allergens: data.allergens || []
+    };
   } catch (error) {
-    console.error('Error in createMenuItem:', error);
-    throw error;
+    if (error instanceof Error) {
+      console.error('Error in createMenuItem:', error.message);
+      throw new Error(`Failed to create menu item: ${error.message}`);
+    }
+    throw new Error('An unknown error occurred while creating menu item');
   }
 };
 
-export const updateMenuItem = async (id: string, data: Partial<MenuItemFormData>) => {
+export const updateMenuItem = async (id: number, data: Partial<MenuItemFormData>): Promise<MenuItem> => {
   try {
-    console.log('Updating menu item:', id, data);
+    await checkAuth();
     
-    // Update menu item
-    const { data: item, error } = await supabase
+    const updateData = {
+      ...(data.name && { name: data.name }),
+      ...(data.description && { description: data.description }),
+      ...(data.price && { price: data.price }),
+      ...(data.category_id && { category_id: data.category_id }),
+      ...(data.image_path && { image_path: data.image_path }),
+      ...(typeof data.active !== 'undefined' && { active: data.active }),
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: item, error: itemError } = await supabase
       .from('menu_items')
-      .update({
-        name: data.name,
-        description: data.description,
-        price: data.price,
-        category_id: data.category_id,
-        image_path: data.image_path,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
 
-    if (error) {
-      console.error('Error updating menu item:', error);
-      throw error;
-    }
+    if (itemError) handleSupabaseError(itemError, 'updateMenuItem');
+    if (!item) throw new Error('Menu item not found');
 
-    // Update allergens if provided
     if (data.allergens) {
-      console.log('Updating allergen relationships...');
-      
-      // Delete existing relationships
       const { error: deleteError } = await supabase
         .from('menu_item_allergens')
         .delete()
         .eq('menu_item_id', id);
 
-      if (deleteError) {
-        console.error('Error deleting existing allergen relationships:', deleteError);
-        throw deleteError;
-      }
+      if (deleteError) handleSupabaseError(deleteError, 'updateMenuItem delete allergens');
 
-      // Create new relationships
       if (data.allergens.length > 0) {
         const allergenRelations = data.allergens.map(allergenId => ({
           menu_item_id: id,
@@ -9112,201 +9310,197 @@ export const updateMenuItem = async (id: string, data: Partial<MenuItemFormData>
           .from('menu_item_allergens')
           .insert(allergenRelations);
 
-        if (insertError) {
-          console.error('Error creating new allergen relationships:', insertError);
-          throw insertError;
-        }
+        if (insertError) handleSupabaseError(insertError, 'updateMenuItem insert allergens');
       }
     }
 
-    return { 
-      ...item, 
-      allergens: data.allergens 
-    } as MenuItem;
+    return {
+      ...item,
+      allergens: data.allergens || []
+    };
   } catch (error) {
-    console.error('Error in updateMenuItem:', error);
-    throw error;
+    if (error instanceof Error) {
+      console.error('Error in updateMenuItem:', error.message);
+      throw new Error(`Failed to update menu item: ${error.message}`);
+    }
+    throw new Error('An unknown error occurred while updating menu item');
   }
 };
 
-export const deleteMenuItem = async (id: string) => {
+export const deleteMenuItem = async (id: number): Promise<void> => {
   try {
-    console.log('Deleting menu item:', id);
+    await checkAuth();
     
-    // Delete menu item (cascade will handle allergen relationships)
     const { error } = await supabase
       .from('menu_items')
       .delete()
       .eq('id', id);
 
-    if (error) {
-      console.error('Error deleting menu item:', error);
-      throw error;
-    }
+    if (error) handleSupabaseError(error, 'deleteMenuItem');
   } catch (error) {
-    console.error('Error in deleteMenuItem:', error);
-    throw error;
+    if (error instanceof Error) {
+      console.error('Error in deleteMenuItem:', error.message);
+      throw new Error(`Failed to delete menu item: ${error.message}`);
+    }
+    throw new Error('An unknown error occurred while deleting menu item');
   }
 };
 
 // Wine Operations
-export const getWines = async () => {
+export const getWines = async (): Promise<Wine[]> => {
   try {
-    console.log('Fetching wines...');
+    await checkAuth();
+
     const { data, error } = await supabase
       .from('wines')
       .select(`
         *,
-        category:wine_categories(*)
-      `);
+        wine_categories(*)
+      `)
+      .order('name');
 
-    if (error) {
-      console.error('Error fetching wines:', error);
-      throw error;
-    }
+    if (error) handleSupabaseError(error, 'getWines');
+    if (!data) return [];
 
-    console.log('Fetched wines:', data);
-    return data as Wine[];
+    const transformedData = data.map((wine: WineWithRelations) => ({
+      ...wine,
+      category: wine.wine_categories
+    }));
+
+    return transformedData;
   } catch (error) {
-    console.error('Error in getWines:', error);
-    throw error;
+    if (error instanceof Error) {
+      console.error('Error in getWines:', error.message);
+      throw new Error(`Failed to get wines: ${error.message}`);
+    }
+    throw new Error('An unknown error occurred while getting wines');
   }
 };
 
-export const createWine = async (data: WineFormData) => {
+export const createWine = async (data: WineFormData): Promise<Wine> => {
   try {
-    console.log('Creating wine with data:', data);
+    await checkAuth();
+
     const { data: wine, error } = await supabase
       .from('wines')
       .insert([{
         name: data.name,
         description: data.description,
-        price: data.price,
+        bottle_price: data.bottle_price,
+        glass_price: data.glass_price,
         category_id: data.category_id,
-        image_path: data.image_path,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        active: data.active ?? true,
+        created_at: new Date().toISOString()
       }])
       .select()
       .single();
 
-    if (error) {
-      console.error('Error creating wine:', error);
-      throw error;
-    }
+    if (error) handleSupabaseError(error, 'createWine');
+    if (!wine) throw new Error('Failed to create wine');
 
-    return wine as Wine;
+    return wine;
   } catch (error) {
-    console.error('Error in createWine:', error);
-    throw error;
+    if (error instanceof Error) {
+      console.error('Error in createWine:', error.message);
+      throw new Error(`Failed to create wine: ${error.message}`);
+    }
+    throw new Error('An unknown error occurred while creating wine');
   }
 };
 
-export const updateWine = async (id: string, data: Partial<WineFormData>) => {
+export const updateWine = async (id: number, data: Partial<WineFormData>): Promise<Wine> => {
   try {
-    console.log('Updating wine:', id, data);
+    await checkAuth();
+
     const { data: wine, error } = await supabase
       .from('wines')
       .update({
-        name: data.name,
-        description: data.description,
-        price: data.price,
-        category_id: data.category_id,
-        image_path: data.image_path,
-        updated_at: new Date().toISOString()
+        ...(data.name && { name: data.name }),
+        ...(data.description && { description: data.description }),
+        ...(data.bottle_price && { bottle_price: data.bottle_price }),
+        ...(data.glass_price && { glass_price: data.glass_price }),
+        ...(data.category_id && { category_id: data.category_id }),
+        ...(typeof data.active !== 'undefined' && { active: data.active })
       })
       .eq('id', id)
       .select()
       .single();
 
-    if (error) {
-      console.error('Error updating wine:', error);
-      throw error;
-    }
+    if (error) handleSupabaseError(error, 'updateWine');
+    if (!wine) throw new Error('Wine not found');
 
-    return wine as Wine;
+    return wine;
   } catch (error) {
-    console.error('Error in updateWine:', error);
-    throw error;
+    if (error instanceof Error) {
+      console.error('Error in updateWine:', error.message);
+      throw new Error(`Failed to update wine: ${error.message}`);
+    }
+    throw new Error('An unknown error occurred while updating wine');
   }
 };
 
-export const deleteWine = async (id: string) => {
+export const deleteWine = async (id: number): Promise<void> => {
   try {
-    console.log('Deleting wine:', id);
+    await checkAuth();
+
     const { error } = await supabase
       .from('wines')
       .delete()
       .eq('id', id);
 
-    if (error) {
-      console.error('Error deleting wine:', error);
-      throw error;
-    }
+    if (error) handleSupabaseError(error, 'deleteWine');
   } catch (error) {
-    console.error('Error in deleteWine:', error);
-    throw error;
+    if (error instanceof Error) {
+      console.error('Error in deleteWine:', error.message);
+      throw new Error(`Failed to delete wine: ${error.message}`);
+    }
+    throw new Error('An unknown error occurred while deleting wine');
   }
 };
 
 // Category Operations
-export const getCategories = async () => {
+export const getCategories = async (): Promise<Category[]> => {
   try {
-    console.log('Fetching categories...');
-    
-    // Test auth state
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    console.log('Auth state:', { 
-      isAuthenticated: !!session,
-      authError: authError?.message 
-    });
+    await checkAuth();
 
     const { data, error } = await supabase
-      .from('categories')
+      .from('menu_categories')
       .select('*')
-      .order('name');
+      .order('display_order', { ascending: true });
 
-    if (error) {
-      console.error('Supabase error details:', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint
-      });
-      throw error;
-    }
+    if (error) handleSupabaseError(error, 'getCategories');
+    if (!data) return [];
 
-    console.log('Categories fetched successfully:', data);
-    return data as Category[];
+    return data;
   } catch (error) {
-    console.error('Error in getCategories:', {
-      name: error instanceof Error ? error.name : 'Unknown',
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
-    });
-    throw error;
+    if (error instanceof Error) {
+      console.error('Error in getCategories:', error.message);
+      throw new Error(`Failed to get categories: ${error.message}`);
+    }
+    throw new Error('An unknown error occurred while getting categories');
   }
 };
 
 // Allergen Operations
-export const getAllergens = async () => {
+export const getAllergens = async (): Promise<Allergen[]> => {
   try {
-    console.log('Fetching allergens...');
+    await checkAuth();
+
     const { data, error } = await supabase
       .from('allergens')
       .select('*')
       .order('name');
 
-    if (error) {
-      console.error('Error fetching allergens:', error);
-      throw error;
-    }
+    if (error) handleSupabaseError(error, 'getAllergens');
+    if (!data) return [];
 
-    console.log('Fetched allergens:', data);
-    return data as Allergen[];
+    return data;
   } catch (error) {
-    console.error('Error in getAllergens:', error);
-    throw error;
+    if (error instanceof Error) {
+      console.error('Error in getAllergens:', error.message);
+      throw new Error(`Failed to get allergens: ${error.message}`);
+    }
+    throw new Error('An unknown error occurred while getting allergens');
   }
 };
 
@@ -9314,41 +9508,69 @@ export const getAllergens = async () => {
 export const subscribeToMenuChanges = (
   callback: (payload: RealtimePayload<MenuItem>) => void
 ): (() => void) => {
-  const channel = supabase.channel('menu_changes')
-    .on<MenuItem>(
-      'postgres_changes',
-      { 
-        event: '*', 
-        schema: 'public', 
-        table: 'menu_items' 
-      },
-      (payload) => callback(payload as RealtimePayload<MenuItem>)
-    )
-    .subscribe();
+  try {
+    const channel = supabase.channel('menu_changes')
+      .on<MenuItem>(
+        'postgres_changes',
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'menu_items' 
+        },
+        (payload) => callback(payload as RealtimePayload<MenuItem>)
+      )
+      .subscribe((status: 'SUBSCRIBED' | 'CLOSED' | 'TIMED_OUT' | 'CHANNEL_ERROR', err?: Error) => {
+        if (err) {
+          console.error('Menu subscription error:', err);
+        } else {
+          console.log('Menu subscription status:', status);
+        }
+      });
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error('Error in subscribeToMenuChanges:', error.message);
+      throw new Error(`Failed to subscribe to menu changes: ${error.message}`);
+    }
+    throw new Error('An unknown error occurred in menu subscription');
+  }
 };
 
 export const subscribeToWineChanges = (
   callback: (payload: RealtimePayload<Wine>) => void
 ): (() => void) => {
-  const channel = supabase.channel('wine_changes')
-    .on<Wine>(
-      'postgres_changes',
-      { 
-        event: '*', 
-        schema: 'public', 
-        table: 'wines' 
-      },
-      (payload) => callback(payload as RealtimePayload<Wine>)
-    )
-    .subscribe();
+  try {
+    const channel = supabase.channel('wine_changes')
+      .on<Wine>(
+        'postgres_changes',
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'wines' 
+        },
+        (payload) => callback(payload as RealtimePayload<Wine>)
+      )
+      .subscribe((status: 'SUBSCRIBED' | 'CLOSED' | 'TIMED_OUT' | 'CHANNEL_ERROR', err?: Error) => {
+        if (err) {
+          console.error('Wine subscription error:', err);
+        } else {
+          console.log('Wine subscription status:', status);
+        }
+      });
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error('Error in subscribeToWineChanges:', error.message);
+      throw new Error(`Failed to subscribe to wine changes: ${error.message}`);
+    }
+    throw new Error('An unknown error occurred in wine subscription');
+  }
 };
 ```
 
@@ -9495,44 +9717,46 @@ export function cn(...inputs: ClassValue[]) {
 ### src/types/menu.ts
 
 ```typescript
+// src/types/menu.ts
+
 // Basic Types
 export interface MenuItem {
-  id: string;
+  id: number;              // Changed to number since it's bigint in DB
   name: string;
   description: string;
   price: number;
-  image_path: string;
-  category_id: string;
-  is_daily_menu: boolean;
+  image_url: string | null;     // Added from DB structure
+  image_path: string | null;    // Made nullable
+  image_alt: string | null;     // Added from DB structure
+  image_thumbnail_path: string | null;  // Added from DB structure
+  category_id: number;    // Changed to number
+  active: boolean;       // Added from DB structure
+  allergens: number[];   // Changed to number array
   created_at: string;
   updated_at: string;
-  allergens: string[];
 }
 
 export interface Wine {
-  id: string;
+  id: number;
   name: string;
   description: string;
-  price: number;
-  image_path: string;
-  category_id: string;
+  bottle_price: number;
+  glass_price: number;
+  category_id: number;
+  active: boolean;
   created_at: string;
-  updated_at: string;
 }
 
+
 export interface Category {
-  id: string;
+  id: number;          // Changed to number
   name: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
+  display_order: number; // Added from DB structure
 }
 
 export interface Allergen {
-  id: string;
+  id: number;         // Changed to number
   name: string;
-  created_at: string;
-  updated_at: string;
 }
 
 // Form Types
@@ -9540,51 +9764,76 @@ export interface MenuItemFormData {
   name: string;
   description: string;
   price: number;
-  category_id: string;
-  image_path: string;
-  allergens: string[];
+  category_id: number;    // Changed to number
+  image_url?: string;     // Made optional
+  image_path?: string;    // Made optional
+  image_alt?: string;     // Added
+  image_thumbnail_path?: string;  // Added
+  active?: boolean;       // Added
+  allergens: number[];    // Changed to number array
 }
 
 export interface WineFormData {
   name: string;
   description: string;
-  price: number;
-  category_id: string;
-  image_path: string;
+  bottle_price: number;   // Changed to match DB
+  glass_price: number;    // Changed to match DB
+  category_id: number;    // Changed to number
+  active?: boolean;       // Added
 }
 
-// Props Types
+// Response Types
+export interface MenuItemResponse {
+  data: MenuItem | null;
+  error: Error | null;
+}
+
+export interface WineResponse {
+  data: Wine | null;
+  error: Error | null;
+}
+
+// Props Types (keeping the same but updating types)
 export interface MenuCardProps {
   item: MenuItem | Wine;
   type: 'menu' | 'wine';
-  onEdit: (id: string, data: MenuItemFormData | WineFormData) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  onEdit: (id: number, data: MenuItemFormData | WineFormData) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
   categories: Category[];
   allergens?: Allergen[];
   isEditing: boolean;
-  onEditToggle: (id: string | null) => void;
+  onEditToggle: (id: number | null) => void;
 }
 
 export interface MenuNavProps {
   categories: Category[];
-  activeCategory: string;
-  onCategoryChange: (id: string) => void;
+  activeCategory: number | null;  // Changed to number | null
+  onCategoryChange: (id: number | null) => void;  // Changed to number | null
   type: 'menu' | 'wine';
 }
 
 export interface MenuSearchProps {
   onSearch: (query: string) => void;
-  onCategoryFilter: (categoryId: string) => void;
+  onCategoryFilter: (categoryId: number | null) => void;  // Changed to number | null
   categories: Category[];
 }
 
 export interface MenuEditorProps {
-  item?: MenuItem | Wine;
+  item: MenuItem | Wine;
   type: 'menu' | 'wine';
   onSave: (data: MenuItemFormData | WineFormData) => Promise<void>;
   onCancel: () => void;
   categories: Category[];
   allergens?: Allergen[];
+}
+
+// Supabase Realtime Types
+export interface RealtimePayload<T> {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: T;
+  old: {
+    id: number;  // Changed to number
+  };
 }
 ```
 

@@ -11,44 +11,36 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import MenuNav from "@/components/menu/MenuNav";
 import MenuSearch from "@/components/menu/MenuSearch";
 import MenuCard from "@/components/menu/MenuCard";
-import type { 
-  MenuItem, 
-  Wine, 
-  Category, 
-  Allergen,
-  MenuItemFormData,
-  WineFormData 
-} from "@/types/menu";
-
 import {
-  getMenuItems,
-  getWines,
   getCategories,
   getAllergens,
+  getMenuItems,
+  getWines,
   createMenuItem,
-  updateMenuItem,
-  deleteMenuItem,
   createWine,
+  updateMenuItem,
   updateWine,
+  deleteMenuItem,
   deleteWine,
   subscribeToMenuChanges,
   subscribeToWineChanges,
 } from "@/lib/supabase/menu";
+import type {
+  MenuItem,
+  Wine,
+  Category,
+  Allergen,
+  MenuItemFormData,
+  WineFormData,
+  RealtimePayload,
+} from "@/types/menu";
 
-type TabType = 'menu' | 'wine';
+type TabType = "menu" | "wine";
 
 type EditFormData = {
   menu: MenuItemFormData;
   wine: WineFormData;
 }[TabType];
-
-interface RealtimePayload<T> {
-  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  new: T;
-  old: {
-    id: string;
-  };
-}
 
 interface LoadingState {
   auth: boolean;
@@ -67,23 +59,21 @@ interface ErrorState {
 }
 
 export default function MenuPage() {
-  // State
+  // State management with correct types
   const [activeTab, setActiveTab] = useState<TabType>("menu");
-  const [activeCategory, setActiveCategory] = useState<string>("");
+  const [activeCategory, setActiveCategory] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
-  // Loading and Error States
   const [loadingState, setLoadingState] = useState<LoadingState>({
     auth: true,
     categories: true,
     allergens: true,
     menuItems: true,
-    wines: true
+    wines: true,
   });
   const [errorState, setErrorState] = useState<ErrorState>({});
 
-  // Data states
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [wines, setWines] = useState<Wine[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -96,21 +86,24 @@ export default function MenuPage() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const { data: { session }, error: authError } = await supabase.auth.getSession();
-        
+        const {
+          data: { session },
+          error: authError,
+        } = await supabase.auth.getSession();
+
         if (authError) throw authError;
-        if (!session) throw new Error('No authenticated session');
-        
-        console.log('Auth successful:', session.user.email);
-        setLoadingState(prev => ({ ...prev, auth: false }));
-        
+        if (!session) throw new Error("No authenticated session");
+
+        console.log("Auth successful:", session.user.email);
+        setLoadingState((prev) => ({ ...prev, auth: false }));
       } catch (error) {
-        console.error('Auth error:', error);
-        setErrorState(prev => ({
+        console.error("Auth error:", error);
+        setErrorState((prev) => ({
           ...prev,
-          auth: error instanceof Error ? error.message : 'Authentication failed'
+          auth:
+            error instanceof Error ? error.message : "Authentication failed",
         }));
-        setLoadingState(prev => ({ ...prev, auth: false }));
+        setLoadingState((prev) => ({ ...prev, auth: false }));
       }
     };
 
@@ -120,7 +113,7 @@ export default function MenuPage() {
   // Data fetching
   useEffect(() => {
     const loadData = async () => {
-      if (errorState.auth) return; // Don't load data if auth failed
+      if (errorState.auth) return;
 
       const fetchData = async <T,>(
         key: keyof LoadingState,
@@ -128,68 +121,77 @@ export default function MenuPage() {
         setter: (data: T) => void
       ) => {
         try {
-          setLoadingState(prev => ({ ...prev, [key]: true }));
+          setLoadingState((prev) => ({ ...prev, [key]: true }));
           const data = await fetcher();
           setter(data);
-          setLoadingState(prev => ({ ...prev, [key]: false }));
+          setLoadingState((prev) => ({ ...prev, [key]: false }));
         } catch (error) {
           console.error(`Error fetching ${key}:`, error);
-          setErrorState(prev => ({
+          setErrorState((prev) => ({
             ...prev,
-            [key]: error instanceof Error ? error.message : `Failed to load ${key}`
+            [key]:
+              error instanceof Error ? error.message : `Failed to load ${key}`,
           }));
-          setLoadingState(prev => ({ ...prev, [key]: false }));
+          setLoadingState((prev) => ({ ...prev, [key]: false }));
         }
       };
 
       await Promise.all([
-        fetchData('categories', getCategories, setCategories),
-        fetchData('allergens', getAllergens, setAllergens),
-        fetchData('menuItems', getMenuItems, setMenuItems),
-        fetchData('wines', getWines, setWines)
+        fetchData("categories", getCategories, setCategories),
+        fetchData("allergens", getAllergens, setAllergens),
+        fetchData("menuItems", getMenuItems, setMenuItems),
+        fetchData("wines", getWines, setWines),
       ]);
     };
 
     loadData();
   }, [errorState.auth]);
 
-  // Realtime subscriptions
+  // Real-time subscriptions
   useEffect(() => {
-    if (Object.keys(errorState).length > 0) return; // Don't subscribe if there are errors
+    if (Object.keys(errorState).length > 0) return;
 
-    const menuUnsubscribe = subscribeToMenuChanges((payload: RealtimePayload<MenuItem>) => {
-      const { eventType, new: newRecord, old: oldRecord } = payload;
-      
-      setMenuItems(current => {
-        switch (eventType) {
-          case 'INSERT':
-            return [...current, newRecord];
-          case 'UPDATE':
-            return current.map(item => item.id === oldRecord.id ? newRecord : item);
-          case 'DELETE':
-            return current.filter(item => item.id !== oldRecord.id);
-          default:
-            return current;
-        }
-      });
-    });
+    const menuUnsubscribe = subscribeToMenuChanges(
+      (payload: RealtimePayload<MenuItem>) => {
+        const { eventType, new: newRecord, old } = payload;
 
-    const wineUnsubscribe = subscribeToWineChanges((payload: RealtimePayload<Wine>) => {
-      const { eventType, new: newRecord, old: oldRecord } = payload;
-      
-      setWines(current => {
-        switch (eventType) {
-          case 'INSERT':
-            return [...current, newRecord];
-          case 'UPDATE':
-            return current.map(wine => wine.id === oldRecord.id ? newRecord : wine);
-          case 'DELETE':
-            return current.filter(wine => wine.id !== oldRecord.id);
-          default:
-            return current;
-        }
-      });
-    });
+        setMenuItems((current) => {
+          switch (eventType) {
+            case "INSERT":
+              return [...current, newRecord];
+            case "UPDATE":
+              return current.map((item) =>
+                item.id === old.id ? newRecord : item
+              );
+            case "DELETE":
+              return current.filter((item) => item.id !== old.id);
+            default:
+              return current;
+          }
+        });
+      }
+    );
+
+    const wineUnsubscribe = subscribeToWineChanges(
+      (payload: RealtimePayload<Wine>) => {
+        const { eventType, new: newRecord, old } = payload;
+
+        setWines((current) => {
+          switch (eventType) {
+            case "INSERT":
+              return [...current, newRecord];
+            case "UPDATE":
+              return current.map((wine) =>
+                wine.id === old.id ? newRecord : wine
+              );
+            case "DELETE":
+              return current.filter((wine) => wine.id !== old.id);
+            default:
+              return current;
+          }
+        });
+      }
+    );
 
     return () => {
       menuUnsubscribe();
@@ -200,10 +202,12 @@ export default function MenuPage() {
   // Filtered items
   const filteredItems = useMemo(() => {
     const items = activeTab === "menu" ? menuItems : wines;
-    return items.filter(item => {
-      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          item.description.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = !activeCategory || item.category_id === activeCategory;
+    return items.filter((item) => {
+      const matchesSearch =
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.description.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory =
+        !activeCategory || item.category_id === activeCategory;
       return matchesSearch && matchesCategory;
     });
   }, [activeTab, menuItems, wines, searchQuery, activeCategory]);
@@ -216,23 +220,25 @@ export default function MenuPage() {
           name: "Nuevo plato",
           description: "Descripción del plato",
           price: 0,
-          category_id: activeCategory || categories[0]?.id,
+          category_id: activeCategory || categories[0]?.id || 0,
           image_path: "",
           allergens: [],
+          active: true,
         });
         setEditingId(newItem.id);
       } else {
         const newWine = await createWine({
           name: "Nuevo vino",
           description: "Descripción del vino",
-          price: 0,
-          category_id: activeCategory || categories[0]?.id,
-          image_path: "",
+          bottle_price: 0,
+          glass_price: 0,
+          category_id: activeCategory || categories[0]?.id || 0,
+          active: true,
         });
         setEditingId(newWine.id);
       }
     } catch (error) {
-      console.error('Error creating item:', error);
+      console.error("Error creating item:", error);
       toast({
         title: "Error",
         description: "Failed to create item",
@@ -241,7 +247,7 @@ export default function MenuPage() {
     }
   };
 
-  const handleEdit = async (id: string, data: EditFormData) => {
+  const handleEdit = async (id: number, data: EditFormData) => {
     try {
       if (activeTab === "menu") {
         await updateMenuItem(id, data as MenuItemFormData);
@@ -254,7 +260,7 @@ export default function MenuPage() {
         description: "Item updated successfully",
       });
     } catch (error) {
-      console.error('Error updating item:', error);
+      console.error("Error updating item:", error);
       toast({
         title: "Error",
         description: "Failed to update item",
@@ -263,7 +269,7 @@ export default function MenuPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: number) => {
     try {
       if (activeTab === "menu") {
         await deleteMenuItem(id);
@@ -275,7 +281,7 @@ export default function MenuPage() {
         description: "Item deleted successfully",
       });
     } catch (error) {
-      console.error('Error deleting item:', error);
+      console.error("Error deleting item:", error);
       toast({
         title: "Error",
         description: "Failed to delete item",
@@ -284,7 +290,6 @@ export default function MenuPage() {
     }
   };
 
-  // Auth error state
   if (errorState.auth) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -292,7 +297,7 @@ export default function MenuPage() {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <p className="text-lg font-semibold mb-2">Authentication Error</p>
           <p className="text-gray-600 mb-4">{errorState.auth}</p>
-          <Button onClick={() => window.location.href = '/login'}>
+          <Button onClick={() => (window.location.href = "/login")}>
             Return to Login
           </Button>
         </div>
@@ -300,7 +305,6 @@ export default function MenuPage() {
     );
   }
 
-  // General loading state
   const isLoading = Object.values(loadingState).some(Boolean);
   if (isLoading) {
     return (
@@ -313,7 +317,6 @@ export default function MenuPage() {
     );
   }
 
-  // Any other error state
   const hasErrors = Object.keys(errorState).length > 0;
   if (hasErrors) {
     return (
@@ -322,11 +325,9 @@ export default function MenuPage() {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <p className="text-lg font-semibold mb-2">Error Loading Data</p>
           <p className="text-gray-600 mb-4">
-            {Object.values(errorState).filter(Boolean).join(', ')}
+            {Object.values(errorState).filter(Boolean).join(", ")}
           </p>
-          <Button onClick={() => window.location.reload()}>
-            Try Again
-          </Button>
+          <Button onClick={() => window.location.reload()}>Try Again</Button>
         </div>
       </div>
     );
@@ -334,8 +335,8 @@ export default function MenuPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Tabs 
-        value={activeTab} 
+      <Tabs
+        value={activeTab}
         onValueChange={(value: string) => setActiveTab(value as TabType)}
       >
         <div className="sticky top-0 z-50 bg-white border-b">
@@ -353,8 +354,10 @@ export default function MenuPage() {
             <MenuSearch
               onSearch={setSearchQuery}
               onCategoryFilter={setActiveCategory}
-              categories={categories.filter(cat => 
-                activeTab === "menu" ? !cat.name.toLowerCase().includes('vino') : cat.name.toLowerCase().includes('vino')
+              categories={categories.filter((cat) =>
+                activeTab === "menu"
+                  ? !cat.name.toLowerCase().includes("vino")
+                  : cat.name.toLowerCase().includes("vino")
               )}
             />
           </div>
@@ -362,8 +365,10 @@ export default function MenuPage() {
 
         <div className="container mx-auto px-4 py-8">
           <MenuNav
-            categories={categories.filter(cat => 
-              activeTab === "menu" ? !cat.name.toLowerCase().includes('vino') : cat.name.toLowerCase().includes('vino')
+            categories={categories.filter((cat) =>
+              activeTab === "menu"
+                ? !cat.name.toLowerCase().includes("vino")
+                : cat.name.toLowerCase().includes("vino")
             )}
             activeCategory={activeCategory}
             onCategoryChange={setActiveCategory}
@@ -387,7 +392,7 @@ export default function MenuPage() {
                   onDelete={handleDelete}
                   categories={categories}
                   allergens={activeTab === "menu" ? allergens : undefined}
-                  isEditing={editingId === item.id}
+                  isEditing={item.id === editingId}
                   onEditToggle={setEditingId}
                 />
               ))}
