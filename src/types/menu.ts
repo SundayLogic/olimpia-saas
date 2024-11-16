@@ -100,7 +100,7 @@ export interface MenuSearchProps {
 }
 
 export interface MenuEditorProps {
-  item?: MenuItem | Wine;
+  item: MenuItem | Wine;
   type: 'menu' | 'wine';
   onSave: (data: MenuItemFormData | WineFormData) => Promise<void>;
   onCancel: () => void;

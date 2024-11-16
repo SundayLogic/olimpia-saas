@@ -15,11 +15,11 @@ interface Image {
   url: string;
   updatedAt: string;
 }
-
+// components/menu/ImageSelector.tsx
 interface ImageSelectorProps {
   onSelect: (imagePath: string) => void;
   onClose: () => void;
-  categoryId: string;
+  categoryId: string; // This needs to be string for SelectItem compatibility
 }
 
 const ImageSelector = ({ onSelect, onClose, categoryId }: ImageSelectorProps) => {
