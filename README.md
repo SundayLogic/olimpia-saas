@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-11-14 18:07:13
+Generated on: 2024-11-15 21:29:31
 
 ## Documented Directories:
 - app/
@@ -73,17 +73,25 @@ src/
             │   ├── ImageUpload.tsx
             │   ├── types.ts
             │   ├── utils.ts
+            ├── menu/
+            │   ├── ImageSelector.tsx
+            │   ├── MenuCard.tsx
+            │   ├── MenuEditor.tsx
+            │   ├── MenuNav.tsx
+            │   ├── MenuSearch.tsx
             ├── ui/
             │   ├── alert-dialog.tsx
             │   ├── badge.tsx
             │   ├── button.tsx
             │   ├── calendar.tsx
             │   ├── card.tsx
+            │   ├── command.tsx
             │   ├── dialog.tsx
             │   ├── dropdown-menu.tsx
             │   ├── form.tsx
             │   ├── input.tsx
             │   ├── label.tsx
+            │   ├── popover.tsx
             │   ├── select.tsx
             │   ├── switch.tsx
             │   ├── table.tsx
@@ -99,11 +107,13 @@ src/
         ├── lib/
             ├── supabase/
             │   ├── client.ts
+            │   ├── menu.ts
             │   ├── server.ts
             │   ├── types.ts
         │   
         │   ├── utils.ts
         ├── types/
+        │   ├── menu.ts
 
 middleware.ts/
     ├── middleware.ts/
@@ -1107,7 +1117,370 @@ export default function ImagesPage() {
 ### app/dashboard/menu/page.tsx
 
 ```typescript
+"use client";
 
+import { useEffect, useState, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Plus, Loader2 } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+
+import MenuNav from "@/components/menu/MenuNav";
+import MenuSearch from "@/components/menu/MenuSearch";
+import MenuCard from "@/components/menu/MenuCard";
+import type { 
+  MenuItem, 
+  Wine, 
+  Category, 
+  Allergen,
+  MenuItemFormData,
+  WineFormData 
+} from "@/types/menu";
+
+import {
+  getMenuItems,
+  getWines,
+  getCategories,
+  getAllergens,
+  createMenuItem,
+  updateMenuItem,
+  deleteMenuItem,
+  createWine,
+  updateWine,
+  deleteWine,
+  subscribeToMenuChanges,
+  subscribeToWineChanges,
+} from "@/lib/supabase/menu";
+
+type TabType = 'menu' | 'wine';
+
+type EditFormData = {
+  menu: MenuItemFormData;
+  wine: WineFormData;
+}[TabType];
+
+interface RealtimePayload<T> {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: T;
+  old: {
+    id: string;
+  };
+}
+
+export default function MenuPage() {
+  // State
+  const [activeTab, setActiveTab] = useState<TabType>("menu");
+  const [activeCategory, setActiveCategory] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Data states
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [wines, setWines] = useState<Wine[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [allergens, setAllergens] = useState<Allergen[]>([]);
+
+  const { toast } = useToast();
+  const supabase = createClientComponentClient();
+
+  // Initial data fetch with improved error handling
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        setIsLoading(true);
+        setIsError(false);
+
+        // Check auth state
+        const { data: { session }, error: authError } = await supabase.auth.getSession();
+        if (authError) {
+          console.error('Auth error:', authError);
+          throw new Error('Authentication error');
+        }
+
+        console.log('Auth state:', {
+          isAuthenticated: !!session,
+          user: session?.user?.email
+        });
+
+        // Fetch data in sequence to better identify issues
+        console.log('Fetching categories...');
+        const categoryData = await getCategories();
+        setCategories(categoryData);
+
+        console.log('Fetching allergens...');
+        const allergenData = await getAllergens();
+        setAllergens(allergenData);
+
+        console.log('Fetching menu items...');
+        const menuData = await getMenuItems();
+        setMenuItems(menuData);
+
+        console.log('Fetching wines...');
+        const wineData = await getWines();
+        setWines(wineData);
+
+        console.log('Data loaded successfully', {
+          categories: categoryData?.length,
+          allergens: allergenData?.length,
+          menuItems: menuData?.length,
+          wines: wineData?.length
+        });
+
+      } catch (error) {
+        setIsError(true);
+        console.error('Error loading data:', {
+          error,
+          message: error instanceof Error ? error.message : 'Unknown error'
+        });
+        toast({
+          title: "Error",
+          description: "Failed to load menu data. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadInitialData();
+  }, [supabase, toast]);
+
+  // Realtime subscriptions
+  useEffect(() => {
+    if (isError) return; // Don't set up subscriptions if there was an error
+
+    const menuUnsubscribe = subscribeToMenuChanges((payload: RealtimePayload<MenuItem>) => {
+      const { eventType, new: newRecord, old: oldRecord } = payload;
+      
+      setMenuItems((current) => {
+        switch (eventType) {
+          case 'INSERT':
+            return [...current, newRecord];
+          case 'UPDATE':
+            return current.map(item => 
+              item.id === oldRecord.id ? newRecord : item
+            );
+          case 'DELETE':
+            return current.filter(item => item.id !== oldRecord.id);
+          default:
+            return current;
+        }
+      });
+    });
+
+    const wineUnsubscribe = subscribeToWineChanges((payload: RealtimePayload<Wine>) => {
+      const { eventType, new: newRecord, old: oldRecord } = payload;
+      
+      setWines((current) => {
+        switch (eventType) {
+          case 'INSERT':
+            return [...current, newRecord];
+          case 'UPDATE':
+            return current.map(wine => 
+              wine.id === oldRecord.id ? newRecord : wine
+            );
+          case 'DELETE':
+            return current.filter(wine => wine.id !== oldRecord.id);
+          default:
+            return current;
+        }
+      });
+    });
+
+    return () => {
+      menuUnsubscribe();
+      wineUnsubscribe();
+    };
+  }, [isError]);
+
+  // Filtered items with memoization
+  const filteredItems = useMemo(() => {
+    const items = activeTab === "menu" ? menuItems : wines;
+    return items.filter(item => {
+      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          item.description.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = !activeCategory || item.category_id === activeCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [activeTab, menuItems, wines, searchQuery, activeCategory]);
+
+  // CRUD handlers
+  const handleCreate = async () => {
+    try {
+      if (activeTab === "menu") {
+        const newItem = await createMenuItem({
+          name: "Nuevo plato",
+          description: "Descripción del plato",
+          price: 0,
+          category_id: activeCategory || categories[0]?.id,
+          image_path: "",
+          allergens: [],
+        });
+        setEditingId(newItem.id);
+      } else {
+        const newWine = await createWine({
+          name: "Nuevo vino",
+          description: "Descripción del vino",
+          price: 0,
+          category_id: activeCategory || categories[0]?.id,
+          image_path: "",
+        });
+        setEditingId(newWine.id);
+      }
+    } catch (error) {
+      console.error('Error creating item:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create item",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEdit = async (id: string, data: EditFormData) => {
+    try {
+      if (activeTab === "menu") {
+        await updateMenuItem(id, data as MenuItemFormData);
+      } else {
+        await updateWine(id, data as WineFormData);
+      }
+      toast({
+        title: "Success",
+        description: "Item updated successfully",
+      });
+    } catch (error) {
+      console.error('Error updating item:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update item",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      if (activeTab === "menu") {
+        await deleteMenuItem(id);
+      } else {
+        await deleteWine(id);
+      }
+      toast({
+        title: "Success",
+        description: "Item deleted successfully",
+      });
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete item",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading menu data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-red-500 mb-4">Failed to load menu data</p>
+          <Button onClick={() => window.location.reload()}>
+            Try Again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Tabs 
+        value={activeTab} 
+        onValueChange={(value: string) => setActiveTab(value as TabType)}
+      >
+        <div className="sticky top-0 z-50 bg-white border-b">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between mb-4">
+              <TabsList>
+                <TabsTrigger value="menu">Carta</TabsTrigger>
+                <TabsTrigger value="wine">Vinos</TabsTrigger>
+              </TabsList>
+              <Button onClick={handleCreate}>
+                <Plus className="w-4 h-4 mr-2" />
+                {activeTab === "menu" ? "Nuevo plato" : "Nuevo vino"}
+              </Button>
+            </div>
+            <MenuSearch
+              onSearch={setSearchQuery}
+              onCategoryFilter={setActiveCategory}
+              categories={categories.filter(cat => 
+                activeTab === "menu" ? !cat.name.toLowerCase().includes('vino') : cat.name.toLowerCase().includes('vino')
+              )}
+            />
+          </div>
+        </div>
+
+        <div className="container mx-auto px-4 py-8">
+          <MenuNav
+            categories={categories.filter(cat => 
+              activeTab === "menu" ? !cat.name.toLowerCase().includes('vino') : cat.name.toLowerCase().includes('vino')
+            )}
+            activeCategory={activeCategory}
+            onCategoryChange={setActiveCategory}
+            type={activeTab}
+          />
+
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8"
+            >
+              {filteredItems.map((item) => (
+                <MenuCard
+                  key={item.id}
+                  item={item}
+                  type={activeTab}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  categories={categories}
+                  allergens={activeTab === "menu" ? allergens : undefined}
+                  isEditing={editingId === item.id}
+                  onEditToggle={setEditingId}
+                />
+              ))}
+            </motion.div>
+          </AnimatePresence>
+
+          {filteredItems.length === 0 && (
+            <div className="text-center py-12 text-gray-500">
+              No items found
+            </div>
+          )}
+        </div>
+      </Tabs>
+    </div>
+  );
+}
 ```
 
 ### app/dashboard/users/page.tsx
@@ -1162,7 +1535,9 @@ import {
   LogOut,
   Loader2,
   ImageIcon,
-  MenuSquare, // Add this import for the menu icon
+  MenuSquare,
+  ClipboardList, // Added for menu link
+  Wine // Added for wine menu
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { Database } from "@/lib/supabase/client";
@@ -1231,7 +1606,7 @@ export default function DashboardLayout({
       <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-background">
         <div className="flex h-full flex-col">
           <div className="border-b px-6 py-4">
-            <h1 className="text-lg font-semibold">Your App Name</h1>
+            <h1 className="text-lg font-semibold">Restaurant Dashboard</h1>
           </div>
 
           <nav className="flex-1 space-y-1 px-3 py-4">
@@ -1244,43 +1619,81 @@ export default function DashboardLayout({
                 Dashboard
               </Button>
             </Link>
-            <Link href="/dashboard/users">
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
-              >
-                <Users className="mr-2 h-4 w-4" />
-                Users
-              </Button>
-            </Link>
-            <Link href="/dashboard/images">
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
-              >
-                <ImageIcon className="mr-2 h-4 w-4" />
-                Images
-              </Button>
-            </Link>
-            {/* Add Daily Menu Link */}
-            <Link href="/dashboard/daily-menu">
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
-              >
-                <MenuSquare className="mr-2 h-4 w-4" />
-                Daily Menu
-              </Button>
-            </Link>
-            <Link href="/dashboard/settings">
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
-              >
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
-              </Button>
-            </Link>
+
+            {/* Menu Management Section */}
+            <div className="pt-4">
+              <h2 className="mb-2 px-4 text-xs font-semibold text-muted-foreground">
+                MENU MANAGEMENT
+              </h2>
+              <Link href="/dashboard/menu">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <ClipboardList className="mr-2 h-4 w-4" />
+                  Menu Items
+                </Button>
+              </Link>
+              <Link href="/dashboard/daily-menu">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <MenuSquare className="mr-2 h-4 w-4" />
+                  Daily Menu
+                </Button>
+              </Link>
+              <Link href="/dashboard/wine">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <Wine className="mr-2 h-4 w-4" />
+                  Wine List
+                </Button>
+              </Link>
+            </div>
+
+            {/* Assets Management Section */}
+            <div className="pt-4">
+              <h2 className="mb-2 px-4 text-xs font-semibold text-muted-foreground">
+                ASSETS
+              </h2>
+              <Link href="/dashboard/images">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <ImageIcon className="mr-2 h-4 w-4" />
+                  Images
+                </Button>
+              </Link>
+            </div>
+
+            {/* Admin Section */}
+            <div className="pt-4">
+              <h2 className="mb-2 px-4 text-xs font-semibold text-muted-foreground">
+                ADMIN
+              </h2>
+              <Link href="/dashboard/users">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <Users className="mr-2 h-4 w-4" />
+                  Users
+                </Button>
+              </Link>
+              <Link href="/dashboard/settings">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </Button>
+              </Link>
+            </div>
           </nav>
 
           <div className="border-t p-4">
@@ -4947,6 +5360,933 @@ export const generateFileName = (itemName: string, originalName: string): string
 };
 ```
 
+### src/components/menu/ImageSelector.tsx
+
+```typescript
+"use client";
+
+import { useState, useEffect } from "react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import Image from "next/image";
+import { motion } from "framer-motion";
+import { useToast } from "@/components/ui/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Loader2, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
+
+interface Image {
+  name: string;
+  url: string;
+  updatedAt: string;
+}
+
+interface ImageSelectorProps {
+  onSelect: (imagePath: string) => void;
+  onClose: () => void;
+  categoryId: string;
+}
+
+const ImageSelector = ({ onSelect, onClose, categoryId }: ImageSelectorProps) => {
+  const [images, setImages] = useState<Image[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const supabase = createClientComponentClient();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const loadImages = async () => {
+      try {
+        setIsLoading(true);
+
+        // Get category info to get the folder name
+        const { data: category, error: categoryError } = await supabase
+          .from("categories")
+          .select("name")
+          .eq("id", categoryId)
+          .single();
+
+        if (categoryError) throw categoryError;
+
+        // Convert category name to folder name format
+        const folderName = category.name.toLowerCase().replace(/\s+/g, "-");
+
+        // List files from the specific category folder
+        const { data: files, error: listError } = await supabase
+          .storage
+          .from("menu-images")
+          .list(folderName);
+
+        if (listError) throw listError;
+
+        if (!files) {
+          setImages([]);
+          return;
+        }
+
+        // Filter for image files and get signed URLs
+        const imageFiles = await Promise.all(
+          files
+            .filter(file => 
+              !file.name.startsWith(".") && 
+              file.name.match(/\.(jpg|jpeg|png|webp)$/i)
+            )
+            .map(async (file) => {
+              const { data: signedUrl } = await supabase
+                .storage
+                .from("menu-images")
+                .createSignedUrl(`${folderName}/${file.name}`, 3600);
+
+              return {
+                name: file.name,
+                url: signedUrl?.signedUrl || "",
+                updatedAt: file.updated_at
+              };
+            })
+        );
+
+        setImages(imageFiles.filter(img => img.url));
+      } catch (error) {
+        console.error("Error loading images:", error);
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar las imágenes",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (categoryId) {
+      loadImages();
+    }
+  }, [categoryId, supabase, toast]);
+
+  const filteredImages = images.filter(image =>
+    image.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleConfirm = () => {
+    if (selectedImage) {
+      onSelect(selectedImage);
+    }
+  };
+
+  const imageMotion = {
+    initial: { opacity: 0, scale: 0.9 },
+    animate: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: 0.9 },
+    transition: { duration: 0.2 }
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Seleccionar imagen</DialogTitle>
+          <div className="relative mt-4">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+            <Input
+              placeholder="Buscar imágenes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : filteredImages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+            <p>No se encontraron imágenes</p>
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                onClick={() => setSearchQuery("")}
+                className="mt-2"
+              >
+                Limpiar búsqueda
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-y-auto flex-1 -mx-6 px-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 py-4">
+              {filteredImages.map((image) => (
+                <motion.div
+                  key={image.url}
+                  {...imageMotion}
+                  className={`
+                    relative aspect-square rounded-lg overflow-hidden cursor-pointer
+                    border-2 transition-colors
+                    ${selectedImage === image.url 
+                      ? "border-primary" 
+                      : "border-transparent hover:border-muted"}
+                  `}
+                  onClick={() => setSelectedImage(image.url)}
+                >
+                  <Image
+                    src={image.url}
+                    alt={image.name}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+                  />
+                  {selectedImage === image.url && (
+                    <div className="absolute inset-0 bg-primary/20" />
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={!selectedImage}
+          >
+            Seleccionar
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default ImageSelector;
+```
+
+### src/components/menu/MenuCard.tsx
+
+```typescript
+"use client";
+
+import { useState } from "react";
+import { motion } from "framer-motion";
+import Image from "next/image";
+import { Edit2, Trash2, Euro } from "lucide-react";
+import type { MenuCardProps, MenuItem, Wine } from "@/types/menu";
+import MenuEditor from "./MenuEditor";
+
+// Typography System
+const typography = {
+  display: {
+    title: "font-garamond text-2xl sm:text-3xl leading-tight tracking-tight",
+    subtitle: "font-garamond text-xl leading-snug",
+  },
+  body: {
+    large: "text-lg leading-relaxed",
+    base: "text-base leading-relaxed",
+    small: "text-sm leading-relaxed"
+  },
+  label: "text-xs uppercase tracking-[0.25em] font-light"
+};
+
+const motionVariants = {
+  card: {
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -20 },
+    transition: { duration: 0.6, ease: [0.23, 1, 0.32, 1] }
+  }
+};
+
+const MenuCard: React.FC<MenuCardProps> = ({
+  item,
+  type,
+  onEdit,
+  onDelete,
+  categories,
+  allergens,
+  isEditing,
+  onEditToggle
+}) => {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Type guard to check if item is a MenuItem
+  const isMenuItem = (item: MenuItem | Wine): item is MenuItem => {
+    return 'allergens' in item;
+  };
+
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true);
+      await onDelete(item.id);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <motion.div
+      layout
+      variants={motionVariants.card}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      className="group relative bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300"
+    >
+      {isEditing ? (
+        <MenuEditor
+          item={item}
+          type={type}
+          onSave={async (data) => {
+            await onEdit(item.id, data);
+            onEditToggle(null);
+          }}
+          onCancel={() => onEditToggle(null)}
+          categories={categories}
+          allergens={allergens}
+        />
+      ) : (
+        <>
+          {/* Image Container */}
+          <div className="relative aspect-[4/3] overflow-hidden">
+            <Image
+              src={item.image_path || '/placeholder-image.jpg'}
+              alt={item.name}
+              fill
+              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            />
+            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          </div>
+
+          {/* Content */}
+          <div className="p-6">
+            {/* Category Label */}
+            <span className={`${typography.label} text-olimpia-text-light`}>
+              {categories.find(c => c.id === item.category_id)?.name || 'Sin categoría'}
+            </span>
+
+            {/* Title and Price */}
+            <div className="flex justify-between items-start mt-2 mb-4">
+              <h3 className={typography.display.title}>{item.name}</h3>
+              <span className="flex items-center text-xl font-light">
+                <Euro className="h-4 w-4 mr-1" />
+                {item.price.toFixed(2)}
+              </span>
+            </div>
+
+            {/* Description */}
+            <p className={`${typography.body.base} text-olimpia-text-secondary`}>
+              {item.description}
+            </p>
+
+            {/* Allergens (Only for menu items) */}
+            {type === 'menu' && allergens && isMenuItem(item) && item.allergens && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {item.allergens.map((allergenId: string) => {
+                  const allergen = allergens.find(a => a.id === allergenId);
+                  return allergen && (
+                    <span
+                      key={allergen.id}
+                      className="px-2 py-1 text-xs bg-olimpia-secondary/10 rounded-full"
+                    >
+                      {allergen.name}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+            <button
+              onClick={() => onEditToggle(item.id)}
+              className="p-2 rounded-full bg-white/90 hover:bg-white shadow-sm transition-colors duration-200"
+            >
+              <Edit2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="p-2 rounded-full bg-white/90 hover:bg-red-500 hover:text-white shadow-sm transition-colors duration-200"
+            >
+              {isDeleting ? (
+                <span className="animate-spin">
+                  <Trash2 className="h-4 w-4" />
+                </span>
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </>
+      )}
+    </motion.div>
+  );
+};
+
+export default MenuCard;
+```
+
+### src/components/menu/MenuEditor.tsx
+
+```typescript
+"use client";
+
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import Image from "next/image";
+import { Loader2, Image as ImageIcon, Check, X } from "lucide-react";
+import type { MenuEditorProps, MenuItem} from "@/types/menu";
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import ImageSelector from "@/components/menu/ImageSelector";
+import { cn } from "@/lib/utils";
+
+// Form Schema
+const menuItemSchema = z.object({
+  name: z.string().min(1, "El nombre es requerido"),
+  description: z.string().min(1, "La descripción es requerida"),
+  price: z.coerce.number().min(0, "El precio debe ser mayor a 0"),
+  category_id: z.string().min(1, "La categoría es requerida"),
+  image_path: z.string().min(1, "La imagen es requerida"),
+  allergens: z.array(z.string()).optional(),
+});
+
+type FormValues = z.infer<typeof menuItemSchema>;
+
+const MenuEditor: React.FC<MenuEditorProps> = ({
+  item,
+  type,
+  onSave,
+  onCancel,
+  categories,
+  allergens = []
+}) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSelectingImage, setIsSelectingImage] = useState(false);
+  const [openAllergens, setOpenAllergens] = useState(false);
+
+  const defaultAllergens = type === 'menu' 
+    ? ((item as MenuItem)?.allergens || [])
+    : [];
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(menuItemSchema),
+    defaultValues: {
+      name: item?.name || "",
+      description: item?.description || "",
+      price: item?.price || 0,
+      category_id: item?.category_id || "",
+      image_path: item?.image_path || "",
+      allergens: defaultAllergens,
+    }
+  });
+
+  const selectedAllergens = form.watch('allergens') || [];
+
+  const handleSubmit = async (data: FormValues) => {
+    try {
+      setIsSubmitting(true);
+      await onSave(data);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleImageSelect = (imagePath: string) => {
+    form.setValue('image_path', imagePath);
+    setIsSelectingImage(false);
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="p-6 space-y-6">
+        {/* Image Selection */}
+        <FormField
+          control={form.control}
+          name="image_path"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Imagen</FormLabel>
+              <div className="flex gap-4 items-center">
+                {field.value ? (
+                  <div className="relative w-20 h-20 rounded overflow-hidden">
+                    <Image
+                      src={field.value}
+                      alt="Selected"
+                      fill
+                      className="object-cover"
+                      sizes="80px"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-20 h-20 bg-gray-100 rounded flex items-center justify-center">
+                    <ImageIcon className="w-8 h-8 text-gray-400" />
+                  </div>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsSelectingImage(true)}
+                >
+                  Seleccionar Imagen
+                </Button>
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Basic Information */}
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Nombre</FormLabel>
+                <FormControl>
+                  <Input placeholder="Nombre del item" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="price"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Precio</FormLabel>
+                <FormControl>
+                  <Input 
+                    type="number" 
+                    step="0.01" 
+                    placeholder="0.00" 
+                    {...field}
+                    onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Category Selection */}
+        <FormField
+          control={form.control}
+          name="category_id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Categoría</FormLabel>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona una categoría" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Description */}
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Descripción</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Descripción del item"
+                  rows={3}
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Allergens Multi-select */}
+        {type === 'menu' && (
+          <FormField
+            control={form.control}
+            name="allergens"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Alérgenos</FormLabel>
+                <Popover open={openAllergens} onOpenChange={setOpenAllergens}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className={cn(
+                        "w-full justify-between",
+                        !field.value?.length && "text-muted-foreground"
+                      )}
+                    >
+                      {field.value?.length
+                        ? `${field.value.length} seleccionados`
+                        : "Seleccionar alérgenos"}
+                      <X
+                        className={cn(
+                          "ml-2 h-4 w-4 shrink-0 opacity-50",
+                          openAllergens && "rotate-90"
+                        )}
+                      />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Buscar alérgenos..." />
+                      <CommandEmpty>No se encontraron alérgenos.</CommandEmpty>
+                      <CommandGroup>
+                        {allergens.map((allergen) => (
+                          <CommandItem
+                            key={allergen.id}
+                            onSelect={() => {
+                              const values = field.value || [];
+                              const newValues = values.includes(allergen.id)
+                                ? values.filter(id => id !== allergen.id)
+                                : [...values, allergen.id];
+                              field.onChange(newValues);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedAllergens.includes(allergen.id)
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              )}
+                            />
+                            {allergen.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {selectedAllergens.map((allergenId) => {
+                    const allergen = allergens.find(a => a.id === allergenId);
+                    return allergen && (
+                      <Badge
+                        key={allergen.id}
+                        variant="secondary"
+                        className="cursor-pointer"
+                        onClick={() => {
+                          const values = field.value || [];
+                          field.onChange(values.filter(id => id !== allergen.id));
+                        }}
+                      >
+                        {allergen.name}
+                        <X className="ml-1 h-3 w-3" />
+                      </Badge>
+                    );
+                  })}
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex justify-end gap-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={isSubmitting}
+          >
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Guardando...
+              </>
+            ) : (
+              'Guardar'
+            )}
+          </Button>
+        </div>
+      </form>
+
+      {/* Image Selector Modal */}
+      {isSelectingImage && (
+        <ImageSelector 
+          onSelect={handleImageSelect}
+          onClose={() => setIsSelectingImage(false)}
+          categoryId={form.watch('category_id')}
+        />
+      )}
+    </Form>
+  );
+};
+
+export default MenuEditor;
+```
+
+### src/components/menu/MenuNav.tsx
+
+```typescript
+"use client";
+
+import { useState, useEffect } from "react";
+import { motion} from "framer-motion";
+import type { MenuNavProps } from "@/types/menu";
+
+// Typography system
+const typography = {
+  nav: {
+    category: "font-garamond text-lg tracking-tight",
+    label: "text-xs uppercase tracking-[0.25em] font-light"
+  },
+  number: "text-xs tracking-[0.25em] text-olimpia-text-light uppercase font-light"
+};
+
+// Animation variants
+const motionVariants = {
+  nav: {
+    initial: { y: 100, opacity: 0 },
+    animate: { y: 0, opacity: 1 },
+    exit: { y: 100, opacity: 0 },
+    transition: { duration: 0.6, ease: [0.23, 1, 0.32, 1] }
+  },
+  item: {
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.6, ease: [0.23, 1, 0.32, 1] }
+  }
+};
+
+const MenuNav: React.FC<MenuNavProps> = ({
+  categories,
+  activeCategory,
+  onCategoryChange,
+  type
+}) => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const NavContent = () => (
+    <>
+      {/* Section Label */}
+      <div className="mb-4">
+        <span className={typography.nav.label}>
+          {type === 'menu' ? 'Secciones del menú' : 'Tipos de vino'}
+        </span>
+      </div>
+
+      {/* Categories Grid */}
+      <div className={`grid ${isMobile ? 'grid-cols-2' : 'grid-cols-4'} gap-6`}>
+        {categories.map((category, index) => (
+          <motion.button
+            key={category.id}
+            onClick={() => onCategoryChange(category.id)}
+            {...motionVariants.item}
+            transition={{
+              ...motionVariants.item.transition,
+              delay: index * 0.1
+            }}
+            className="group text-left"
+          >
+            {/* Category Number */}
+            <span className={typography.number}>
+              {String(index + 1).padStart(2, '0')}
+            </span>
+
+            {/* Category Name */}
+            <span className={`
+              block ${typography.nav.category}
+              transition-colors duration-300
+              ${activeCategory === category.id 
+                ? 'text-olimpia-primary' 
+                : 'text-olimpia-text-secondary'
+              }
+            `}>
+              {category.name}
+            </span>
+
+            {/* Active Indicator */}
+            <div className={`
+              mt-3 h-[1px] w-full transform 
+              transition-all duration-500 ease-out origin-left
+              ${activeCategory === category.id
+                ? 'scale-x-100 bg-olimpia-primary'
+                : 'scale-x-0 bg-olimpia-text-light/20 group-hover:scale-x-100'
+              }
+            `} />
+          </motion.button>
+        ))}
+      </div>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <motion.nav 
+        {...motionVariants.nav}
+        className="fixed bottom-0 left-0 right-0 z-50 backdrop-blur-md"
+      >
+        <div className="absolute inset-0 bg-white/95" />
+        <div className="container mx-auto px-6 py-6 pb-safe relative">
+          <NavContent />
+          <div className="h-[env(safe-area-inset-bottom)]" />
+        </div>
+        <div className="absolute top-0 left-0 right-0 h-[1px] bg-olimpia-primary/10" />
+      </motion.nav>
+    );
+  }
+
+  return (
+    <motion.nav 
+      {...motionVariants.nav}
+      className="sticky top-0 z-50 backdrop-blur-md bg-white/95 border-b border-olimpia-primary/10"
+    >
+      <div className="container mx-auto px-6 py-6">
+        <NavContent />
+      </div>
+    </motion.nav>
+  );
+};
+
+export default MenuNav;
+```
+
+### src/components/menu/MenuSearch.tsx
+
+```typescript
+"use client";
+
+import { useState } from "react";
+import { Search } from "lucide-react";
+import type { MenuSearchProps } from "@/types/menu";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const MenuSearch: React.FC<MenuSearchProps> = ({
+  onSearch,
+  onCategoryFilter,
+  categories
+}) => {
+  const [searchValue, setSearchValue] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+
+  const handleSearch = (value: string) => {
+    setSearchValue(value);
+    onSearch(value);
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setSelectedCategory(value);
+    onCategoryFilter(value === "all" ? "" : value);
+  };
+
+  return (
+    <div className="flex flex-col sm:flex-row gap-4 p-4 bg-white/50 backdrop-blur-sm rounded-lg">
+      <div className="relative flex-grow">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-olimpia-text-light h-4 w-4" />
+        <Input
+          type="text"
+          placeholder="Buscar..."
+          value={searchValue}
+          onChange={(e) => handleSearch(e.target.value)}
+          className="pl-10 bg-white"
+        />
+      </div>
+      
+      <Select
+        value={selectedCategory}
+        onValueChange={handleCategoryChange}
+      >
+        <SelectTrigger className="w-full sm:w-[200px] bg-white">
+          <SelectValue placeholder="Todas las categorías" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Todas las categorías</SelectItem>
+          {categories.map((category) => (
+            <SelectItem key={category.id} value={category.id}>
+              {category.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+};
+
+export default MenuSearch;
+```
+
 ### src/components/ui/alert-dialog.tsx
 
 ```typescript
@@ -5349,6 +6689,163 @@ const CardFooter = React.forwardRef<
 CardFooter.displayName = "CardFooter"
 
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+
+```
+
+### src/components/ui/command.tsx
+
+```typescript
+import * as React from "react"
+import { type DialogProps } from "@radix-ui/react-dialog"
+import { Command as CommandPrimitive } from "cmdk"
+import { Search } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+
+const Command = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive
+    ref={ref}
+    className={cn(
+      "flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground",
+      className
+    )}
+    {...props}
+  />
+))
+Command.displayName = CommandPrimitive.displayName
+
+const CommandDialog = ({ children, ...props }: DialogProps) => {
+  return (
+    <Dialog {...props}>
+      <DialogContent className="overflow-hidden p-0">
+        <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
+          {children}
+        </Command>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+const CommandInput = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Input>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
+>(({ className, ...props }, ref) => (
+  <div className="flex items-center border-b px-3" cmdk-input-wrapper="">
+    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+    <CommandPrimitive.Input
+      ref={ref}
+      className={cn(
+        "flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      {...props}
+    />
+  </div>
+))
+
+CommandInput.displayName = CommandPrimitive.Input.displayName
+
+const CommandList = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.List>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.List
+    ref={ref}
+    className={cn("max-h-[300px] overflow-y-auto overflow-x-hidden", className)}
+    {...props}
+  />
+))
+
+CommandList.displayName = CommandPrimitive.List.displayName
+
+const CommandEmpty = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Empty>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>
+>((props, ref) => (
+  <CommandPrimitive.Empty
+    ref={ref}
+    className="py-6 text-center text-sm"
+    {...props}
+  />
+))
+
+CommandEmpty.displayName = CommandPrimitive.Empty.displayName
+
+const CommandGroup = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Group>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Group>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.Group
+    ref={ref}
+    className={cn(
+      "overflow-hidden p-1 text-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground",
+      className
+    )}
+    {...props}
+  />
+))
+
+CommandGroup.displayName = CommandPrimitive.Group.displayName
+
+const CommandSeparator = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Separator>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Separator>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.Separator
+    ref={ref}
+    className={cn("-mx-1 h-px bg-border", className)}
+    {...props}
+  />
+))
+CommandSeparator.displayName = CommandPrimitive.Separator.displayName
+
+const CommandItem = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.Item
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default gap-2 select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[disabled=true]:pointer-events-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+      className
+    )}
+    {...props}
+  />
+))
+
+CommandItem.displayName = CommandPrimitive.Item.displayName
+
+const CommandShortcut = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span
+      className={cn(
+        "ml-auto text-xs tracking-widest text-muted-foreground",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+CommandShortcut.displayName = "CommandShortcut"
+
+export {
+  Command,
+  CommandDialog,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandShortcut,
+  CommandSeparator,
+}
 
 ```
 
@@ -5923,6 +7420,45 @@ const Label = React.forwardRef<
 Label.displayName = LabelPrimitive.Root.displayName
 
 export { Label }
+```
+
+### src/components/ui/popover.tsx
+
+```typescript
+"use client"
+
+import * as React from "react"
+import * as PopoverPrimitive from "@radix-ui/react-popover"
+
+import { cn } from "@/lib/utils"
+
+const Popover = PopoverPrimitive.Root
+
+const PopoverTrigger = PopoverPrimitive.Trigger
+
+const PopoverAnchor = PopoverPrimitive.Anchor
+
+const PopoverContent = React.forwardRef<
+  React.ElementRef<typeof PopoverPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
+>(({ className, align = "center", sideOffset = 4, ...props }, ref) => (
+  <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Content
+      ref={ref}
+      align={align}
+      sideOffset={sideOffset}
+      className={cn(
+        "z-50 w-72 rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        className
+      )}
+      {...props}
+    />
+  </PopoverPrimitive.Portal>
+))
+PopoverContent.displayName = PopoverPrimitive.Content.displayName
+
+export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor }
+
 ```
 
 ### src/components/ui/select.tsx
@@ -7073,6 +8609,7 @@ export function UsersTable({ initialData }: UsersTableProps) {
 ### src/lib/supabase/client.ts
 
 ```typescript
+
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 export type Database = {
@@ -7144,6 +8681,196 @@ export type Database = {
           updated_at?: string;
         };
       };
+      menu_items: {
+        Row: {
+          id: string;
+          name: string;
+          description: string;
+          price: number;
+          image_path: string;
+          category_id: string;
+          is_daily_menu: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          name: string;
+          description: string;
+          price: number;
+          category_id: string;
+          image_path?: string;
+          is_daily_menu?: boolean;
+        };
+        Update: {
+          name?: string;
+          description?: string;
+          price?: number;
+          category_id?: string;
+          image_path?: string;
+          is_daily_menu?: boolean;
+          updated_at?: string;
+        };
+      };
+      categories: {
+        Row: {
+          id: string;
+          name: string;
+          description: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          name: string;
+          description?: string;
+        };
+        Update: {
+          name?: string;
+          description?: string;
+          updated_at?: string;
+        };
+      };
+      allergens: {
+        Row: {
+          id: string;
+          name: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          name: string;
+        };
+        Update: {
+          name?: string;
+          updated_at?: string;
+        };
+      };
+      menu_item_allergens: {
+        Row: {
+          id: string;
+          menu_item_id: string;
+          allergen_id: string;
+          created_at: string;
+        };
+        Insert: {
+          menu_item_id: string;
+          allergen_id: string;
+        };
+        Update: {
+          menu_item_id?: string;
+          allergen_id?: string;
+        };
+      };
+      daily_menus: {
+        Row: {
+          id: number;
+          date: string;
+          price: number;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          date: string;
+          price: number;
+          active?: boolean;
+        };
+        Update: {
+          date?: string;
+          price?: number;
+          active?: boolean;
+          updated_at?: string;
+        };
+      };
+      daily_menu_first_courses: {
+        Row: {
+          id: number;
+          daily_menu_id: number;
+          name: string;
+          display_order: number;
+          created_at: string;
+        };
+        Insert: {
+          daily_menu_id: number;
+          name: string;
+          display_order: number;
+        };
+        Update: {
+          name?: string;
+          display_order?: number;
+        };
+      };
+      daily_menu_second_courses: {
+        Row: {
+          id: number;
+          daily_menu_id: number;
+          name: string;
+          display_order: number;
+          created_at: string;
+        };
+        Insert: {
+          daily_menu_id: number;
+          name: string;
+          display_order: number;
+        };
+        Update: {
+          name?: string;
+          display_order?: number;
+        };
+      };
+      wines: {
+        Row: {
+          id: string;
+          name: string;
+          description: string;
+          price: number;
+          category_id: string;
+          grape_varieties: string;
+          aging_info: string;
+          denomination: string;
+          image_path: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          name: string;
+          description: string;
+          price: number;
+          category_id: string;
+          grape_varieties?: string;
+          aging_info?: string;
+          denomination?: string;
+          image_path?: string;
+        };
+        Update: {
+          name?: string;
+          description?: string;
+          price?: number;
+          category_id?: string;
+          grape_varieties?: string;
+          aging_info?: string;
+          denomination?: string;
+          image_path?: string;
+          updated_at?: string;
+        };
+      };
+      wine_categories: {
+        Row: {
+          id: string;
+          name: string;
+          description: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          name: string;
+          description?: string;
+        };
+        Update: {
+          name?: string;
+          description?: string;
+          updated_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;
@@ -7161,12 +8888,32 @@ export type Database = {
 export type Tables = Database['public']['Tables'];
 export type TableRow<T extends keyof Tables> = Tables[T]['Row'];
 
+// Entity Types
 export type DbUser = TableRow<'users'>;
 export type DbProfile = TableRow<'profiles'>;
 export type DbDataEntry = TableRow<'data_entries'>;
+export type DbMenuItem = TableRow<'menu_items'>;
+export type DbCategory = TableRow<'categories'>;
+export type DbAllergen = TableRow<'allergens'>;
+export type DbMenuItemAllergen = TableRow<'menu_item_allergens'>;
+export type DbDailyMenu = TableRow<'daily_menus'>;
+export type DbDailyMenuFirstCourse = TableRow<'daily_menu_first_courses'>;
+export type DbDailyMenuSecondCourse = TableRow<'daily_menu_second_courses'>;
+export type DbWine = TableRow<'wines'>;
+export type DbWineCategory = TableRow<'wine_categories'>;
 
+// Extended Types
 export interface DbDataEntryWithUser extends DbDataEntry {
   user: DbUser;
+}
+
+export interface DbMenuItemWithRelations extends DbMenuItem {
+  category: DbCategory;
+  allergens: DbAllergen[];
+}
+
+export interface DbWineWithRelations extends DbWine {
+  category: DbWineCategory;
 }
 
 // Create a singleton instance
@@ -7177,6 +8924,431 @@ export const getSupabaseClient = () => {
     client = createClientComponentClient<Database>();
   }
   return client;
+};
+```
+
+### src/lib/supabase/menu.ts
+
+```typescript
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import type { 
+  MenuItem, 
+  Wine, 
+  Category, 
+  Allergen, 
+  MenuItemFormData, 
+  WineFormData 
+} from "@/types/menu";
+
+const supabase = createClientComponentClient();
+
+// Types for real-time subscriptions
+interface RealtimePayload<T> {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: T;
+  old: {
+    id: string;
+  };
+}
+
+interface MenuItemWithRelations {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category_id: string;
+  image_path: string;
+  is_daily_menu: boolean;
+  created_at: string;
+  updated_at: string;
+  menu_item_allergens: {
+    allergen: {
+      id: string;
+      name: string;
+      created_at: string;
+      updated_at: string;
+    };
+  }[];
+}
+
+// Menu Items Operations
+export const getMenuItems = async () => {
+  try {
+    console.log('Fetching menu items...');
+    const { data, error } = await supabase
+      .from('menu_items')
+      .select(`
+        *,
+        menu_item_allergens(
+          allergen:allergens(*)
+        )
+      `);
+
+    if (error) {
+      console.error('Error fetching menu items:', error);
+      throw error;
+    }
+
+    // Transform the data to match the MenuItem type
+    const transformedData = data?.map((item: MenuItemWithRelations) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      price: item.price,
+      category_id: item.category_id,
+      image_path: item.image_path,
+      is_daily_menu: item.is_daily_menu,
+      created_at: item.created_at,
+      updated_at: item.updated_at,
+      allergens: item.menu_item_allergens.map(relation => relation.allergen.id)
+    }));
+
+    console.log('Fetched menu items:', transformedData);
+    return transformedData as MenuItem[];
+  } catch (error) {
+    console.error('Error in getMenuItems:', error);
+    throw error;
+  }
+};
+
+export const createMenuItem = async (data: MenuItemFormData) => {
+  try {
+    console.log('Creating menu item with data:', data);
+    const { data: item, error } = await supabase
+      .from('menu_items')
+      .insert([{
+        name: data.name,
+        description: data.description,
+        price: data.price,
+        category_id: data.category_id,
+        image_path: data.image_path,
+        is_daily_menu: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating menu item:', error);
+      throw error;
+    }
+
+    // Create allergen relationships if provided
+    if (data.allergens?.length) {
+      console.log('Creating allergen relationships...');
+      const allergenRelations = data.allergens.map(allergenId => ({
+        menu_item_id: item.id,
+        allergen_id: allergenId
+      }));
+
+      const { error: allergenError } = await supabase
+        .from('menu_item_allergens')
+        .insert(allergenRelations);
+
+      if (allergenError) {
+        console.error('Error creating allergen relationships:', allergenError);
+        throw allergenError;
+      }
+    }
+
+    return { 
+      ...item, 
+      allergens: data.allergens || [] 
+    } as MenuItem;
+  } catch (error) {
+    console.error('Error in createMenuItem:', error);
+    throw error;
+  }
+};
+
+export const updateMenuItem = async (id: string, data: Partial<MenuItemFormData>) => {
+  try {
+    console.log('Updating menu item:', id, data);
+    
+    // Update menu item
+    const { data: item, error } = await supabase
+      .from('menu_items')
+      .update({
+        name: data.name,
+        description: data.description,
+        price: data.price,
+        category_id: data.category_id,
+        image_path: data.image_path,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating menu item:', error);
+      throw error;
+    }
+
+    // Update allergens if provided
+    if (data.allergens) {
+      console.log('Updating allergen relationships...');
+      
+      // Delete existing relationships
+      const { error: deleteError } = await supabase
+        .from('menu_item_allergens')
+        .delete()
+        .eq('menu_item_id', id);
+
+      if (deleteError) {
+        console.error('Error deleting existing allergen relationships:', deleteError);
+        throw deleteError;
+      }
+
+      // Create new relationships
+      if (data.allergens.length > 0) {
+        const allergenRelations = data.allergens.map(allergenId => ({
+          menu_item_id: id,
+          allergen_id: allergenId
+        }));
+
+        const { error: insertError } = await supabase
+          .from('menu_item_allergens')
+          .insert(allergenRelations);
+
+        if (insertError) {
+          console.error('Error creating new allergen relationships:', insertError);
+          throw insertError;
+        }
+      }
+    }
+
+    return { 
+      ...item, 
+      allergens: data.allergens 
+    } as MenuItem;
+  } catch (error) {
+    console.error('Error in updateMenuItem:', error);
+    throw error;
+  }
+};
+
+export const deleteMenuItem = async (id: string) => {
+  try {
+    console.log('Deleting menu item:', id);
+    
+    // Delete menu item (cascade will handle allergen relationships)
+    const { error } = await supabase
+      .from('menu_items')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting menu item:', error);
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error in deleteMenuItem:', error);
+    throw error;
+  }
+};
+
+// Wine Operations
+export const getWines = async () => {
+  try {
+    console.log('Fetching wines...');
+    const { data, error } = await supabase
+      .from('wines')
+      .select(`
+        *,
+        category:wine_categories(*)
+      `);
+
+    if (error) {
+      console.error('Error fetching wines:', error);
+      throw error;
+    }
+
+    console.log('Fetched wines:', data);
+    return data as Wine[];
+  } catch (error) {
+    console.error('Error in getWines:', error);
+    throw error;
+  }
+};
+
+export const createWine = async (data: WineFormData) => {
+  try {
+    console.log('Creating wine with data:', data);
+    const { data: wine, error } = await supabase
+      .from('wines')
+      .insert([{
+        name: data.name,
+        description: data.description,
+        price: data.price,
+        category_id: data.category_id,
+        image_path: data.image_path,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating wine:', error);
+      throw error;
+    }
+
+    return wine as Wine;
+  } catch (error) {
+    console.error('Error in createWine:', error);
+    throw error;
+  }
+};
+
+export const updateWine = async (id: string, data: Partial<WineFormData>) => {
+  try {
+    console.log('Updating wine:', id, data);
+    const { data: wine, error } = await supabase
+      .from('wines')
+      .update({
+        name: data.name,
+        description: data.description,
+        price: data.price,
+        category_id: data.category_id,
+        image_path: data.image_path,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating wine:', error);
+      throw error;
+    }
+
+    return wine as Wine;
+  } catch (error) {
+    console.error('Error in updateWine:', error);
+    throw error;
+  }
+};
+
+export const deleteWine = async (id: string) => {
+  try {
+    console.log('Deleting wine:', id);
+    const { error } = await supabase
+      .from('wines')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting wine:', error);
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error in deleteWine:', error);
+    throw error;
+  }
+};
+
+// Category Operations
+export const getCategories = async () => {
+  try {
+    console.log('Fetching categories...');
+    
+    // Test auth state
+    const { data: { session }, error: authError } = await supabase.auth.getSession();
+    console.log('Auth state:', { 
+      isAuthenticated: !!session,
+      authError: authError?.message 
+    });
+
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('name');
+
+    if (error) {
+      console.error('Supabase error details:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      });
+      throw error;
+    }
+
+    console.log('Categories fetched successfully:', data);
+    return data as Category[];
+  } catch (error) {
+    console.error('Error in getCategories:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    throw error;
+  }
+};
+
+// Allergen Operations
+export const getAllergens = async () => {
+  try {
+    console.log('Fetching allergens...');
+    const { data, error } = await supabase
+      .from('allergens')
+      .select('*')
+      .order('name');
+
+    if (error) {
+      console.error('Error fetching allergens:', error);
+      throw error;
+    }
+
+    console.log('Fetched allergens:', data);
+    return data as Allergen[];
+  } catch (error) {
+    console.error('Error in getAllergens:', error);
+    throw error;
+  }
+};
+
+// Real-time subscriptions
+export const subscribeToMenuChanges = (
+  callback: (payload: RealtimePayload<MenuItem>) => void
+): (() => void) => {
+  const channel = supabase.channel('menu_changes')
+    .on<MenuItem>(
+      'postgres_changes',
+      { 
+        event: '*', 
+        schema: 'public', 
+        table: 'menu_items' 
+      },
+      (payload) => callback(payload as RealtimePayload<MenuItem>)
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
+
+export const subscribeToWineChanges = (
+  callback: (payload: RealtimePayload<Wine>) => void
+): (() => void) => {
+  const channel = supabase.channel('wine_changes')
+    .on<Wine>(
+      'postgres_changes',
+      { 
+        event: '*', 
+        schema: 'public', 
+        table: 'wines' 
+      },
+      (payload) => callback(payload as RealtimePayload<Wine>)
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 };
 ```
 
@@ -7317,6 +9489,102 @@ import { twMerge } from "tailwind-merge"
  
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+```
+
+### src/types/menu.ts
+
+```typescript
+// Basic Types
+export interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  image_path: string;
+  category_id: string;
+  is_daily_menu: boolean;
+  created_at: string;
+  updated_at: string;
+  allergens: string[];
+}
+
+export interface Wine {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  image_path: string;
+  category_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Allergen {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Form Types
+export interface MenuItemFormData {
+  name: string;
+  description: string;
+  price: number;
+  category_id: string;
+  image_path: string;
+  allergens: string[];
+}
+
+export interface WineFormData {
+  name: string;
+  description: string;
+  price: number;
+  category_id: string;
+  image_path: string;
+}
+
+// Props Types
+export interface MenuCardProps {
+  item: MenuItem | Wine;
+  type: 'menu' | 'wine';
+  onEdit: (id: string, data: MenuItemFormData | WineFormData) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  categories: Category[];
+  allergens?: Allergen[];
+  isEditing: boolean;
+  onEditToggle: (id: string | null) => void;
+}
+
+export interface MenuNavProps {
+  categories: Category[];
+  activeCategory: string;
+  onCategoryChange: (id: string) => void;
+  type: 'menu' | 'wine';
+}
+
+export interface MenuSearchProps {
+  onSearch: (query: string) => void;
+  onCategoryFilter: (categoryId: string) => void;
+  categories: Category[];
+}
+
+export interface MenuEditorProps {
+  item?: MenuItem | Wine;
+  type: 'menu' | 'wine';
+  onSave: (data: MenuItemFormData | WineFormData) => Promise<void>;
+  onCancel: () => void;
+  categories: Category[];
+  allergens?: Allergen[];
 }
 ```
 

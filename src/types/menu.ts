@@ -1,41 +1,42 @@
+// src/types/menu.ts
+
 // Basic Types
 export interface MenuItem {
-  id: string;
+  id: number;              // Changed to number since it's bigint in DB
   name: string;
   description: string;
   price: number;
-  image_path: string;
-  category_id: string;
-  is_daily_menu: boolean;
+  image_url: string | null;     // Added from DB structure
+  image_path: string | null;    // Made nullable
+  image_alt: string | null;     // Added from DB structure
+  image_thumbnail_path: string | null;  // Added from DB structure
+  category_id: number;    // Changed to number
+  active: boolean;       // Added from DB structure
+  allergens: number[];   // Changed to number array
   created_at: string;
   updated_at: string;
-  allergens: string[];
 }
 
 export interface Wine {
-  id: string;
+  id: number;           // Changed to number
   name: string;
   description: string;
-  price: number;
-  image_path: string;
-  category_id: string;
+  bottle_price: number; // Changed to match DB
+  glass_price: number;  // Changed to match DB
+  active: boolean;
+  category_id: number;  // Changed to number
   created_at: string;
-  updated_at: string;
 }
 
 export interface Category {
-  id: string;
+  id: number;          // Changed to number
   name: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
+  display_order: number; // Added from DB structure
 }
 
 export interface Allergen {
-  id: string;
+  id: number;         // Changed to number
   name: string;
-  created_at: string;
-  updated_at: string;
 }
 
 // Form Types
@@ -43,41 +44,57 @@ export interface MenuItemFormData {
   name: string;
   description: string;
   price: number;
-  category_id: string;
-  image_path: string;
-  allergens: string[];
+  category_id: number;    // Changed to number
+  image_url?: string;     // Made optional
+  image_path?: string;    // Made optional
+  image_alt?: string;     // Added
+  image_thumbnail_path?: string;  // Added
+  active?: boolean;       // Added
+  allergens: number[];    // Changed to number array
 }
 
 export interface WineFormData {
   name: string;
   description: string;
-  price: number;
-  category_id: string;
-  image_path: string;
+  bottle_price: number;   // Changed to match DB
+  glass_price: number;    // Changed to match DB
+  category_id: number;    // Changed to number
+  active?: boolean;       // Added
 }
 
-// Props Types
+// Response Types
+export interface MenuItemResponse {
+  data: MenuItem | null;
+  error: Error | null;
+}
+
+export interface WineResponse {
+  data: Wine | null;
+  error: Error | null;
+}
+
+// Props Types (keeping the same but updating types)
 export interface MenuCardProps {
   item: MenuItem | Wine;
   type: 'menu' | 'wine';
-  onEdit: (id: string, data: MenuItemFormData | WineFormData) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  onEdit: (id: number, data: MenuItemFormData | WineFormData) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
   categories: Category[];
   allergens?: Allergen[];
   isEditing: boolean;
-  onEditToggle: (id: string | null) => void;
+  onEditToggle: (id: number | null) => void;
 }
 
 export interface MenuNavProps {
   categories: Category[];
-  activeCategory: string;
-  onCategoryChange: (id: string) => void;
+  activeCategory: number | null;  // Changed to number | null
+  onCategoryChange: (id: number | null) => void;  // Changed to number | null
   type: 'menu' | 'wine';
 }
 
 export interface MenuSearchProps {
   onSearch: (query: string) => void;
-  onCategoryFilter: (categoryId: string) => void;
+  onCategoryFilter: (categoryId: number | null) => void;  // Changed to number | null
   categories: Category[];
 }
 
@@ -88,4 +105,13 @@ export interface MenuEditorProps {
   onCancel: () => void;
   categories: Category[];
   allergens?: Allergen[];
+}
+
+// Supabase Realtime Types
+export interface RealtimePayload<T> {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: T;
+  old: {
+    id: number;  // Changed to number
+  };
 }

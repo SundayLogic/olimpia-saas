@@ -12,7 +12,9 @@ import {
   LogOut,
   Loader2,
   ImageIcon,
-  MenuSquare, // Add this import for the menu icon
+  MenuSquare,
+  ClipboardList, // Added for menu link
+  Wine // Added for wine menu
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { Database } from "@/lib/supabase/client";
@@ -81,7 +83,7 @@ export default function DashboardLayout({
       <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-background">
         <div className="flex h-full flex-col">
           <div className="border-b px-6 py-4">
-            <h1 className="text-lg font-semibold">Your App Name</h1>
+            <h1 className="text-lg font-semibold">Restaurant Dashboard</h1>
           </div>
 
           <nav className="flex-1 space-y-1 px-3 py-4">
@@ -94,43 +96,81 @@ export default function DashboardLayout({
                 Dashboard
               </Button>
             </Link>
-            <Link href="/dashboard/users">
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
-              >
-                <Users className="mr-2 h-4 w-4" />
-                Users
-              </Button>
-            </Link>
-            <Link href="/dashboard/images">
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
-              >
-                <ImageIcon className="mr-2 h-4 w-4" />
-                Images
-              </Button>
-            </Link>
-            {/* Add Daily Menu Link */}
-            <Link href="/dashboard/daily-menu">
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
-              >
-                <MenuSquare className="mr-2 h-4 w-4" />
-                Daily Menu
-              </Button>
-            </Link>
-            <Link href="/dashboard/settings">
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
-              >
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
-              </Button>
-            </Link>
+
+            {/* Menu Management Section */}
+            <div className="pt-4">
+              <h2 className="mb-2 px-4 text-xs font-semibold text-muted-foreground">
+                MENU MANAGEMENT
+              </h2>
+              <Link href="/dashboard/menu">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <ClipboardList className="mr-2 h-4 w-4" />
+                  Menu Items
+                </Button>
+              </Link>
+              <Link href="/dashboard/daily-menu">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <MenuSquare className="mr-2 h-4 w-4" />
+                  Daily Menu
+                </Button>
+              </Link>
+              <Link href="/dashboard/wine">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <Wine className="mr-2 h-4 w-4" />
+                  Wine List
+                </Button>
+              </Link>
+            </div>
+
+            {/* Assets Management Section */}
+            <div className="pt-4">
+              <h2 className="mb-2 px-4 text-xs font-semibold text-muted-foreground">
+                ASSETS
+              </h2>
+              <Link href="/dashboard/images">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <ImageIcon className="mr-2 h-4 w-4" />
+                  Images
+                </Button>
+              </Link>
+            </div>
+
+            {/* Admin Section */}
+            <div className="pt-4">
+              <h2 className="mb-2 px-4 text-xs font-semibold text-muted-foreground">
+                ADMIN
+              </h2>
+              <Link href="/dashboard/users">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <Users className="mr-2 h-4 w-4" />
+                  Users
+                </Button>
+              </Link>
+              <Link href="/dashboard/settings">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </Button>
+              </Link>
+            </div>
           </nav>
 
           <div className="border-t p-4">

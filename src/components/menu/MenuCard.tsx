@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import Image from "next/image";
-import { Edit2, Trash2, X, Check, Euro } from "lucide-react";
-import type { MenuCardProps } from "@/types/menu";
-import { MenuEditor } from "./MenuEditor";
+import { Edit2, Trash2, Euro } from "lucide-react";
+import type { MenuCardProps, MenuItem, Wine } from "@/types/menu";
+import MenuEditor from "./MenuEditor";
 
 // Typography System
 const typography = {
@@ -41,6 +41,11 @@ const MenuCard: React.FC<MenuCardProps> = ({
   onEditToggle
 }) => {
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Type guard to check if item is a MenuItem
+  const isMenuItem = (item: MenuItem | Wine): item is MenuItem => {
+    return 'allergens' in item;
+  };
 
   const handleDelete = async () => {
     try {
@@ -108,9 +113,9 @@ const MenuCard: React.FC<MenuCardProps> = ({
             </p>
 
             {/* Allergens (Only for menu items) */}
-            {type === 'menu' && allergens && item.allergens && (
+            {type === 'menu' && allergens && isMenuItem(item) && item.allergens && (
               <div className="mt-4 flex flex-wrap gap-2">
-                {item.allergens.map(allergenId => {
+                {item.allergens.map((allergenId: string) => {
                   const allergen = allergens.find(a => a.id === allergenId);
                   return allergen && (
                     <span

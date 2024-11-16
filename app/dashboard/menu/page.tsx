@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Tabs,  TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, AlertCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 import MenuNav from "@/components/menu/MenuNav";
 import MenuSearch from "@/components/menu/MenuSearch";
@@ -41,7 +42,6 @@ type EditFormData = {
   wine: WineFormData;
 }[TabType];
 
-// Define types for real-time subscription payloads
 interface RealtimePayload<T> {
   eventType: 'INSERT' | 'UPDATE' | 'DELETE';
   new: T;
@@ -50,13 +50,38 @@ interface RealtimePayload<T> {
   };
 }
 
+interface LoadingState {
+  auth: boolean;
+  categories: boolean;
+  allergens: boolean;
+  menuItems: boolean;
+  wines: boolean;
+}
+
+interface ErrorState {
+  auth?: string;
+  categories?: string;
+  allergens?: string;
+  menuItems?: string;
+  wines?: string;
+}
+
 export default function MenuPage() {
   // State
   const [activeTab, setActiveTab] = useState<TabType>("menu");
   const [activeCategory, setActiveCategory] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Loading and Error States
+  const [loadingState, setLoadingState] = useState<LoadingState>({
+    auth: true,
+    categories: true,
+    allergens: true,
+    menuItems: true,
+    wines: true
+  });
+  const [errorState, setErrorState] = useState<ErrorState>({});
 
   // Data states
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -65,51 +90,82 @@ export default function MenuPage() {
   const [allergens, setAllergens] = useState<Allergen[]>([]);
 
   const { toast } = useToast();
+  const supabase = createClientComponentClient();
 
-  // Initial data fetch
+  // Auth check
   useEffect(() => {
-    const loadInitialData = async () => {
+    const checkAuth = async () => {
       try {
-        setIsLoading(true);
-        const [menuData, wineData, categoryData, allergenData] = await Promise.all([
-          getMenuItems(),
-          getWines(),
-          getCategories(),
-          getAllergens(),
-        ]);
-
-        setMenuItems(menuData);
-        setWines(wineData);
-        setCategories(categoryData);
-        setAllergens(allergenData);
+        const { data: { session }, error: authError } = await supabase.auth.getSession();
+        
+        if (authError) throw authError;
+        if (!session) throw new Error('No authenticated session');
+        
+        console.log('Auth successful:', session.user.email);
+        setLoadingState(prev => ({ ...prev, auth: false }));
+        
       } catch (error) {
-        console.error('Error loading data:', error);
-        toast({
-          title: "Error",
-          description: "No se pudo cargar la información",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
+        console.error('Auth error:', error);
+        setErrorState(prev => ({
+          ...prev,
+          auth: error instanceof Error ? error.message : 'Authentication failed'
+        }));
+        setLoadingState(prev => ({ ...prev, auth: false }));
       }
     };
 
-    loadInitialData();
-  }, [toast]);
+    checkAuth();
+  }, [supabase.auth]);
 
-  // Real-time updates
+  // Data fetching
   useEffect(() => {
+    const loadData = async () => {
+      if (errorState.auth) return; // Don't load data if auth failed
+
+      const fetchData = async <T,>(
+        key: keyof LoadingState,
+        fetcher: () => Promise<T>,
+        setter: (data: T) => void
+      ) => {
+        try {
+          setLoadingState(prev => ({ ...prev, [key]: true }));
+          const data = await fetcher();
+          setter(data);
+          setLoadingState(prev => ({ ...prev, [key]: false }));
+        } catch (error) {
+          console.error(`Error fetching ${key}:`, error);
+          setErrorState(prev => ({
+            ...prev,
+            [key]: error instanceof Error ? error.message : `Failed to load ${key}`
+          }));
+          setLoadingState(prev => ({ ...prev, [key]: false }));
+        }
+      };
+
+      await Promise.all([
+        fetchData('categories', getCategories, setCategories),
+        fetchData('allergens', getAllergens, setAllergens),
+        fetchData('menuItems', getMenuItems, setMenuItems),
+        fetchData('wines', getWines, setWines)
+      ]);
+    };
+
+    loadData();
+  }, [errorState.auth]);
+
+  // Realtime subscriptions
+  useEffect(() => {
+    if (Object.keys(errorState).length > 0) return; // Don't subscribe if there are errors
+
     const menuUnsubscribe = subscribeToMenuChanges((payload: RealtimePayload<MenuItem>) => {
       const { eventType, new: newRecord, old: oldRecord } = payload;
       
-      setMenuItems((current) => {
+      setMenuItems(current => {
         switch (eventType) {
           case 'INSERT':
             return [...current, newRecord];
           case 'UPDATE':
-            return current.map(item => 
-              item.id === oldRecord.id ? newRecord : item
-            );
+            return current.map(item => item.id === oldRecord.id ? newRecord : item);
           case 'DELETE':
             return current.filter(item => item.id !== oldRecord.id);
           default:
@@ -121,14 +177,12 @@ export default function MenuPage() {
     const wineUnsubscribe = subscribeToWineChanges((payload: RealtimePayload<Wine>) => {
       const { eventType, new: newRecord, old: oldRecord } = payload;
       
-      setWines((current) => {
+      setWines(current => {
         switch (eventType) {
           case 'INSERT':
             return [...current, newRecord];
           case 'UPDATE':
-            return current.map(wine => 
-              wine.id === oldRecord.id ? newRecord : wine
-            );
+            return current.map(wine => wine.id === oldRecord.id ? newRecord : wine);
           case 'DELETE':
             return current.filter(wine => wine.id !== oldRecord.id);
           default:
@@ -141,7 +195,7 @@ export default function MenuPage() {
       menuUnsubscribe();
       wineUnsubscribe();
     };
-  }, []);
+  }, [errorState]);
 
   // Filtered items
   const filteredItems = useMemo(() => {
@@ -154,7 +208,7 @@ export default function MenuPage() {
     });
   }, [activeTab, menuItems, wines, searchQuery, activeCategory]);
 
-  // Handlers
+  // CRUD handlers
   const handleCreate = async () => {
     try {
       if (activeTab === "menu") {
@@ -181,7 +235,7 @@ export default function MenuPage() {
       console.error('Error creating item:', error);
       toast({
         title: "Error",
-        description: "No se pudo crear el elemento",
+        description: "Failed to create item",
         variant: "destructive",
       });
     }
@@ -194,15 +248,16 @@ export default function MenuPage() {
       } else {
         await updateWine(id, data as WineFormData);
       }
+      setEditingId(null);
       toast({
-        title: "Éxito",
-        description: "Elemento actualizado correctamente",
+        title: "Success",
+        description: "Item updated successfully",
       });
     } catch (error) {
       console.error('Error updating item:', error);
       toast({
         title: "Error",
-        description: "No se pudo actualizar el elemento",
+        description: "Failed to update item",
         variant: "destructive",
       });
     }
@@ -216,23 +271,63 @@ export default function MenuPage() {
         await deleteWine(id);
       }
       toast({
-        title: "Éxito",
-        description: "Elemento eliminado correctamente",
+        title: "Success",
+        description: "Item deleted successfully",
       });
     } catch (error) {
       console.error('Error deleting item:', error);
       toast({
         title: "Error",
-        description: "No se pudo eliminar el elemento",
+        description: "Failed to delete item",
         variant: "destructive",
       });
     }
   };
 
+  // Auth error state
+  if (errorState.auth) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <p className="text-lg font-semibold mb-2">Authentication Error</p>
+          <p className="text-gray-600 mb-4">{errorState.auth}</p>
+          <Button onClick={() => window.location.href = '/login'}>
+            Return to Login
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // General loading state
+  const isLoading = Object.values(loadingState).some(Boolean);
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin" />
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading menu data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Any other error state
+  const hasErrors = Object.keys(errorState).length > 0;
+  if (hasErrors) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <p className="text-lg font-semibold mb-2">Error Loading Data</p>
+          <p className="text-gray-600 mb-4">
+            {Object.values(errorState).filter(Boolean).join(', ')}
+          </p>
+          <Button onClick={() => window.location.reload()}>
+            Try Again
+          </Button>
+        </div>
       </div>
     );
   }
@@ -301,7 +396,7 @@ export default function MenuPage() {
 
           {filteredItems.length === 0 && (
             <div className="text-center py-12 text-gray-500">
-              No se encontraron elementos
+              No items found
             </div>
           )}
         </div>
