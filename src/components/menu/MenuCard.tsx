@@ -47,6 +47,11 @@ const MenuCard: React.FC<MenuCardProps> = ({
     return 'allergens' in item;
   };
 
+  // Type guard to check if item is a Wine
+  const isWine = (item: MenuItem | Wine): item is Wine => {
+    return 'bottle_price' in item;
+  };
+
   const handleDelete = async () => {
     try {
       setIsDeleting(true);
@@ -54,6 +59,29 @@ const MenuCard: React.FC<MenuCardProps> = ({
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  const getDisplayImage = () => {
+    if (isMenuItem(item)) {
+      return item.image_path || '/placeholder-menu-item.jpg';
+    }
+    // For wines, always return placeholder since they don't have images
+    return '/placeholder-wine.jpg';
+  };
+
+  const getDisplayPrice = () => {
+    if (isMenuItem(item)) {
+      return item.price.toFixed(2);
+    }
+    if (isWine(item)) {
+      return `${item.bottle_price.toFixed(2)}`;
+    }
+    return '0.00';
+  };
+
+  const getCategory = () => {
+    const category = categories.find(c => c.id === item.category_id);
+    return category?.name || 'Sin categoría';
   };
 
   return (
@@ -82,7 +110,7 @@ const MenuCard: React.FC<MenuCardProps> = ({
           {/* Image Container */}
           <div className="relative aspect-[4/3] overflow-hidden">
             <Image
-              src={item.image_path || '/placeholder-image.jpg'}
+              src={getDisplayImage()}
               alt={item.name}
               fill
               className="object-cover transition-transform duration-300 group-hover:scale-105"
@@ -94,8 +122,8 @@ const MenuCard: React.FC<MenuCardProps> = ({
           {/* Content */}
           <div className="p-6">
             {/* Category Label */}
-            <span className={`${typography.label} text-olimpia-text-light`}>
-              {categories.find(c => c.id === item.category_id)?.name || 'Sin categoría'}
+            <span className={`${typography.label} text-muted-foreground`}>
+              {getCategory()}
             </span>
 
             {/* Title and Price */}
@@ -103,29 +131,38 @@ const MenuCard: React.FC<MenuCardProps> = ({
               <h3 className={typography.display.title}>{item.name}</h3>
               <span className="flex items-center text-xl font-light">
                 <Euro className="h-4 w-4 mr-1" />
-                {item.price.toFixed(2)}
+                {getDisplayPrice()}
               </span>
             </div>
 
             {/* Description */}
-            <p className={`${typography.body.base} text-olimpia-text-secondary`}>
+            <p className={`${typography.body.base} text-muted-foreground`}>
               {item.description}
             </p>
 
             {/* Allergens (Only for menu items) */}
             {type === 'menu' && allergens && isMenuItem(item) && item.allergens && (
               <div className="mt-4 flex flex-wrap gap-2">
-                {item.allergens.map((allergenId: string) => {
+                {item.allergens.map((allergenId) => {
                   const allergen = allergens.find(a => a.id === allergenId);
                   return allergen && (
                     <span
                       key={allergen.id}
-                      className="px-2 py-1 text-xs bg-olimpia-secondary/10 rounded-full"
+                      className="px-2 py-1 text-xs bg-secondary/10 rounded-full"
                     >
                       {allergen.name}
                     </span>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Additional Wine Info */}
+            {isWine(item) && (
+              <div className="mt-4">
+                <span className="text-sm font-medium">
+                  Copa: €{item.glass_price.toFixed(2)}
+                </span>
               </div>
             )}
           </div>
@@ -135,6 +172,7 @@ const MenuCard: React.FC<MenuCardProps> = ({
             <button
               onClick={() => onEditToggle(item.id)}
               className="p-2 rounded-full bg-white/90 hover:bg-white shadow-sm transition-colors duration-200"
+              aria-label="Edit item"
             >
               <Edit2 className="h-4 w-4" />
             </button>
@@ -142,6 +180,7 @@ const MenuCard: React.FC<MenuCardProps> = ({
               onClick={handleDelete}
               disabled={isDeleting}
               className="p-2 rounded-full bg-white/90 hover:bg-red-500 hover:text-white shadow-sm transition-colors duration-200"
+              aria-label="Delete item"
             >
               {isDeleting ? (
                 <span className="animate-spin">

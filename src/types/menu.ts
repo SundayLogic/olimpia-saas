@@ -18,15 +18,16 @@ export interface MenuItem {
 }
 
 export interface Wine {
-  id: number;           // Changed to number
+  id: number;
   name: string;
   description: string;
-  bottle_price: number; // Changed to match DB
-  glass_price: number;  // Changed to match DB
+  bottle_price: number;
+  glass_price: number;
+  category_id: number;
   active: boolean;
-  category_id: number;  // Changed to number
   created_at: string;
 }
+
 
 export interface Category {
   id: number;          // Changed to number
