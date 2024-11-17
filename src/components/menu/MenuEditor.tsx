@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import Image from 'next/image';
 import * as z from "zod";
-import Image from "next/image";
 import { Loader2, Image as ImageIcon, Check, X } from "lucide-react";
 import type { MenuEditorProps, MenuItem, Wine, MenuItemFormData, WineFormData } from "@/types/menu";
 import { Button } from "@/components/ui/button";
@@ -38,10 +38,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import ImageSelector from "@/components/menu/ImageSelector";
+import dynamic from 'next/dynamic';
 import { cn } from "@/lib/utils";
 
-// Form Schemas
+const ImageSelector = dynamic(() => import('./ImageSelector'), {
+  ssr: false,
+  loading: () => <div className="h-[400px] bg-gray-100 animate-pulse rounded-lg" />,
+});
+
 const menuItemSchema = z.object({
   name: z.string().min(1, "El nombre es requerido"),
   description: z.string().min(1, "La descripción es requerida"),
@@ -93,7 +97,7 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
       description: item.description,
       price: isMenuItem(item) ? item.price : 0,
       category_id: item.category_id,
-      image_path: isMenuItem(item) && item.image_path ? item.image_path : undefined,
+      image_path: isMenuItem(item) && item.image_path ? item.image_path : '',
       allergens: defaultAllergens,
     } : {
       name: item.name,
@@ -106,7 +110,7 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
 
   const selectedAllergens = type === 'menu' ? (form.watch('allergens') || []) : [];
 
-  const handleSubmit = async (data: MenuItemFormValues | WineFormValues) => {
+  const handleSubmit = useCallback(async (data: MenuItemFormValues | WineFormValues) => {
     try {
       setIsSubmitting(true);
       if (type === 'menu') {
@@ -127,19 +131,47 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [type, onSave]);
 
-  const handleImageSelect = (imagePath: string) => {
+  const handleImageSelect = useCallback((imagePath: string) => {
     if (type === 'menu') {
-      form.setValue('image_path', imagePath);
+      form.setValue('image_path', imagePath, { shouldValidate: true });
     }
     setIsSelectingImage(false);
+  }, [form, type]);
+
+  const renderImagePreview = (imagePath: string) => {
+    const commonProps = {
+      fill: true,
+      className: "object-cover",
+      onError: () => {
+        form.setValue('image_path', '', { shouldValidate: true });
+      }
+    };
+
+    if (imagePath.startsWith('http')) {
+      return (
+        <Image
+          src={imagePath}
+          alt="Selected"
+          unoptimized
+          {...commonProps}
+        />
+      );
+    }
+
+    return (
+      <Image
+        src={imagePath}
+        alt="Selected"
+        {...commonProps}
+      />
+    );
   };
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="p-6 space-y-6">
-        {/* Image Selection - Only for menu items */}
         {type === 'menu' && (
           <FormField
             control={form.control}
@@ -148,21 +180,15 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
               <FormItem>
                 <FormLabel>Imagen</FormLabel>
                 <div className="flex gap-4 items-center">
-                  {field.value ? (
-                    <div className="relative w-20 h-20 rounded overflow-hidden">
-                      <Image
-                        src={field.value}
-                        alt="Selected"
-                        fill
-                        className="object-cover"
-                        sizes="80px"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-20 h-20 bg-gray-100 rounded flex items-center justify-center">
+                  <div className="relative w-20 h-20 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
+                    {field.value ? (
+                      <div className="relative w-full h-full">
+                        {renderImagePreview(field.value)}
+                      </div>
+                    ) : (
                       <ImageIcon className="w-8 h-8 text-gray-400" />
-                    </div>
-                  )}
+                    )}
+                  </div>
                   <Button
                     type="button"
                     variant="outline"
@@ -177,7 +203,6 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
           />
         )}
 
-        {/* Basic Information */}
         <div className="grid grid-cols-2 gap-4">
           <FormField
             control={form.control}
@@ -206,7 +231,7 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                       step="0.01" 
                       placeholder="0.00" 
                       {...field}
-                      onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                     />
                   </FormControl>
                   <FormMessage />
@@ -227,7 +252,7 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                         step="0.01" 
                         placeholder="0.00" 
                         {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                       />
                     </FormControl>
                     <FormMessage />
@@ -246,7 +271,7 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                         step="0.01" 
                         placeholder="0.00" 
                         {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                       />
                     </FormControl>
                     <FormMessage />
@@ -257,7 +282,6 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
           )}
         </div>
 
-        {/* Category Selection */}
         <FormField
           control={form.control}
           name="category_id"
@@ -289,7 +313,6 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
           )}
         />
 
-        {/* Description */}
         <FormField
           control={form.control}
           name="description"
@@ -308,7 +331,6 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
           )}
         />
 
-        {/* Allergens Multi-select - Only for menu items */}
         {type === 'menu' && (
           <FormField
             control={form.control}
@@ -319,6 +341,7 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                 <Popover open={openAllergens} onOpenChange={setOpenAllergens}>
                   <PopoverTrigger asChild>
                     <Button
+                      type="button"
                       variant="outline"
                       role="combobox"
                       className={cn(
@@ -393,7 +416,6 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
           />
         )}
 
-        {/* Action Buttons */}
         <div className="flex justify-end gap-4">
           <Button
             type="button"
@@ -416,7 +438,6 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
         </div>
       </form>
 
-      {/* Image Selector Modal */}
       {isSelectingImage && type === 'menu' && (
         <ImageSelector 
           onSelect={handleImageSelect}
