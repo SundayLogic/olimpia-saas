@@ -13,17 +13,17 @@ import {
   Loader2,
   ImageIcon,
   MenuSquare,
-  ClipboardList, // Added for menu link
-  Wine // Added for wine menu
+  ClipboardList,
+  Wine,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import type { Database } from "@/lib/supabase/client";
+import type { Database } from "@/lib/supabase/types";
 
-export default function DashboardLayout({
-  children,
-}: {
+interface DashboardLayoutProps {
   children: React.ReactNode;
-}) {
+}
+
+export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const router = useRouter();
@@ -80,13 +80,17 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Sidebar */}
       <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-background">
         <div className="flex h-full flex-col">
+          {/* Sidebar Header */}
           <div className="border-b px-6 py-4">
             <h1 className="text-lg font-semibold">Restaurant Dashboard</h1>
           </div>
 
+          {/* Navigation */}
           <nav className="flex-1 space-y-1 px-3 py-4">
+            {/* Dashboard Link */}
             <Link href="/dashboard">
               <Button
                 variant="ghost"
@@ -173,6 +177,7 @@ export default function DashboardLayout({
             </div>
           </nav>
 
+          {/* User Section */}
           <div className="border-t p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center">
@@ -199,6 +204,7 @@ export default function DashboardLayout({
         </div>
       </aside>
 
+      {/* Main Content */}
       <main className="pl-64">
         <div className="h-full py-12">
           {children}

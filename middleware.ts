@@ -1,23 +1,81 @@
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import type { Database } from "@/types";
 
-export async function middleware(req: NextRequest) {
-  const res = NextResponse.next()
-  const supabase = createMiddlewareClient({ req, res })
+export async function middleware(request: NextRequest) {
+  const response = NextResponse.next();
+  const supabase = createMiddlewareClient<Database>({ req: request, res: response });
+  const path = request.nextUrl.pathname;
 
-  // Refresh session if expired - this will automatically handle token refresh
-  const { data: { session } } = await supabase.auth.getSession()
+  // Check auth session
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  // Optional: Redirect to login if accessing protected routes without session
-  if (!session && req.nextUrl.pathname.startsWith('/dashboard')) {
-    return NextResponse.redirect(new URL('/login', req.url))
+  // Auth routes handling
+  if (path.startsWith('/auth') || path === '/login' || path === '/signup') {
+    if (session) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    return response;
   }
 
-  return res
+  // Protected routes handling
+  if (
+    path.startsWith('/dashboard') ||
+    path.startsWith('/api') ||
+    path === '/'
+  ) {
+    if (!session) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    // Check for admin-only routes
+    if (path.startsWith('/dashboard/users') || path.startsWith('/dashboard/settings')) {
+      const { data: user } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (user?.role !== 'admin') {
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+      }
+    }
+
+    // Check user status (active/inactive)
+    const { data: userStatus } = await supabase
+      .from('users')
+      .select('active')
+      .eq('id', session.user.id)
+      .single();
+
+    if (!userStatus?.active) {
+      await supabase.auth.signOut();
+      return NextResponse.redirect(
+        new URL('/login?error=Account%20is%20inactive', request.url)
+      );
+    }
+  }
+
+  // Refresh session if needed
+  const hasExpired = session?.expires_at
+    ? session.expires_at * 1000 < Date.now()
+    : false;
+
+  if (session && hasExpired) {
+    const { data: { session: newSession } } = await supabase.auth.refreshSession();
+    if (!newSession) {
+      await supabase.auth.signOut();
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  }
+
+  return response;
 }
 
-// Specify which routes should be handled by the middleware
+// Configure which paths the middleware should run on
 export const config = {
   matcher: [
     /*
@@ -27,6 +85,10 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public folder
      */
-    '/((?!_next/static|_next/image|favicon.ico|public).*)',
+    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
+    '/',
+    '/dashboard/:path*',
+    '/auth/:path*',
+    '/api/:path*',
   ],
-}
+};

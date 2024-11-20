@@ -1,411 +1,115 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useState, useEffect } from "react";
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, AlertCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-
-import MenuNav from "@/components/menu/MenuNav";
-import MenuSearch from "@/components/menu/MenuSearch";
-import MenuCard from "@/components/menu/MenuCard";
-import {
-  getCategories,
-  getAllergens,
-  getMenuItems,
-  getWines,
-  createMenuItem,
-  createWine,
-  updateMenuItem,
-  updateWine,
-  deleteMenuItem,
-  deleteWine,
-  subscribeToMenuChanges,
-  subscribeToWineChanges,
-} from "@/lib/supabase/menu";
-import type {
-  MenuItem,
-  Wine,
-  Category,
-  Allergen,
-  MenuItemFormData,
-  WineFormData,
-  RealtimePayload,
-} from "@/types/menu";
-
-type TabType = "menu" | "wine";
-
-type EditFormData = {
-  menu: MenuItemFormData;
-  wine: WineFormData;
-}[TabType];
-
-interface LoadingState {
-  auth: boolean;
-  categories: boolean;
-  allergens: boolean;
-  menuItems: boolean;
-  wines: boolean;
-}
-
-interface ErrorState {
-  auth?: string;
-  categories?: string;
-  allergens?: string;
-  menuItems?: string;
-  wines?: string;
-}
+import MenuList from "@/components/features/menu/MenuList";
+import MenuSearch from "@/components/features/menu/MenuSearch";
+import type { MenuItem, Category } from "@/types/menu";
 
 export default function MenuPage() {
-  // State management with correct types
-  const [activeTab, setActiveTab] = useState<TabType>("menu");
-  const [activeCategory, setActiveCategory] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [editingId, setEditingId] = useState<number | null>(null);
-
-  const [loadingState, setLoadingState] = useState<LoadingState>({
-    auth: true,
-    categories: true,
-    allergens: true,
-    menuItems: true,
-    wines: true,
-  });
-  const [errorState, setErrorState] = useState<ErrorState>({});
-
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [wines, setWines] = useState<Wine[]>([]);
+  const [items, setItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [allergens, setAllergens] = useState<Allergen[]>([]);
-
-  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  
   const supabase = createClientComponentClient();
+  const { toast } = useToast();
 
-  // Auth check
+  // Fetch menu items and categories
   useEffect(() => {
-    const checkAuth = async () => {
+    const fetchData = async () => {
       try {
-        const {
-          data: { session },
-          error: authError,
-        } = await supabase.auth.getSession();
+        setIsLoading(true);
+        
+        // Fetch categories
+        const { data: categoriesData, error: categoriesError } = await supabase
+          .from('categories')
+          .select('*')
+          .order('name');
 
-        if (authError) throw authError;
-        if (!session) throw new Error("No authenticated session");
+        if (categoriesError) throw categoriesError;
 
-        console.log("Auth successful:", session.user.email);
-        setLoadingState((prev) => ({ ...prev, auth: false }));
+        // Fetch menu items
+        const { data: itemsData, error: itemsError } = await supabase
+          .from('menu_items')
+          .select(`
+            *,
+            categories (id, name),
+            menu_item_allergens (
+              allergen_id,
+              allergens (id, name)
+            )
+          `)
+          .order('name');
+
+        if (itemsError) throw itemsError;
+
+        setCategories(categoriesData);
+        setItems(itemsData);
       } catch (error) {
-        console.error("Auth error:", error);
-        setErrorState((prev) => ({
-          ...prev,
-          auth:
-            error instanceof Error ? error.message : "Authentication failed",
-        }));
-        setLoadingState((prev) => ({ ...prev, auth: false }));
-      }
-    };
-
-    checkAuth();
-  }, [supabase.auth]);
-
-  // Data fetching
-  useEffect(() => {
-    const loadData = async () => {
-      if (errorState.auth) return;
-
-      const fetchData = async <T,>(
-        key: keyof LoadingState,
-        fetcher: () => Promise<T>,
-        setter: (data: T) => void
-      ) => {
-        try {
-          setLoadingState((prev) => ({ ...prev, [key]: true }));
-          const data = await fetcher();
-          setter(data);
-          setLoadingState((prev) => ({ ...prev, [key]: false }));
-        } catch (error) {
-          console.error(`Error fetching ${key}:`, error);
-          setErrorState((prev) => ({
-            ...prev,
-            [key]:
-              error instanceof Error ? error.message : `Failed to load ${key}`,
-          }));
-          setLoadingState((prev) => ({ ...prev, [key]: false }));
-        }
-      };
-
-      await Promise.all([
-        fetchData("categories", getCategories, setCategories),
-        fetchData("allergens", getAllergens, setAllergens),
-        fetchData("menuItems", getMenuItems, setMenuItems),
-        fetchData("wines", getWines, setWines),
-      ]);
-    };
-
-    loadData();
-  }, [errorState.auth]);
-
-  // Real-time subscriptions
-  useEffect(() => {
-    if (Object.keys(errorState).length > 0) return;
-
-    const menuUnsubscribe = subscribeToMenuChanges(
-      (payload: RealtimePayload<MenuItem>) => {
-        const { eventType, new: newRecord, old } = payload;
-
-        setMenuItems((current) => {
-          switch (eventType) {
-            case "INSERT":
-              return [...current, newRecord];
-            case "UPDATE":
-              return current.map((item) =>
-                item.id === old.id ? newRecord : item
-              );
-            case "DELETE":
-              return current.filter((item) => item.id !== old.id);
-            default:
-              return current;
-          }
+        console.error('Error fetching data:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load menu items",
+          variant: "destructive",
         });
+      } finally {
+        setIsLoading(false);
       }
-    );
-
-    const wineUnsubscribe = subscribeToWineChanges(
-      (payload: RealtimePayload<Wine>) => {
-        const { eventType, new: newRecord, old } = payload;
-
-        setWines((current) => {
-          switch (eventType) {
-            case "INSERT":
-              return [...current, newRecord];
-            case "UPDATE":
-              return current.map((wine) =>
-                wine.id === old.id ? newRecord : wine
-              );
-            case "DELETE":
-              return current.filter((wine) => wine.id !== old.id);
-            default:
-              return current;
-          }
-        });
-      }
-    );
-
-    return () => {
-      menuUnsubscribe();
-      wineUnsubscribe();
     };
-  }, [errorState]);
 
-  // Filtered items
-  const filteredItems = useMemo(() => {
-    const items = activeTab === "menu" ? menuItems : wines;
-    return items.filter((item) => {
-      const matchesSearch =
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.description.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory =
-        !activeCategory || item.category_id === activeCategory;
-      return matchesSearch && matchesCategory;
+    fetchData();
+  }, [supabase, toast]);
+
+  // Filter items based on search and category
+  const filteredItems = items.filter(item => {
+    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         item.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = !selectedCategory || item.category_id === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  // Handle new item creation
+  const handleCreateItem = async () => {
+    // Implementation will be added later
+    toast({
+      title: "Coming Soon",
+      description: "This feature is under development",
     });
-  }, [activeTab, menuItems, wines, searchQuery, activeCategory]);
-
-  // CRUD handlers
-  const handleCreate = async () => {
-    try {
-      if (activeTab === "menu") {
-        const newItem = await createMenuItem({
-          name: "Nuevo plato",
-          description: "Descripción del plato",
-          price: 0,
-          category_id: activeCategory || categories[0]?.id || 0,
-          image_path: "",
-          allergens: [],
-          active: true,
-        });
-        setEditingId(newItem.id);
-      } else {
-        const newWine = await createWine({
-          name: "Nuevo vino",
-          description: "Descripción del vino",
-          bottle_price: 0,
-          glass_price: 0,
-          category_id: activeCategory || categories[0]?.id || 0,
-          active: true,
-        });
-        setEditingId(newWine.id);
-      }
-    } catch (error) {
-      console.error("Error creating item:", error);
-      toast({
-        title: "Error",
-        description: "Failed to create item",
-        variant: "destructive",
-      });
-    }
   };
-
-  const handleEdit = async (id: number, data: EditFormData) => {
-    try {
-      if (activeTab === "menu") {
-        await updateMenuItem(id, data as MenuItemFormData);
-      } else {
-        await updateWine(id, data as WineFormData);
-      }
-      setEditingId(null);
-      toast({
-        title: "Success",
-        description: "Item updated successfully",
-      });
-    } catch (error) {
-      console.error("Error updating item:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update item",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    try {
-      if (activeTab === "menu") {
-        await deleteMenuItem(id);
-      } else {
-        await deleteWine(id);
-      }
-      toast({
-        title: "Success",
-        description: "Item deleted successfully",
-      });
-    } catch (error) {
-      console.error("Error deleting item:", error);
-      toast({
-        title: "Error",
-        description: "Failed to delete item",
-        variant: "destructive",
-      });
-    }
-  };
-
-  if (errorState.auth) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-lg font-semibold mb-2">Authentication Error</p>
-          <p className="text-gray-600 mb-4">{errorState.auth}</p>
-          <Button onClick={() => (window.location.href = "/login")}>
-            Return to Login
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  const isLoading = Object.values(loadingState).some(Boolean);
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading menu data...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const hasErrors = Object.keys(errorState).length > 0;
-  if (hasErrors) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-lg font-semibold mb-2">Error Loading Data</p>
-          <p className="text-gray-600 mb-4">
-            {Object.values(errorState).filter(Boolean).join(", ")}
-          </p>
-          <Button onClick={() => window.location.reload()}>Try Again</Button>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Tabs
-        value={activeTab}
-        onValueChange={(value: string) => setActiveTab(value as TabType)}
-      >
-        <div className="sticky top-0 z-50 bg-white border-b">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between mb-4">
-              <TabsList>
-                <TabsTrigger value="menu">Carta</TabsTrigger>
-                <TabsTrigger value="wine">Vinos</TabsTrigger>
-              </TabsList>
-              <Button onClick={handleCreate}>
-                <Plus className="w-4 h-4 mr-2" />
-                {activeTab === "menu" ? "Nuevo plato" : "Nuevo vino"}
-              </Button>
-            </div>
-            <MenuSearch
-              onSearch={setSearchQuery}
-              onCategoryFilter={setActiveCategory}
-              categories={categories.filter((cat) =>
-                activeTab === "menu"
-                  ? !cat.name.toLowerCase().includes("vino")
-                  : cat.name.toLowerCase().includes("vino")
-              )}
-            />
-          </div>
+    <div className="container mx-auto px-4">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold">Menu Items</h1>
+          <p className="text-muted-foreground mt-2">
+            Manage your restaurant's menu items
+          </p>
         </div>
+        <Button onClick={handleCreateItem}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Item
+        </Button>
+      </div>
 
-        <div className="container mx-auto px-4 py-8">
-          <MenuNav
-            categories={categories.filter((cat) =>
-              activeTab === "menu"
-                ? !cat.name.toLowerCase().includes("vino")
-                : cat.name.toLowerCase().includes("vino")
-            )}
-            activeCategory={activeCategory}
-            onCategoryChange={setActiveCategory}
-            type={activeTab}
-          />
+      <div className="space-y-4">
+        <MenuSearch
+          onSearch={setSearchQuery}
+          onCategoryFilter={setSelectedCategory}
+          categories={categories}
+        />
 
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8"
-            >
-              {filteredItems.map((item) => (
-                <MenuCard
-                  key={item.id}
-                  item={item}
-                  type={activeTab}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                  categories={categories}
-                  allergens={activeTab === "menu" ? allergens : undefined}
-                  isEditing={item.id === editingId}
-                  onEditToggle={setEditingId}
-                />
-              ))}
-            </motion.div>
-          </AnimatePresence>
-
-          {filteredItems.length === 0 && (
-            <div className="text-center py-12 text-gray-500">
-              No items found
-            </div>
-          )}
-        </div>
-      </Tabs>
+        <MenuList
+          items={filteredItems}
+          isLoading={isLoading}
+          categories={categories}
+        />
+      </div>
     </div>
   );
 }
