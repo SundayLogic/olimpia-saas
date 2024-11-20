@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import {
   Table,
   TableBody,
@@ -15,7 +14,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -44,7 +42,7 @@ import {
   UserCheck,
   Mail 
 } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 
 interface User {
   id: string;
@@ -63,7 +61,6 @@ interface UsersTableProps {
 export function UsersTable({ users, onStatusChange, onRoleChange }: UsersTableProps) {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const { toast } = useToast();
-  const supabase = createClientComponentClient();
 
   const handleStatusToggle = async (user: User) => {
     try {
@@ -73,7 +70,7 @@ export function UsersTable({ users, onStatusChange, onRoleChange }: UsersTablePr
         title: "Success",
         description: `User ${user.active ? 'deactivated' : 'activated'} successfully`,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to update user status",
@@ -194,7 +191,7 @@ export function InviteUserDialog({ open, onOpenChange, onInvite }: InviteUserDia
       setEmail("");
       setRole("user");
       onOpenChange(false);
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to send invitation",
