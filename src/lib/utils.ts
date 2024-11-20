@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
 // Classname utility
-export function cn(...inputs: ClassValue[]) {
+export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
@@ -48,8 +48,10 @@ export function formatRelativeTime(date: string | Date): string {
   return format(new Date(date), "PP", { locale: es });
 }
 
-// Debounce function
-export function debounce<T extends (...args: any[]) => any>(
+// Debounce function with proper typing
+type AnyFunction = (...args: unknown[]) => unknown;
+
+export function debounce<T extends AnyFunction>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -107,7 +109,7 @@ export function isValidEmail(email: string): boolean {
 }
 
 // Random ID generator
-export function generateId(length: number = 8): string {
+export function generateId(length = 8): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   return Array.from({ length }, () => 
     chars.charAt(Math.floor(Math.random() * chars.length))
@@ -116,11 +118,11 @@ export function generateId(length: number = 8): string {
 
 // Deep clone utility
 export function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj));
+  return JSON.parse(JSON.stringify(obj)) as T;
 }
 
-// Object comparison
-export function isEqual(obj1: any, obj2: any): boolean {
+// Object comparison with proper typing
+export function isEqual<T extends Record<string, unknown>>(obj1: T, obj2: T): boolean {
   return JSON.stringify(obj1) === JSON.stringify(obj2);
 }
 
@@ -140,23 +142,34 @@ export function truncateText(text: string, length: number): string {
   return text.slice(0, length) + "...";
 }
 
-// Parse boolean
-export function parseBoolean(value: any): boolean {
+// Parse boolean with proper typing
+export function parseBoolean(value: string | number | boolean | null | undefined): boolean {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') {
     return value.toLowerCase() === 'true';
   }
-  return !!value;
+  return Boolean(value);
 }
 
 // Check if object is empty
-export function isEmpty(obj: object): boolean {
+export function isEmpty(obj: Record<string, unknown>): boolean {
   return Object.keys(obj).length === 0;
 }
 
 // Remove undefined values from object
-export function removeUndefined<T extends object>(obj: T): Partial<T> {
+export function removeUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
   return Object.fromEntries(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     Object.entries(obj).filter(([_, value]) => value !== undefined)
   ) as Partial<T>;
+}
+
+// Type guard for checking if value is Record type
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// Type guard for checking if value is array
+export function isArray<T>(value: unknown): value is T[] {
+  return Array.isArray(value);
 }

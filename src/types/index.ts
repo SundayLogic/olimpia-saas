@@ -192,17 +192,49 @@ export interface UserFormData {
 }
 
 // API Response Types
-export interface ApiResponse<T = any> {
-  data?: T;
-  error?: string;
-  status: number;
+export interface ApiSuccessResponse<T> {
+  data: T;
+  error: null;
+  status: 200 | 201 | 204;
+}
+
+export interface ApiErrorResponse {
+  data: null;
+  error: {
+    message: string;
+    code?: string;
+    details?: unknown;
+  };
+  status: 400 | 401 | 403 | 404 | 500;
+}
+
+export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
+
+// Paginated Response Types
+export interface PaginatedData<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
+export interface PaginatedResponse<T> extends ApiSuccessResponse<PaginatedData<T>> {
+  meta: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 // Error Types
-export interface ApiError {
+export interface ErrorResponse {
   message: string;
   code?: string;
-  status?: number;
+  status: number;
+  details?: Record<string, unknown>;
 }
 
 // Image Types
@@ -219,6 +251,24 @@ export interface ImageMetadata {
   size: number;
 }
 
+// Request Types
+export interface PaginationParams {
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface FilterParams {
+  search?: string;
+  category?: string;
+  status?: 'active' | 'inactive';
+  startDate?: string;
+  endDate?: string;
+}
+
+export type RequestParams = PaginationParams & FilterParams;
+
 // Utility Types
 export type Nullable<T> = T | null;
 export type Optional<T> = T | undefined;
@@ -227,6 +277,14 @@ export type DeepPartial<T> = {
   [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
 };
 
+// Strongly typed object keys
+export type ObjectKeys<T> = keyof T;
+export type ObjectValues<T> = T[keyof T];
+
+// Function Types
+export type AsyncFunction<T = void> = () => Promise<T>;
+export type AsyncFunctionWithParam<P, T = void> = (param: P) => Promise<T>;
+
 // Constants
 export const ROLES = ['admin', 'user'] as const;
 export type Role = typeof ROLES[number];
@@ -234,10 +292,49 @@ export type Role = typeof ROLES[number];
 export const IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'webp'] as const;
 export type ImageFormat = typeof IMAGE_FORMATS[number];
 
+export const SORT_ORDERS = ['asc', 'desc'] as const;
+export type SortOrder = typeof SORT_ORDERS[number];
+
+export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE'] as const;
+export type HttpMethod = typeof HTTP_METHODS[number];
+
 export const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
 
-// Validation Schemas (if using Zod)
+// Validation Types
 export interface ValidationError {
   path: string[];
   message: string;
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  errors: ValidationError[];
+}
+
+// Event Types
+export interface EventHandler<T = void> {
+  (event: Event): T;
+}
+
+// Realtime Types
+export interface RealtimeSubscription {
+  unsubscribe: () => void;
+}
+
+export interface RealtimeMessage<T> {
+  event: string;
+  payload: T;
+}
+
+// Export type guards
+export function isApiSuccessResponse<T>(
+  response: ApiResponse<T>
+): response is ApiSuccessResponse<T> {
+  return response.error === null;
+}
+
+export function isApiErrorResponse(
+  response: ApiResponse<unknown>
+): response is ApiErrorResponse {
+  return response.error !== null;
 }
