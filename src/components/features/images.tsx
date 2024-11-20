@@ -2,11 +2,11 @@
 
 import { useState, useCallback } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Loader2, UploadCloud, X, Image as ImageIcon } from "lucide-react";
+import { Loader2, UploadCloud, X } from "lucide-react";
 import Image from "next/image";
 import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
@@ -25,48 +25,7 @@ export function ImageUpload({ category, onUploadComplete }: ImageUploadProps) {
   const supabase = createClientComponentClient();
   const { toast } = useToast();
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const file = acceptedFiles[0];
-    if (!file) return;
-
-    // Validate file
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Error",
-        description: "Please upload an image file",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Validate size (2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      toast({
-        title: "Error",
-        description: "Image must be less than 2MB",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(file);
-    setPreview(objectUrl);
-
-    handleUpload(file);
-  }, []);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'image/jpeg': [],
-      'image/png': [],
-      'image/webp': []
-    },
-    maxFiles: 1,
-    multiple: false
-  });
-
-  const handleUpload = async (file: File) => {
+  const handleUpload = useCallback(async (file: File) => {
     try {
       setIsUploading(true);
 
@@ -107,7 +66,48 @@ export function ImageUpload({ category, onUploadComplete }: ImageUploadProps) {
       setIsUploading(false);
       setPreview(null);
     }
-  };
+  }, [category, onUploadComplete, supabase.storage, toast]);
+
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    const file = acceptedFiles[0];
+    if (!file) return;
+
+    // Validate file
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Error",
+        description: "Please upload an image file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate size (2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast({
+        title: "Error",
+        description: "Image must be less than 2MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setPreview(objectUrl);
+
+    handleUpload(file);
+  }, [handleUpload, toast]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'image/jpeg': [],
+      'image/png': [],
+      'image/webp': []
+    },
+    maxFiles: 1,
+    multiple: false
+  });
 
   return (
     <div className="space-y-4">
@@ -163,14 +163,12 @@ interface ImageGalleryProps {
 export function ImageGallery({ images, onSelect, onDelete }: ImageGalleryProps) {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-  const handleImageClick = (url: string) => {
+  const handleImageClick = useCallback((url: string) => {
     setSelectedImage(url);
-    if (onSelect) {
-      onSelect(url);
-    }
-  };
+    onSelect?.(url);
+  }, [onSelect]);
 
-  const handleDelete = async (url: string) => {
+  const handleDelete = useCallback(async (url: string) => {
     if (!onDelete) return;
     
     try {
@@ -182,7 +180,7 @@ export function ImageGallery({ images, onSelect, onDelete }: ImageGalleryProps) 
     } catch (error) {
       console.error('Error deleting image:', error);
     }
-  };
+  }, [onDelete]);
 
   if (!images.length) {
     return (
@@ -202,7 +200,7 @@ export function ImageGallery({ images, onSelect, onDelete }: ImageGalleryProps) 
           >
             <Image
               src={url}
-              alt=""
+              alt="Gallery image"
               fill
               className="object-cover transition-all group-hover:scale-105"
             />

@@ -1,7 +1,8 @@
 import { createClientComponentClient, createServerComponentClient, createServerActionClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import { cache } from "react";
-import type { Database } from "./types";
+import type { Database } from "@/types";
+import type {  RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 // Client Component Client (for client-side)
 export const createClient = () => {
@@ -140,23 +141,27 @@ export const deleteFile = async (
   }
 };
 
+// Types for Realtime Subscriptions
+type TableName = Database['public']['Tables'][keyof Database['public']['Tables']];
+type RealtimePayload<T extends TableName> = RealtimePostgresChangesPayload<T['Row']>;
+
 // Realtime Subscription Helper Functions
-export const subscribeToChanges = (
+export const subscribeToChanges = <T extends TableName>(
   table: string,
-  callback: (payload: any) => void
-) => {
+  callback: (payload: RealtimePayload<T>) => void
+): (() => void) => {
   const supabase = createClient();
   
   const subscription = supabase
     .channel('db_changes')
-    .on(
+    .on<T['Row']>(
       'postgres_changes',
       {
         event: '*',
         schema: 'public',
         table: table
       },
-      callback
+      (payload) => callback(payload as RealtimePayload<T>)
     )
     .subscribe();
 
@@ -164,6 +169,13 @@ export const subscribeToChanges = (
     supabase.removeChannel(subscription);
   };
 };
+
+// Error Types
+export interface SupabaseErrorDetails {
+  message: string;
+  code: string;
+  details?: string;
+}
 
 // Error Handling Helper
 export class SupabaseError extends Error {
@@ -177,14 +189,21 @@ export class SupabaseError extends Error {
   }
 }
 
-export const handleError = (error: any) => {
+export const handleError = (error: unknown) => {
   console.error("Supabase Error:", error);
   
-  if (error?.code && error?.message) {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    'message' in error &&
+    typeof error.message === 'string' &&
+    typeof error.code === 'string'
+  ) {
     throw new SupabaseError(
       error.message,
       error.code,
-      error?.details || ""
+      'details' in error && typeof error.details === 'string' ? error.details : ""
     );
   }
   

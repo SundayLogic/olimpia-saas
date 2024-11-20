@@ -1,9 +1,5 @@
 import * as React from "react"
-
-import type {
-  ToastActionElement,
-  ToastProps,
-} from "@/components/ui/toast"
+import type { ToastActionElement, ToastProps } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
@@ -15,21 +11,13 @@ type ToasterToast = ToastProps & {
   action?: ToastActionElement
 }
 
-const actionTypes = {
-  ADD_TOAST: "ADD_TOAST",
-  UPDATE_TOAST: "UPDATE_TOAST",
-  DISMISS_TOAST: "DISMISS_TOAST",
-  REMOVE_TOAST: "REMOVE_TOAST",
-} as const
-
-let count = 0
-
-function genId() {
-  count = (count + 1) % Number.MAX_SAFE_INTEGER
-  return count.toString()
+// Define action type literals directly in a type
+type ActionType = {
+  ADD_TOAST: "ADD_TOAST"
+  UPDATE_TOAST: "UPDATE_TOAST"
+  DISMISS_TOAST: "DISMISS_TOAST"
+  REMOVE_TOAST: "REMOVE_TOAST"
 }
-
-type ActionType = typeof actionTypes
 
 type Action =
   | {
@@ -51,6 +39,13 @@ type Action =
 
 interface State {
   toasts: ToasterToast[]
+}
+
+let count = 0
+
+function genId() {
+  count = (count + 1) % Number.MAX_SAFE_INTEGER
+  return count.toString()
 }
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
@@ -78,7 +73,6 @@ export const reducer = (state: State, action: Action): State => {
         ...state,
         toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
       }
-
     case "UPDATE_TOAST":
       return {
         ...state,
@@ -86,12 +80,9 @@ export const reducer = (state: State, action: Action): State => {
           t.id === action.toast.id ? { ...t, ...action.toast } : t
         ),
       }
-
     case "DISMISS_TOAST": {
       const { toastId } = action
 
-      // ! Side effects ! - This could be extracted into a dismissToast() action,
-      // but I'll keep it here for simplicity
       if (toastId) {
         addToRemoveQueue(toastId)
       } else {
@@ -147,6 +138,7 @@ function toast({ ...props }: Toast) {
       type: "UPDATE_TOAST",
       toast: { ...props, id },
     })
+
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
 
   dispatch({
