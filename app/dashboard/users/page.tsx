@@ -4,10 +4,9 @@ import { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
-import UserList from "@/components/features/users/UserList";
-import InviteUserDialog from "@/components/features/users/InviteUserDialog";
-import type { User } from "@/types/users";
+import { useToast } from "@/hooks/use-toast";
+import { InviteUserDialog } from "@/src/components/features/users"; // Updated import path
+import type { User } from "@/types"; 
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);

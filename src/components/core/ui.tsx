@@ -36,47 +36,41 @@ const buttonVariants = cva(
   }
 );
 
-interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
-  isLoading?: boolean;
-}
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
+  VariantProps<typeof buttonVariants> & {
+    isLoading?: boolean;
+  };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, isLoading, children, ...props }, ref) => {
-    return (
-      <button
-        className={cn(buttonVariants({ variant, size, className }))}
-        ref={ref}
-        disabled={isLoading}
-        {...props}
-      >
-        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        {children}
-      </button>
-    );
-  }
+  ({ className, variant, size, isLoading, children, ...props }, ref) => (
+    <button
+      className={cn(buttonVariants({ variant, size, className }))}
+      ref={ref}
+      disabled={isLoading || props.disabled}
+      {...props}
+    >
+      {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+      {children}
+    </button>
+  )
 );
 Button.displayName = "Button";
 
 // Input Component
-export interface InputProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {}
+export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, ...props }, ref) => {
-    return (
-      <input
-        type={type}
-        className={cn(
-          "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-          className
-        )}
-        ref={ref}
-        {...props}
-      />
-    );
-  }
+  ({ className, type, ...props }, ref) => (
+    <input
+      type={type}
+      className={cn(
+        "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      ref={ref}
+      {...props}
+    />
+  )
 );
 Input.displayName = "Input";
 
@@ -103,9 +97,8 @@ const badgeVariants = cva(
   }
 );
 
-export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+type BadgeProps = React.HTMLAttributes<HTMLDivElement> &
+  VariantProps<typeof badgeVariants>;
 
 export function Badge({ className, variant, ...props }: BadgeProps) {
   return (
@@ -114,10 +107,9 @@ export function Badge({ className, variant, ...props }: BadgeProps) {
 }
 
 // Loading Component
-export function LoadingSpinner({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+type LoadingSpinnerProps = React.HTMLAttributes<HTMLDivElement>;
+
+export function LoadingSpinner({ className, ...props }: LoadingSpinnerProps) {
   return (
     <div
       className={cn(
@@ -132,12 +124,12 @@ export function LoadingSpinner({
 }
 
 // Empty State Component
-interface EmptyStateProps extends React.HTMLAttributes<HTMLDivElement> {
+type EmptyStateProps = React.HTMLAttributes<HTMLDivElement> & {
   title: string;
   description: string;
   action?: React.ReactNode;
   icon?: React.ReactNode;
-}
+};
 
 export function EmptyState({
   title,
@@ -164,11 +156,10 @@ export function EmptyState({
 }
 
 // Textarea Component
-export const Textarea = React.forwardRef<
-  HTMLTextAreaElement,
-  React.TextareaHTMLAttributes<HTMLTextAreaElement>
->(({ className, ...props }, ref) => {
-  return (
+export type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement>;
+
+export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
+  ({ className, ...props }, ref) => (
     <textarea
       className={cn(
         "flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
@@ -177,12 +168,12 @@ export const Textarea = React.forwardRef<
       ref={ref}
       {...props}
     />
-  );
-});
+  )
+);
 Textarea.displayName = "Textarea";
 
 // Label Component
-export interface LabelProps extends React.LabelHTMLAttributes<HTMLLabelElement> {}
+export type LabelProps = React.LabelHTMLAttributes<HTMLLabelElement>;
 
 export const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
   ({ className, ...props }, ref) => (
@@ -199,9 +190,9 @@ export const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
 Label.displayName = "Label";
 
 // Alert Component
-interface AlertProps extends React.HTMLAttributes<HTMLDivElement> {
+type AlertProps = React.HTMLAttributes<HTMLDivElement> & {
   variant?: "default" | "destructive";
-}
+};
 
 export function Alert({
   className,
@@ -224,7 +215,7 @@ export function Alert({
 }
 
 export const AlertTitle = React.forwardRef<
-  HTMLParagraphElement,
+  HTMLHeadingElement,
   React.HTMLAttributes<HTMLHeadingElement>
 >(({ className, ...props }, ref) => (
   <h5
@@ -236,8 +227,8 @@ export const AlertTitle = React.forwardRef<
 AlertTitle.displayName = "AlertTitle";
 
 export const AlertDescription = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}

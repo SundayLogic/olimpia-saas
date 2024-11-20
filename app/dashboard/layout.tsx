@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import {
   LayoutDashboard,
   Users,
@@ -17,7 +17,7 @@ import {
   Wine,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import type { Database } from "@/lib/supabase/types";
+import type { Database } from "@/types/index";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
