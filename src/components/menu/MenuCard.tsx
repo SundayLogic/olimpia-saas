@@ -1,10 +1,18 @@
-
 "use client";
 
 import { useState, useCallback, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Edit2, Trash2, Euro } from "lucide-react";
-import type { MenuCardProps, MenuItem, Wine, MenuItemFormData, WineFormData } from "@/types/menu";
+import Image from "next/image";
+import type { 
+  MenuCardProps, 
+  MenuItem, 
+  Wine, 
+  MenuItemFormData, 
+  WineFormData, 
+  ValidImageSource, 
+  DEFAULT_IMAGE_PLACEHOLDER 
+} from "@/types/menu";
 import MenuEditor from "./MenuEditor";
 
 const LoadingEditor = () => (
@@ -33,6 +41,14 @@ const motionVariants = {
   }
 };
 
+// Image Helper Utility
+const getValidImagePath = (path: string | null): ValidImageSource => {
+  if (!path) return DEFAULT_IMAGE_PLACEHOLDER;
+  if (path.startsWith('http')) return path as ValidImageSource;
+  if (path.startsWith('/images/')) return path as ValidImageSource;
+  return `/images/${path}` as ValidImageSource;
+};
+
 const MenuCard: React.FC<MenuCardProps> = ({
   item,
   type,
@@ -44,6 +60,9 @@ const MenuCard: React.FC<MenuCardProps> = ({
   onEditToggle
 }) => {
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Image Error State
+  const [imageError, setImageError] = useState(false);
 
   const isMenuItem = (item: MenuItem | Wine): item is MenuItem => {
     return 'allergens' in item;
@@ -86,6 +105,26 @@ const MenuCard: React.FC<MenuCardProps> = ({
     return '0.00';
   }, [item]);
 
+  // Image Render Function
+  const renderImage = useCallback(() => {
+    if (!isMenuItem(item)) return null;
+
+    const imagePath = getValidImagePath(item.image_path);
+    
+    return (
+      <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
+        <Image
+          src={imageError ? DEFAULT_IMAGE_PLACEHOLDER : imagePath}
+          alt={item.name}
+          fill
+          className="object-cover transition-all duration-200"
+          onError={() => setImageError(true)}
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+        />
+      </div>
+    );
+  }, [item, imageError]);
+
   return (
     <AnimatePresence mode="wait">
       {isEditing ? (
@@ -116,9 +155,8 @@ const MenuCard: React.FC<MenuCardProps> = ({
           exit="exit"
           className="group relative bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300"
         >
-          <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
-            <div className="w-full h-full bg-gray-200" />
-          </div>
+          {/* Replaced Current Image Section with renderImage() */}
+          {renderImage()}
 
           <div className="p-6">
             <span className={`${typography.label} text-muted-foreground`}>
@@ -162,19 +200,22 @@ const MenuCard: React.FC<MenuCardProps> = ({
             )}
           </div>
 
+          {/* Enhanced Button Accessibility */}
           <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
             <button
               onClick={() => onEditToggle(item.id)}
-              className="p-2 rounded-full bg-white/90 hover:bg-white shadow-sm transition-colors duration-200"
-              aria-label="Edit item"
+              type="button"
+              className="p-2 rounded-full bg-white/90 hover:bg-white shadow-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary"
+              aria-label={`Editar ${item.name}`}
             >
               <Edit2 className="h-4 w-4" />
             </button>
             <button
               onClick={handleDelete}
               disabled={isDeleting}
-              className="p-2 rounded-full bg-white/90 hover:bg-red-500 hover:text-white shadow-sm transition-colors duration-200"
-              aria-label="Delete item"
+              type="button"
+              className="p-2 rounded-full bg-white/90 hover:bg-red-500 hover:text-white shadow-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label={`Eliminar ${item.name}`}
             >
               {isDeleting ? (
                 <span className="animate-spin">

@@ -7,60 +7,94 @@ import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, ImageIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import type { ValidImageSource } from "@/types/menu";
 
-interface Image {
+interface ImageFile {
   name: string;
   url: string;
   updatedAt: string;
-}
-// components/menu/ImageSelector.tsx
-interface ImageSelectorProps {
-  onSelect: (imagePath: string) => void;
-  onClose: () => void;
-  categoryId: string; // This needs to be string for SelectItem compatibility
+  error?: boolean;
 }
 
+interface ImageSelectorProps {
+  onSelect: (imagePath: ValidImageSource) => void;
+  onClose: () => void;
+  categoryId: string;
+}
+
+const DEFAULT_IMAGE_EXPIRY = 3600; // 1 hour
+
 const ImageSelector = ({ onSelect, onClose, categoryId }: ImageSelectorProps) => {
-  const [images, setImages] = useState<Image[]>([]);
+  const [images, setImages] = useState<ImageFile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const supabase = createClientComponentClient();
   const { toast } = useToast();
 
+  const getFolderName = async (categoryId: string): Promise<string> => {
+    try {
+      const { data: category, error } = await supabase
+        .from("categories")
+        .select("name")
+        .eq("id", categoryId)
+        .single();
+
+      if (error) throw error;
+      if (!category?.name) throw new Error("Category not found");
+
+      return category.name.toLowerCase().replace(/\s+/g, "-");
+    } catch (error) {
+      console.error("Error getting folder name:", error);
+      throw new Error("Failed to get category folder name");
+    }
+  };
+
+  const getSignedUrl = async (folderName: string, fileName: string): Promise<string> => {
+    try {
+      const { data, error } = await supabase
+        .storage
+        .from("menu-images")
+        .createSignedUrl(`${folderName}/${fileName}`, DEFAULT_IMAGE_EXPIRY);
+
+      if (error) throw error;
+      if (!data?.signedUrl) throw new Error("Failed to get signed URL");
+
+      return data.signedUrl;
+    } catch (error) {
+      console.error("Error getting signed URL:", error);
+      throw new Error("Failed to get image URL");
+    }
+  };
   useEffect(() => {
     const loadImages = async () => {
       try {
         setIsLoading(true);
+        setLoadError(null);
 
-        // Get category info to get the folder name
-        const { data: category, error: categoryError } = await supabase
-          .from("categories")
-          .select("name")
-          .eq("id", categoryId)
-          .single();
+        if (!categoryId) {
+          throw new Error("Category ID is required");
+        }
 
-        if (categoryError) throw categoryError;
+        // Get folder name from category
+        const folderName = await getFolderName(categoryId);
 
-        // Convert category name to folder name format
-        const folderName = category.name.toLowerCase().replace(/\s+/g, "-");
-
-        // List files from the specific category folder
+        // List files from category folder
         const { data: files, error: listError } = await supabase
           .storage
           .from("menu-images")
           .list(folderName);
 
         if (listError) throw listError;
-
-        if (!files) {
+        if (!files?.length) {
           setImages([]);
           return;
         }
 
-        // Filter for image files and get signed URLs
+        // Process image files
         const imageFiles = await Promise.all(
           files
             .filter(file => 
@@ -68,22 +102,33 @@ const ImageSelector = ({ onSelect, onClose, categoryId }: ImageSelectorProps) =>
               file.name.match(/\.(jpg|jpeg|png|webp)$/i)
             )
             .map(async (file) => {
-              const { data: signedUrl } = await supabase
-                .storage
-                .from("menu-images")
-                .createSignedUrl(`${folderName}/${file.name}`, 3600);
-
-              return {
-                name: file.name,
-                url: signedUrl?.signedUrl || "",
-                updatedAt: file.updated_at
-              };
+              try {
+                const signedUrl = await getSignedUrl(folderName, file.name);
+                
+                return {
+                  name: file.name,
+                  url: signedUrl,
+                  updatedAt: file.updated_at,
+                  error: false
+                };
+              } catch (error) {
+                console.error(`Error processing image ${file.name}:`, error);
+                return {
+                  name: file.name,
+                  url: "",
+                  updatedAt: file.updated_at,
+                  error: true
+                };
+              }
             })
         );
 
-        setImages(imageFiles.filter(img => img.url));
+        // Filter out failed images
+        setImages(imageFiles.filter(img => !img.error && img.url));
+
       } catch (error) {
         console.error("Error loading images:", error);
+        setLoadError(error instanceof Error ? error.message : "Failed to load images");
         toast({
           title: "Error",
           description: "No se pudieron cargar las imágenes",
@@ -103,9 +148,36 @@ const ImageSelector = ({ onSelect, onClose, categoryId }: ImageSelectorProps) =>
     image.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleImageSelect = (url: string) => {
+    try {
+      // Validate URL before selecting
+      new URL(url);
+      setSelectedImage(url);
+    } catch (error) {
+      console.error("Invalid image URL:", error);
+      toast({
+        title: "Error",
+        description: "URL de imagen inválida",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleConfirm = () => {
-    if (selectedImage) {
-      onSelect(selectedImage);
+    if (!selectedImage) return;
+    
+    try {
+      // Final validation before sending back
+      new URL(selectedImage);
+      onSelect(selectedImage as ValidImageSource);
+      onClose();
+    } catch (error) {
+      console.error("Invalid image URL on confirm:", error);
+      toast({
+        title: "Error",
+        description: "URL de imagen inválida",
+        variant: "destructive",
+      });
     }
   };
 
@@ -115,86 +187,4 @@ const ImageSelector = ({ onSelect, onClose, categoryId }: ImageSelectorProps) =>
     exit: { opacity: 0, scale: 0.9 },
     transition: { duration: 0.2 }
   };
-
-  return (
-    <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Seleccionar imagen</DialogTitle>
-          <div className="relative mt-4">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-            <Input
-              placeholder="Buscar imágenes..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-        </DialogHeader>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : filteredImages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-            <p>No se encontraron imágenes</p>
-            {searchQuery && (
-              <Button
-                variant="ghost"
-                onClick={() => setSearchQuery("")}
-                className="mt-2"
-              >
-                Limpiar búsqueda
-              </Button>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-y-auto flex-1 -mx-6 px-6">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 py-4">
-              {filteredImages.map((image) => (
-                <motion.div
-                  key={image.url}
-                  {...imageMotion}
-                  className={`
-                    relative aspect-square rounded-lg overflow-hidden cursor-pointer
-                    border-2 transition-colors
-                    ${selectedImage === image.url 
-                      ? "border-primary" 
-                      : "border-transparent hover:border-muted"}
-                  `}
-                  onClick={() => setSelectedImage(image.url)}
-                >
-                  <Image
-                    src={image.url}
-                    alt={image.name}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
-                  />
-                  {selectedImage === image.url && (
-                    <div className="absolute inset-0 bg-primary/20" />
-                  )}
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
-          <Button variant="outline" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={handleConfirm}
-            disabled={!selectedImage}
-          >
-            Seleccionar
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-};
-
-export default ImageSelector;
+}

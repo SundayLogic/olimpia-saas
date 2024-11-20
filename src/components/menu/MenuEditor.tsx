@@ -3,10 +3,19 @@
 import { useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import Image from 'next/image';
+import Image from "next/image";
 import * as z from "zod";
 import { Loader2, Image as ImageIcon, Check, X } from "lucide-react";
-import type { MenuEditorProps, MenuItem, Wine, MenuItemFormData, WineFormData } from "@/types/menu";
+import type {
+  MenuEditorProps,
+  MenuItem,
+  Wine,
+  MenuItemFormData,
+  WineFormData,
+  ValidImageSource,
+  DEFAULT_IMAGE_PLACEHOLDER,
+  ImageValidationError,
+} from "@/types/menu";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -38,27 +47,45 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import dynamic from 'next/dynamic';
+import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 
-const ImageSelector = dynamic(() => import('./ImageSelector'), {
+const ImageSelector = dynamic(() => import("./ImageSelector"), {
   ssr: false,
-  loading: () => <div className="h-[400px] bg-gray-100 animate-pulse rounded-lg" />,
+  loading: () => (
+    <div className="h-[400px] bg-gray-100 animate-pulse rounded-lg" />
+  ),
 });
+
+// Utility function to validate and format image paths
+const getValidImagePath = (path: string | null): ValidImageSource => {
+  if (!path) return null;
+  if (path.startsWith("http")) return path as ValidImageSource;
+  if (path.startsWith("/images/")) return path as ValidImageSource;
+  return `/images/${path}` as ValidImageSource;
+};
 
 const menuItemSchema = z.object({
   name: z.string().min(1, "El nombre es requerido"),
   description: z.string().min(1, "La descripción es requerida"),
   price: z.coerce.number().min(0, "El precio debe ser mayor a 0"),
   category_id: z.coerce.number().min(1, "La categoría es requerida"),
-  image_path: z.string().optional(),
+  image_path: z
+    .union([
+      z.string().startsWith("/images/"),
+      z.string().startsWith("http"),
+      z.string().length(0),
+    ])
+    .optional(),
   allergens: z.array(z.coerce.number()).optional(),
 });
 
 const wineSchema = z.object({
   name: z.string().min(1, "El nombre es requerido"),
   description: z.string().min(1, "La descripción es requerida"),
-  bottle_price: z.coerce.number().min(0, "El precio de botella debe ser mayor a 0"),
+  bottle_price: z.coerce
+    .number()
+    .min(0, "El precio de botella debe ser mayor a 0"),
   glass_price: z.coerce.number().min(0, "El precio de copa debe ser mayor a 0"),
   category_id: z.coerce.number().min(1, "La categoría es requerida"),
 });
@@ -72,107 +99,136 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
   onSave,
   onCancel,
   categories,
-  allergens = []
+  allergens = [],
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSelectingImage, setIsSelectingImage] = useState(false);
   const [openAllergens, setOpenAllergens] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const isMenuItem = (item: MenuItem | Wine): item is MenuItem => {
-    return 'allergens' in item;
+    return "allergens" in item;
   };
 
   const isWine = (item: MenuItem | Wine): item is Wine => {
-    return 'bottle_price' in item;
+    return "bottle_price" in item;
   };
 
-  const defaultAllergens = type === 'menu' && isMenuItem(item) 
-    ? item.allergens
-    : [];
+  const defaultAllergens =
+    type === "menu" && isMenuItem(item) ? item.allergens : [];
+
+  const validateImagePath = (path: string | null): boolean => {
+    if (!path) return true;
+    return path.startsWith("/images/") || path.startsWith("http");
+  };
 
   const form = useForm<MenuItemFormValues | WineFormValues>({
-    resolver: zodResolver(type === 'menu' ? menuItemSchema : wineSchema),
-    defaultValues: type === 'menu' ? {
-      name: item.name,
-      description: item.description,
-      price: isMenuItem(item) ? item.price : 0,
-      category_id: item.category_id,
-      image_path: isMenuItem(item) && item.image_path ? item.image_path : '',
-      allergens: defaultAllergens,
-    } : {
-      name: item.name,
-      description: item.description,
-      bottle_price: isWine(item) ? item.bottle_price : 0,
-      glass_price: isWine(item) ? item.glass_price : 0,
-      category_id: item.category_id,
-    }
+    resolver: zodResolver(type === "menu" ? menuItemSchema : wineSchema),
+    defaultValues:
+      type === "menu"
+        ? {
+            name: item.name,
+            description: item.description,
+            price: isMenuItem(item) ? item.price : 0,
+            category_id: item.category_id,
+            image_path: isMenuItem(item)
+              ? getValidImagePath(item.image_path) || ""
+              : "",
+            allergens: defaultAllergens,
+          }
+        : {
+            name: item.name,
+            description: item.description,
+            bottle_price: isWine(item) ? item.bottle_price : 0,
+            glass_price: isWine(item) ? item.glass_price : 0,
+            category_id: item.category_id,
+          },
   });
 
-  const selectedAllergens = type === 'menu' ? (form.watch('allergens') || []) : [];
+  const selectedAllergens =
+    type === "menu" ? form.watch("allergens") || [] : [];
 
-  const handleSubmit = useCallback(async (data: MenuItemFormValues | WineFormValues) => {
-    try {
-      setIsSubmitting(true);
-      if (type === 'menu') {
-        const menuData: MenuItemFormData = {
-          ...data as MenuItemFormValues,
-          category_id: Number(data.category_id),
-          allergens: (data as MenuItemFormValues).allergens?.map(Number) || [],
-          image_path: (data as MenuItemFormValues).image_path || ''
-        };
-        await onSave(menuData);
-      } else {
-        const wineData: WineFormData = {
-          ...data as WineFormValues,
-          category_id: Number(data.category_id)
-        };
-        await onSave(wineData);
+  const handleSubmit = useCallback(
+    async (data: MenuItemFormValues | WineFormValues) => {
+      try {
+        setIsSubmitting(true);
+        if (type === "menu") {
+          const imagePath = (data as MenuItemFormValues).image_path;
+          if (imagePath && !validateImagePath(imagePath)) {
+            setImageError("Invalid image path format");
+            return;
+          }
+
+          const menuData: MenuItemFormData = {
+            ...(data as MenuItemFormValues),
+            category_id: Number(data.category_id),
+            allergens:
+              (data as MenuItemFormValues).allergens?.map(Number) || [],
+            image_path: getValidImagePath(imagePath || null),
+          };
+          await onSave(menuData);
+        } else {
+          const wineData: WineFormData = {
+            ...(data as WineFormValues),
+            category_id: Number(data.category_id),
+          };
+          await onSave(wineData);
+        }
+      } catch (error) {
+        setImageError(
+          error instanceof Error ? error.message : "Error submitting form"
+        );
+      } finally {
+        setIsSubmitting(false);
       }
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [type, onSave]);
+    },
+    [type, onSave]
+  );
 
-  const handleImageSelect = useCallback((imagePath: string) => {
-    if (type === 'menu') {
-      form.setValue('image_path', imagePath, { shouldValidate: true });
-    }
-    setIsSelectingImage(false);
-  }, [form, type]);
-
-  const renderImagePreview = (imagePath: string) => {
-    const commonProps = {
-      fill: true,
-      className: "object-cover",
-      onError: () => {
-        form.setValue('image_path', '', { shouldValidate: true });
+  const handleImageSelect = useCallback(
+    (imagePath: string) => {
+      const validPath = getValidImagePath(imagePath);
+      if (!validPath) {
+        setImageError("Invalid image path received");
+        return;
       }
-    };
 
-    if (imagePath.startsWith('http')) {
-      return (
-        <Image
-          src={imagePath}
-          alt="Selected"
-          unoptimized
-          {...commonProps}
-        />
-      );
+      setImageError(null);
+      if (type === "menu") {
+        form.setValue("image_path", validPath, { shouldValidate: true });
+      }
+      setIsSelectingImage(false);
+    },
+    [form, type]
+  );
+
+  const renderImagePreview = (imagePath: string | null) => {
+    if (!imagePath) {
+      return <ImageIcon className="w-8 h-8 text-gray-400" />;
     }
 
     return (
-      <Image
-        src={imagePath}
-        alt="Selected"
-        {...commonProps}
-      />
+      <div className="relative w-full h-full">
+        <Image
+          src={getValidImagePath(imagePath) || DEFAULT_IMAGE_PLACEHOLDER}
+          alt="Preview"
+          fill
+          className="object-cover"
+          onError={() => {
+            setImageError("Failed to load image");
+            form.setValue("image_path", "", { shouldValidate: true });
+          }}
+        />
+      </div>
     );
   };
-
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="p-6 space-y-6">
-        {type === 'menu' && (
+      <form
+        onSubmit={form.handleSubmit(handleSubmit)}
+        className="p-6 space-y-6"
+      >
+        {type === "menu" && (
           <FormField
             control={form.control}
             name="image_path"
@@ -181,13 +237,7 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                 <FormLabel>Imagen</FormLabel>
                 <div className="flex gap-4 items-center">
                   <div className="relative w-20 h-20 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
-                    {field.value ? (
-                      <div className="relative w-full h-full">
-                        {renderImagePreview(field.value)}
-                      </div>
-                    ) : (
-                      <ImageIcon className="w-8 h-8 text-gray-400" />
-                    )}
+                    {renderImagePreview(field.value)}
                   </div>
                   <Button
                     type="button"
@@ -197,6 +247,9 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                     Seleccionar Imagen
                   </Button>
                 </div>
+                {imageError && (
+                  <p className="text-sm text-destructive mt-1">{imageError}</p>
+                )}
                 <FormMessage />
               </FormItem>
             )}
@@ -218,7 +271,7 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
             )}
           />
 
-          {type === 'menu' ? (
+          {type === "menu" ? (
             <FormField
               control={form.control}
               name="price"
@@ -226,12 +279,14 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                 <FormItem>
                   <FormLabel>Precio</FormLabel>
                   <FormControl>
-                    <Input 
-                      type="number" 
-                      step="0.01" 
-                      placeholder="0.00" 
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
                       {...field}
-                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                      onChange={(e) =>
+                        field.onChange(parseFloat(e.target.value) || 0)
+                      }
                     />
                   </FormControl>
                   <FormMessage />
@@ -247,12 +302,14 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                   <FormItem>
                     <FormLabel>Precio Botella</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="number" 
-                        step="0.01" 
-                        placeholder="0.00" 
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
                         {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        onChange={(e) =>
+                          field.onChange(parseFloat(e.target.value) || 0)
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -266,12 +323,14 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                   <FormItem>
                     <FormLabel>Precio Copa</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="number" 
-                        step="0.01" 
-                        placeholder="0.00" 
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
                         {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        onChange={(e) =>
+                          field.onChange(parseFloat(e.target.value) || 0)
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -299,8 +358,8 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                 </FormControl>
                 <SelectContent>
                   {categories.map((category) => (
-                    <SelectItem 
-                      key={category.id} 
+                    <SelectItem
+                      key={category.id}
                       value={category.id.toString()}
                     >
                       {category.name}
@@ -331,7 +390,7 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
           )}
         />
 
-        {type === 'menu' && (
+        {type === "menu" && (
           <FormField
             control={form.control}
             name="allergens"
@@ -371,7 +430,7 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                             onSelect={() => {
                               const values = field.value || [];
                               const newValues = values.includes(allergen.id)
-                                ? values.filter(id => id !== allergen.id)
+                                ? values.filter((id) => id !== allergen.id)
                                 : [...values, allergen.id];
                               field.onChange(newValues);
                             }}
@@ -393,20 +452,24 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                 </Popover>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {selectedAllergens.map((allergenId) => {
-                    const allergen = allergens.find(a => a.id === allergenId);
-                    return allergen && (
-                      <Badge
-                        key={allergen.id}
-                        variant="secondary"
-                        className="cursor-pointer"
-                        onClick={() => {
-                          const values = field.value || [];
-                          field.onChange(values.filter(id => id !== allergen.id));
-                        }}
-                      >
-                        {allergen.name}
-                        <X className="ml-1 h-3 w-3" />
-                      </Badge>
+                    const allergen = allergens.find((a) => a.id === allergenId);
+                    return (
+                      allergen && (
+                        <Badge
+                          key={allergen.id}
+                          variant="secondary"
+                          className="cursor-pointer"
+                          onClick={() => {
+                            const values = field.value || [];
+                            field.onChange(
+                              values.filter((id) => id !== allergen.id)
+                            );
+                          }}
+                        >
+                          {allergen.name}
+                          <X className="ml-1 h-3 w-3" />
+                        </Badge>
+                      )
                     );
                   })}
                 </div>
@@ -432,17 +495,17 @@ const MenuEditor: React.FC<MenuEditorProps> = ({
                 Guardando...
               </>
             ) : (
-              'Guardar'
+              "Guardar"
             )}
           </Button>
         </div>
       </form>
 
-      {isSelectingImage && type === 'menu' && (
-        <ImageSelector 
+      {isSelectingImage && type === "menu" && (
+        <ImageSelector
           onSelect={handleImageSelect}
           onClose={() => setIsSelectingImage(false)}
-          categoryId={form.watch('category_id').toString()}
+          categoryId={form.watch("category_id").toString()}
         />
       )}
     </Form>
