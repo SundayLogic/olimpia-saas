@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Edit2, MoreHorizontal, Trash2 } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
 
+// Rest of your code remains the same...
 interface MenuItem {
   id: string;
   name: string;
