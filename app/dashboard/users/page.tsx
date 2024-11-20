@@ -5,12 +5,11 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { InviteUserDialog } from "@/src/components/features/users"; // Updated import path
-import type { User } from "@/types"; 
+import { UsersTable, InviteUserDialog } from "@/components/features/users";
+import type { User, Role } from "@/types";
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   
   const supabase = createClientComponentClient();
@@ -20,8 +19,6 @@ export default function UsersPage() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        setIsLoading(true);
-        
         const { data, error } = await supabase
           .from('users')
           .select('*')
@@ -37,8 +34,6 @@ export default function UsersPage() {
           description: "Failed to load users",
           variant: "destructive",
         });
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -58,8 +53,8 @@ export default function UsersPage() {
 
       if (error) throw error;
 
-      setUsers(currentUsers =>
-        currentUsers.map(user =>
+      setUsers((currentUsers) =>
+        currentUsers.map((user) =>
           user.id === userId ? { ...user, active: isActive } : user
         )
       );
@@ -78,8 +73,41 @@ export default function UsersPage() {
     }
   };
 
+  // Handle user role change
+  const handleRoleChange = async (userId: string, newRole: Role) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ 
+          role: newRole,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      setUsers((currentUsers) =>
+        currentUsers.map((user) =>
+          user.id === userId ? { ...user, role: newRole } : user
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: "User role updated successfully.",
+      });
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update user role",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Handle user invitation
-  const handleInviteUser = async (email: string, role: string) => {
+  const handleInviteUser = async (email: string, role: Role) => {
     try {
       // Check if user already exists
       const { data: existingUser, error: checkError } = await supabase
@@ -152,14 +180,12 @@ export default function UsersPage() {
       </div>
 
       <div className="space-y-4">
-        {/* User List Component */}
-        <UserList
+        <UsersTable
           users={users}
-          isLoading={isLoading}
           onStatusChange={handleUserStatusChange}
+          onRoleChange={handleRoleChange}
         />
 
-        {/* Invite User Dialog */}
         <InviteUserDialog
           open={isInviteDialogOpen}
           onOpenChange={setIsInviteDialogOpen}

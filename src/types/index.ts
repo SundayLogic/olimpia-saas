@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 // Supabase Database Types
 export type Database = {
   public: {
@@ -123,25 +125,43 @@ export type Database = {
 };
 
 // Component Props Types
-export interface CommonProps {
+export type CommonProps = {
   className?: string;
-  children?: React.ReactNode;
-}
+  children?: ReactNode;
+};
+
+// User Types
+export type User = {
+  id: string;
+  email: string;
+  name: string;
+  role: 'admin' | 'user';
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserFormData = {
+  email: string;
+  name: string;
+  role: 'admin' | 'user';
+  active: boolean;
+};
 
 // Auth Types
-export interface AuthUser {
+export type AuthUser = {
   id: string;
   email: string;
   role: 'admin' | 'user';
-}
+};
 
-export interface Session {
+export type Session = {
   user: AuthUser;
   accessToken: string;
-}
+};
 
 // Menu Types
-export interface MenuItem {
+export type MenuItem = {
   id: string;
   name: string;
   description: string;
@@ -154,15 +174,15 @@ export interface MenuItem {
   created_at: string;
   updated_at: string;
   category?: Category;
-}
+};
 
-export interface Category {
+export type Category = {
   id: number;
   name: string;
   description: string | null;
-}
+};
 
-export interface DailyMenu {
+export type DailyMenu = {
   id: number;
   date: string;
   price: number;
@@ -170,10 +190,10 @@ export interface DailyMenu {
   items: MenuItem[];
   created_at: string;
   updated_at: string;
-}
+};
 
 // Form Types
-export interface MenuItemFormData {
+export type MenuItemFormData = {
   name: string;
   description: string;
   price: number;
@@ -182,23 +202,16 @@ export interface MenuItemFormData {
   image_path?: string | null;
   allergens?: string[];
   active?: boolean;
-}
-
-export interface UserFormData {
-  email: string;
-  name: string;
-  role: 'admin' | 'user';
-  active: boolean;
-}
+};
 
 // API Response Types
-export interface ApiSuccessResponse<T> {
+export type ApiSuccessResponse<T> = {
   data: T;
   error: null;
   status: 200 | 201 | 204;
-}
+};
 
-export interface ApiErrorResponse {
+export type ApiErrorResponse = {
   data: null;
   error: {
     message: string;
@@ -206,66 +219,66 @@ export interface ApiErrorResponse {
     details?: unknown;
   };
   status: 400 | 401 | 403 | 404 | 500;
-}
+};
 
 export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
 // Paginated Response Types
-export interface PaginatedData<T> {
+export type PaginatedData<T> = {
   items: T[];
   total: number;
   page: number;
   pageSize: number;
   totalPages: number;
   hasMore: boolean;
-}
+};
 
-export interface PaginatedResponse<T> extends ApiSuccessResponse<PaginatedData<T>> {
+export type PaginatedResponse<T> = ApiSuccessResponse<PaginatedData<T>> & {
   meta: {
     page: number;
     pageSize: number;
     total: number;
     totalPages: number;
   };
-}
+};
 
 // Error Types
-export interface ErrorResponse {
+export type ErrorResponse = {
   message: string;
   code?: string;
   status: number;
   details?: Record<string, unknown>;
-}
+};
 
 // Image Types
-export interface ImageUpload {
+export type ImageUpload = {
   file: File;
   path: string;
   category: string;
-}
+};
 
-export interface ImageMetadata {
+export type ImageMetadata = {
   width: number;
   height: number;
   format: string;
   size: number;
-}
+};
 
 // Request Types
-export interface PaginationParams {
+export type PaginationParams = {
   page?: number;
   pageSize?: number;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
-}
+};
 
-export interface FilterParams {
+export type FilterParams = {
   search?: string;
   category?: string;
   status?: 'active' | 'inactive';
   startDate?: string;
   endDate?: string;
-}
+};
 
 export type RequestParams = PaginationParams & FilterParams;
 
@@ -301,32 +314,30 @@ export type HttpMethod = typeof HTTP_METHODS[number];
 export const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
 
 // Validation Types
-export interface ValidationError {
+export type ValidationError = {
   path: string[];
   message: string;
-}
+};
 
-export interface ValidationResult {
+export type ValidationResult = {
   valid: boolean;
   errors: ValidationError[];
-}
+};
 
 // Event Types
-export interface EventHandler<T = void> {
-  (event: Event): T;
-}
+export type EventHandler<T = void> = (event: Event) => T;
 
 // Realtime Types
-export interface RealtimeSubscription {
+export type RealtimeSubscription = {
   unsubscribe: () => void;
-}
+};
 
-export interface RealtimeMessage<T> {
+export type RealtimeMessage<T> = {
   event: string;
   payload: T;
-}
+};
 
-// Export type guards
+// Type Guards
 export function isApiSuccessResponse<T>(
   response: ApiResponse<T>
 ): response is ApiSuccessResponse<T> {
@@ -337,4 +348,14 @@ export function isApiErrorResponse(
   response: ApiResponse<unknown>
 ): response is ApiErrorResponse {
   return response.error !== null;
+}
+
+export function isUser(value: unknown): value is User {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    'email' in value &&
+    'role' in value
+  );
 }

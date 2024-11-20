@@ -1,7 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { formatDistanceToNow } from "date-fns";
+import { Loader2, UserPlus, UserX, UserCheck, Mail, MoreHorizontal } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -16,68 +35,31 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { 
-  MoreHorizontal, 
-  UserPlus, 
-  Loader2,
-  UserX,
-  UserCheck,
-  Mail 
-} from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import type { User, Role } from "@/types";
 
-interface User {
-  id: string;
-  email: string;
-  role: string;
-  active: boolean;
-  created_at: string;
-}
-
+// Types
 interface UsersTableProps {
   users: User[];
-  onStatusChange: (userId: string, active: boolean) => Promise<void>;
-  onRoleChange: (userId: string, role: string) => Promise<void>;
+  onStatusChange: (userId: string, isActive: boolean) => Promise<void>;
+  onRoleChange: (userId: string, role: Role) => Promise<void>;
 }
 
+interface InviteUserDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onInvite: (email: string, role: Role) => Promise<void>;
+}
+
+// Components
 export function UsersTable({ users, onStatusChange, onRoleChange }: UsersTableProps) {
-  const [isLoading, setIsLoading] = useState<string | null>(null);
-  const { toast } = useToast();
+  const [loadingId, setLoadingId] = useState<string | null>(null);
 
   const handleStatusToggle = async (user: User) => {
     try {
-      setIsLoading(user.id);
+      setLoadingId(user.id);
       await onStatusChange(user.id, !user.active);
-      toast({
-        title: "Success",
-        description: `User ${user.active ? 'deactivated' : 'activated'} successfully`,
-      });
-    } catch {
-      toast({
-        title: "Error",
-        description: "Failed to update user status",
-        variant: "destructive",
-      });
     } finally {
-      setIsLoading(null);
+      setLoadingId(null);
     }
   };
 
@@ -104,7 +86,7 @@ export function UsersTable({ users, onStatusChange, onRoleChange }: UsersTablePr
             <TableCell>
               <Select
                 defaultValue={user.role}
-                onValueChange={(value) => onRoleChange(user.id, value)}
+                onValueChange={(value) => onRoleChange(user.id, value as Role)}
               >
                 <SelectTrigger className="w-[100px]">
                   <SelectValue />
@@ -136,7 +118,7 @@ export function UsersTable({ users, onStatusChange, onRoleChange }: UsersTablePr
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                    {isLoading === user.id ? (
+                    {loadingId === user.id ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <MoreHorizontal className="h-4 w-4" />
@@ -147,7 +129,7 @@ export function UsersTable({ users, onStatusChange, onRoleChange }: UsersTablePr
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
                     onClick={() => handleStatusToggle(user)}
-                    disabled={isLoading === user.id}
+                    disabled={loadingId === user.id}
                   >
                     {user.active ? (
                       <>
@@ -171,17 +153,10 @@ export function UsersTable({ users, onStatusChange, onRoleChange }: UsersTablePr
   );
 }
 
-interface InviteUserDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onInvite: (email: string, role: string) => Promise<void>;
-}
-
 export function InviteUserDialog({ open, onOpenChange, onInvite }: InviteUserDialogProps) {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("user");
+  const [role, setRole] = useState<Role>("user");
   const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,11 +167,7 @@ export function InviteUserDialog({ open, onOpenChange, onInvite }: InviteUserDia
       setRole("user");
       onOpenChange(false);
     } catch {
-      toast({
-        title: "Error",
-        description: "Failed to send invitation",
-        variant: "destructive",
-      });
+      // Error handling is done in the parent component
     } finally {
       setIsLoading(false);
     }
@@ -227,7 +198,7 @@ export function InviteUserDialog({ open, onOpenChange, onInvite }: InviteUserDia
             <label className="text-sm font-medium">Role</label>
             <Select
               value={role}
-              onValueChange={setRole}
+              onValueChange={(value) => setRole(value as Role)}
               disabled={isLoading}
             >
               <SelectTrigger>
