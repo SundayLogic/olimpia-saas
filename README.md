@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-11-21 18:07:15
+Generated on: 2024-11-21 22:47:09
 
 ## Documented Directories:
 - app/
@@ -63,6 +63,7 @@ src/
             │   ├── users.tsx
             ├── ui/
             │   ├── alert-dialog.tsx
+            │   ├── alert.tsx
             │   ├── badge.tsx
             │   ├── button.tsx
             │   ├── dialog.tsx
@@ -77,7 +78,6 @@ src/
         ├── hooks/
         │   ├── use-toast.ts
         ├── lib/
-        │   ├── auth.ts
         │   ├── supabase.ts
         │   ├── utils.ts
         ├── types/
@@ -93,8 +93,8 @@ src/
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -112,8 +112,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-// Form schema with validation
 const loginSchema = z.object({
   email: z
     .string()
@@ -128,11 +128,31 @@ type LoginValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const supabase = createClientComponentClient();
 
-  // Initialize form with validation schema
+  // Check existing session
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.replace('/dashboard');
+      }
+    };
+    checkSession();
+  }, [router, supabase.auth]);
+
+  // Check for error parameter in URL
+  useEffect(() => {
+    const errorMsg = searchParams.get('error');
+    if (errorMsg) {
+      setError(decodeURIComponent(errorMsg));
+    }
+  }, [searchParams]);
+
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -141,31 +161,41 @@ export default function LoginPage() {
     },
   });
 
-  // Handle form submission
-  const onSubmit = async (values: LoginValues) => {
+  const onSubmit = async (formData: LoginValues) => {
     try {
       setIsLoading(true);
+      setError(null);
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email: values.email,
-        password: values.password,
+      // Attempt login
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
       });
 
-      if (error) {
-        throw error;
+      if (signInError) throw signInError;
+
+      if (!data?.session) {
+        throw new Error('No session created');
       }
 
-      // Show success message
+      // Ensure session is set
+      await supabase.auth.getSession();
+
       toast({
         title: "Success",
         description: "You have successfully logged in.",
       });
 
-      // Refresh and redirect
+      // Get redirectTo from URL or default to dashboard
+      const redirectTo = searchParams.get('redirectTo') || '/dashboard';
+
+      // Force a router refresh and redirect
       router.refresh();
-      router.push("/dashboard");
+      router.replace(redirectTo);
+      
     } catch (error) {
-      // Show error message
+      console.error('Login error:', error);
+      setError(error instanceof Error ? error.message : "Failed to login");
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to login",
@@ -208,6 +238,12 @@ export default function LoginPage() {
       {/* Right side - Login form */}
       <div className="lg:p-8">
         <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex flex-col space-y-2 text-center">
             <h1 className="text-2xl font-semibold tracking-tight">
               Welcome back
@@ -219,7 +255,7 @@ export default function LoginPage() {
 
           <Form {...form}>
             <form 
-              onSubmit={form.handleSubmit(onSubmit)} 
+              onSubmit={form.handleSubmit(onSubmit)}
               className="space-y-6"
             >
               <FormField
@@ -267,10 +303,14 @@ export default function LoginPage() {
                 className="w-full"
                 disabled={isLoading}
               >
-                {isLoading && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign In"
                 )}
-                Sign In
               </Button>
             </form>
           </Form>
@@ -544,37 +584,19 @@ export default function SignUpPage() {
 ### app/(auth)/layout.tsx
 
 ```typescript
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import type { Database } from "@/types";
+// app/(auth)/layout.tsx
+import type { Metadata } from "next";
 
-interface AuthLayoutProps {
+export const metadata: Metadata = {
+  title: "Authentication",
+  description: "Authentication forms built using the components.",
+};
+
+export default function AuthLayout({
+  children,
+}: {
   children: React.ReactNode;
-}
-
-async function getSession() {
-  const cookieStore = cookies();
-  const supabase = createServerComponentClient<Database>({ 
-    cookies: () => cookieStore 
-  });
-
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session;
-  } catch (error) {
-    console.error('Auth error:', error);
-    return null;
-  }
-}
-
-export default async function AuthLayout({ children }: AuthLayoutProps) {
-  const session = await getSession();
-
-  if (session) {
-    redirect("/dashboard");
-  }
-
+}) {
   return (
     <div className="min-h-screen grid grid-cols-1 overflow-hidden antialiased">
       {/* Gradient background */}
@@ -588,7 +610,7 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
 
       {/* Background pattern */}
       <div 
-        className="fixed inset-0 -z-10 h-full w-full bg-white" 
+        className="fixed inset-0 -z-10 h-full w-full bg-white dark:bg-gray-950" 
         style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='30' height='30' viewBox='0 0 30 30' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1.22676 0C1.91374 0 2.45351 0.539773 2.45351 1.22676C2.45351 1.91374 1.91374 2.45351 1.22676 2.45351C0.539773 2.45351 0 1.91374 0 1.22676C0 0.539773 0.539773 0 1.22676 0Z' fill='rgba(0,0,0,0.07)'/%3E%3C/svg%3E")`,
           backgroundSize: "60px 60px",
@@ -597,27 +619,6 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
 
       {/* Content */}
       <div className="relative flex flex-col">
-        {/* Header with Branding - Only shown on mobile */}
-        <div className="border-b lg:hidden">
-          <div className="flex h-14 items-center px-4">
-            <div className="flex items-center space-x-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-6 w-6"
-              >
-                <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />
-              </svg>
-              <span className="font-bold">Restaurant Manager</span>
-            </div>
-          </div>
-        </div>
-
         {/* Main Content */}
         <main className="flex-1">
           {children}
@@ -1491,6 +1492,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 ### app/layout.tsx
 
 ```typescript
+// app/layout.tsx
 import type { Metadata, Viewport } from "next";
 import { Lato, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
@@ -3088,6 +3090,71 @@ export {
 };
 ```
 
+### src/components/ui/alert.tsx
+
+```typescript
+import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const alertVariants = cva(
+  "relative w-full rounded-lg border px-4 py-3 text-sm [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground [&>svg~*]:pl-7",
+  {
+    variants: {
+      variant: {
+        default: "bg-background text-foreground",
+        destructive:
+          "border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+const Alert = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants>
+>(({ className, variant, ...props }, ref) => (
+  <div
+    ref={ref}
+    role="alert"
+    className={cn(alertVariants({ variant }), className)}
+    {...props}
+  />
+))
+Alert.displayName = "Alert"
+
+const AlertTitle = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h5
+    ref={ref}
+    className={cn("mb-1 font-medium leading-none tracking-tight", className)}
+    {...props}
+  />
+))
+AlertTitle.displayName = "AlertTitle"
+
+const AlertDescription = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("text-sm [&_p]:leading-relaxed", className)}
+    {...props}
+  />
+))
+AlertDescription.displayName = "AlertDescription"
+
+export { Alert, AlertTitle, AlertDescription }
+
+```
+
 ### src/components/ui/badge.tsx
 
 ```typescript
@@ -4412,168 +4479,10 @@ function useToast() {
 export { useToast, toast }
 ```
 
-### src/lib/auth.ts
-
-```typescript
-import { createMiddlewareClient, createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import type { Database } from "@/types";
-
-// Middleware handler
-export async function handleMiddleware(request: NextRequest) {
-  const response = NextResponse.next();
-  const supabase = createMiddlewareClient<Database>({ req: request, res: response });
-  const path = request.nextUrl.pathname;
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  // Auth routes handling
-  if (path.startsWith('/auth') || path === '/login' || path === '/signup') {
-    if (session) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-    return response;
-  }
-
-  // Protected routes handling
-  if (path.startsWith('/dashboard') || path.startsWith('/api') || path === '/') {
-    if (!session) {
-      return NextResponse.redirect(new URL('/login', request.url));
-    }
-
-    // Check for admin-only routes
-    if (path.startsWith('/dashboard/users') || path.startsWith('/dashboard/settings')) {
-      const { data: user } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
-
-      if (user?.role !== 'admin') {
-        return NextResponse.redirect(new URL('/dashboard', request.url));
-      }
-    }
-
-    // Check user status
-    const { data: userStatus } = await supabase
-      .from('users')
-      .select('active')
-      .eq('id', session.user.id)
-      .single();
-
-    if (!userStatus?.active) {
-      await supabase.auth.signOut();
-      return NextResponse.redirect(
-        new URL('/login?error=Account%20is%20inactive', request.url)
-      );
-    }
-  }
-
-  // Handle session expiry
-  const hasExpired = session?.expires_at ? session.expires_at * 1000 < Date.now() : false;
-  if (session && hasExpired) {
-    const { data: { session: newSession } } = await supabase.auth.refreshSession();
-    if (!newSession) {
-      await supabase.auth.signOut();
-      return NextResponse.redirect(new URL('/login', request.url));
-    }
-  }
-
-  return response;
-}
-
-// Auth callback handler
-export async function handleAuthCallback(request: NextRequest) {
-  try {
-    const requestUrl = new URL(request.url);
-    const code = requestUrl.searchParams.get('code');
-    const next = requestUrl.searchParams.get('next') || '/dashboard';
-
-    if (!code) {
-      throw new Error('No code provided');
-    }
-
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient<Database>({ cookies: () => cookieStore });
-
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) throw error;
-
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      throw userError || new Error('User not found');
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    if (!profile && !profileError && user.email) {
-      await supabase
-        .from('users')
-        .insert({
-          email: user.email,
-          name: user.email.split('@')[0] || 'New User',
-          role: 'user' as const,
-          active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-    }
-
-    return NextResponse.redirect(new URL(next, request.url));
-  } catch (error) {
-    console.error('Auth error:', error);
-    return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent('Authentication failed')}`, request.url)
-    );
-  }
-}
-
-// Auth actions handler
-export async function handleAuthAction(request: NextRequest) {
-  try {
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient<Database>({ cookies: () => cookieStore });
-    const { action } = await request.json();
-
-    if (action === 'signout') {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      return NextResponse.json({ success: true }, { status: 200 });
-    }
-
-    return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
-  } catch (error) {
-    console.error('Auth action error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
-// Middleware config
-export const middlewareConfig = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
-    '/',
-    '/dashboard/:path*',
-    '/auth/:path*',
-    '/api/:path*',
-  ],
-};
-```
-
 ### src/lib/supabase.ts
 
 ```typescript
+// src/lib/supabase.ts
 import { createClientComponentClient, createServerComponentClient, createServerActionClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import { cache } from "react";
@@ -4987,6 +4896,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          id?: string; // Made optional for Supabase to auto-generate
           email: string;
           name?: string;
           role?: 'admin' | 'user';
@@ -4995,6 +4905,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          id?: string;
           email?: string;
           name?: string;
           role?: 'admin' | 'user';
@@ -5088,7 +4999,17 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      match_user: {
+        Args: {
+          email: string;
+        };
+        Returns: {
+          id: string;
+          email: string;
+          role: 'admin' | 'user';
+          active: boolean;
+        }[];
+      };
     };
     Enums: {
       [_ in never]: never;
@@ -5103,15 +5024,9 @@ export type CommonProps = {
 };
 
 // User Types
-export type User = {
-  id: string;
-  email: string;
-  name: string;
-  role: 'admin' | 'user';
-  active: boolean;
-  created_at: string;
-  updated_at: string;
-};
+export type User = Database['public']['Tables']['users']['Row'];
+export type UserInsert = Database['public']['Tables']['users']['Insert'];
+export type UserUpdate = Database['public']['Tables']['users']['Update'];
 
 export type UserFormData = {
   email: string;
