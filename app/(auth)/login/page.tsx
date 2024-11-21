@@ -1,9 +1,8 @@
-// app/(auth)/login/page.tsx
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -21,8 +20,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-// Form schema with validation
 const loginSchema = z.object({
   email: z
     .string()
@@ -37,11 +36,31 @@ type LoginValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const supabase = createClientComponentClient();
 
-  // Initialize form with validation schema
+  // Check existing session
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.replace('/dashboard');
+      }
+    };
+    checkSession();
+  }, [router, supabase.auth]);
+
+  // Check for error parameter in URL
+  useEffect(() => {
+    const errorMsg = searchParams.get('error');
+    if (errorMsg) {
+      setError(decodeURIComponent(errorMsg));
+    }
+  }, [searchParams]);
+
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -50,31 +69,41 @@ export default function LoginPage() {
     },
   });
 
-  // Handle form submission
-  const onSubmit = async (values: LoginValues) => {
+  const onSubmit = async (formData: LoginValues) => {
     try {
       setIsLoading(true);
+      setError(null);
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email: values.email,
-        password: values.password,
+      // Attempt login
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
       });
 
-      if (error) {
-        throw error;
+      if (signInError) throw signInError;
+
+      if (!data?.session) {
+        throw new Error('No session created');
       }
 
-      // Show success message
+      // Ensure session is set
+      await supabase.auth.getSession();
+
       toast({
         title: "Success",
         description: "You have successfully logged in.",
       });
 
-      // Refresh and redirect
+      // Get redirectTo from URL or default to dashboard
+      const redirectTo = searchParams.get('redirectTo') || '/dashboard';
+
+      // Force a router refresh and redirect
       router.refresh();
-      router.push("/dashboard");
+      router.replace(redirectTo);
+      
     } catch (error) {
-      // Show error message
+      console.error('Login error:', error);
+      setError(error instanceof Error ? error.message : "Failed to login");
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to login",
@@ -117,6 +146,12 @@ export default function LoginPage() {
       {/* Right side - Login form */}
       <div className="lg:p-8">
         <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex flex-col space-y-2 text-center">
             <h1 className="text-2xl font-semibold tracking-tight">
               Welcome back
@@ -128,7 +163,7 @@ export default function LoginPage() {
 
           <Form {...form}>
             <form 
-              onSubmit={form.handleSubmit(onSubmit)} 
+              onSubmit={form.handleSubmit(onSubmit)}
               className="space-y-6"
             >
               <FormField
@@ -176,10 +211,14 @@ export default function LoginPage() {
                 className="w-full"
                 disabled={isLoading}
               >
-                {isLoading && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign In"
                 )}
-                Sign In
               </Button>
             </form>
           </Form>

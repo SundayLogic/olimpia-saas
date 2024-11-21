@@ -15,6 +15,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          id?: string; // Made optional for Supabase to auto-generate
           email: string;
           name?: string;
           role?: 'admin' | 'user';
@@ -23,6 +24,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          id?: string;
           email?: string;
           name?: string;
           role?: 'admin' | 'user';
@@ -116,7 +118,17 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      match_user: {
+        Args: {
+          email: string;
+        };
+        Returns: {
+          id: string;
+          email: string;
+          role: 'admin' | 'user';
+          active: boolean;
+        }[];
+      };
     };
     Enums: {
       [_ in never]: never;
@@ -131,15 +143,9 @@ export type CommonProps = {
 };
 
 // User Types
-export type User = {
-  id: string;
-  email: string;
-  name: string;
-  role: 'admin' | 'user';
-  active: boolean;
-  created_at: string;
-  updated_at: string;
-};
+export type User = Database['public']['Tables']['users']['Row'];
+export type UserInsert = Database['public']['Tables']['users']['Insert'];
+export type UserUpdate = Database['public']['Tables']['users']['Update'];
 
 export type UserFormData = {
   email: string;
