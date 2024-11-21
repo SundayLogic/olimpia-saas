@@ -1,9 +1,22 @@
 import type { Metadata } from "next";
-import { GeistSans } from "geist/font/sans";
-import { GeistMono } from "geist/font/mono";
+import { Lato, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
-
 import "./globals.css";
+
+// Configure Lato
+const lato = Lato({
+  subsets: ['latin'],
+  weight: ['100', '300', '400', '700', '900'],
+  variable: '--font-lato',
+  display: 'swap',
+});
+
+// Configure JetBrains Mono
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+  display: 'swap',
+});
 
 const APP_NAME = "Restaurant Manager";
 const APP_DESCRIPTION = "A modern restaurant management platform";
@@ -33,7 +46,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html 
       lang="en" 
-      className={`${GeistSans.variable} ${GeistMono.variable}`}
+      className={`${lato.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
       <body className="min-h-screen bg-background font-sans antialiased">
