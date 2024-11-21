@@ -1,3 +1,4 @@
+// src/lib/supabase.ts
 import { createClientComponentClient, createServerComponentClient, createServerActionClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import { cache } from "react";

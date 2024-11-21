@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+// app/layout.tsx
+import type { Metadata, Viewport } from "next";
 import { Lato, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
-import "./globals.css";
+import "./global.css";
 
-// Configure Lato
 const lato = Lato({
   subsets: ['latin'],
   weight: ['100', '300', '400', '700', '900'],
@@ -11,7 +11,6 @@ const lato = Lato({
   display: 'swap',
 });
 
-// Configure JetBrains Mono
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
   variable: '--font-mono',
@@ -30,12 +29,13 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.ico",
   },
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 interface RootLayoutProps {

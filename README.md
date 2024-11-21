@@ -1,16 +1,14 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-11-20 11:03:30
+Generated on: 2024-11-21 18:07:15
 
 ## Documented Directories:
 - app/
-- src/
 - middleware.ts
+- tailwind.config.ts
 - next.config.ts
 - package.json
-- tailwind.config.ts
-- lib/
-- hooks/
+- src/
 
 ## Directory Structure
 
@@ -18,8 +16,6 @@ Generated on: 2024-11-20 11:03:30
 app/
     ├── app/
         ├── (auth)/
-            ├── invite/
-            │   ├── page.tsx
             ├── login/
             │   ├── page.tsx
             ├── signup/
@@ -28,100 +24,25 @@ app/
         │   ├── layout.tsx
         ├── api/
             ├── auth/
-                ├── callback/
-                │   ├── route.ts
-                ├── signout/
+                ├── [...supabase]/
                 │   ├── route.ts
         ├── dashboard/
-            ├── daily-menu/
-            │   ├── page.tsx
-            ├── images/
-            │   ├── page.tsx
             ├── menu/
             │   ├── page.tsx
             ├── users/
             │   ├── page.tsx
         │   
         │   ├── layout.tsx
-        │   ├── page.tsx
-        ├── fonts/
-        │   ├── GeistMonoVF.woff
-        │   ├── GeistVF.woff
     │   
-    │   ├── favicon.ico
-    │   ├── globals.css
+    │   ├── global.css
     │   ├── layout.tsx
     │   ├── page.tsx
 
-src/
-    ├── src/
-        ├── components/
-            ├── auth/
-            │   ├── invite-form.tsx
-            │   ├── login-form.tsx
-            │   ├── signup-form.tsx
-            ├── daily-menu/
-            │   ├── CurrentMenuList.tsx
-            │   ├── DailyMenuEditor.tsx
-            │   ├── MenuDateSelection.tsx
-            │   ├── MenuHeader.tsx
-            │   ├── MenuList.tsx
-            │   ├── MenuTemplateSelection.tsx
-            ├── data/
-            │   ├── data-entry.tsx
-            │   ├── data-management.tsx
-            │   ├── data-table.tsx
-            │   ├── edit-form.tsx
-            │   ├── table-actions.tsx
-            ├── image/
-            │   ├── ImageGallery.tsx
-            │   ├── ImageUpload.tsx
-            │   ├── types.ts
-            │   ├── utils.ts
-            ├── menu/
-            │   ├── ImageSelector.tsx
-            │   ├── MenuCard.tsx
-            │   ├── MenuEditor.tsx
-            │   ├── MenuNav.tsx
-            │   ├── MenuSearch.tsx
-            ├── ui/
-            │   ├── alert-dialog.tsx
-            │   ├── badge.tsx
-            │   ├── button.tsx
-            │   ├── calendar.tsx
-            │   ├── card.tsx
-            │   ├── command.tsx
-            │   ├── dialog.tsx
-            │   ├── dropdown-menu.tsx
-            │   ├── form.tsx
-            │   ├── input.tsx
-            │   ├── label.tsx
-            │   ├── popover.tsx
-            │   ├── select.tsx
-            │   ├── switch.tsx
-            │   ├── table.tsx
-            │   ├── tabs.tsx
-            │   ├── textarea.tsx
-            │   ├── toast.tsx
-            │   ├── toaster.tsx
-            │   ├── tooltip.tsx
-            │   ├── use-toast.tsx
-            ├── users/
-            │   ├── invite-user.tsx
-            │   ├── users-table.tsx
-        ├── lib/
-            ├── supabase/
-            │   ├── client.ts
-            │   ├── menu.ts
-            │   ├── server.ts
-            │   ├── types.ts
-        │   
-        │   ├── utils.ts
-        ├── types/
-        │   ├── menu.ts
-
 middleware.ts/
     ├── middleware.ts/
+
+tailwind.config.ts/
+    ├── tailwind.config.ts/
 
 next.config.ts/
     ├── next.config.ts/
@@ -129,100 +50,135 @@ next.config.ts/
 package.json/
     ├── package.json/
 
-tailwind.config.ts/
-    ├── tailwind.config.ts/
-
-lib/
-    ├── lib/
-    │   ├── utils.ts
-
-hooks/
-    ├── hooks/
-    │   ├── use-toast.ts
+src/
+    ├── src/
+        ├── components/
+            ├── core/
+            │   ├── forms.tsx
+            │   ├── layout.tsx
+            │   ├── ui.tsx
+            ├── features/
+            │   ├── images.tsx
+            │   ├── menu.tsx
+            │   ├── users.tsx
+            ├── ui/
+            │   ├── alert-dialog.tsx
+            │   ├── badge.tsx
+            │   ├── button.tsx
+            │   ├── dialog.tsx
+            │   ├── dropdown-menu.tsx
+            │   ├── form.tsx
+            │   ├── input.tsx
+            │   ├── label.tsx
+            │   ├── select.tsx
+            │   ├── table.tsx
+            │   ├── toast.tsx
+            │   ├── toaster.tsx
+        ├── hooks/
+        │   ├── use-toast.ts
+        ├── lib/
+        │   ├── auth.ts
+        │   ├── supabase.ts
+        │   ├── utils.ts
+        ├── types/
+        │   ├── index.ts
 
 ```
 
 ## File Contents
 
-### app/(auth)/invite/page.tsx
-
-```typescript
-import { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import { InviteForm } from "@/components/auth/invite-form";
-
-export const metadata: Metadata = {
-  title: "Accept Invitation | Data Management App",
-  description: "Accept your invitation and create an account",
-};
-
-export default async function InvitePage({
-  searchParams,
-}: {
-  searchParams: { token?: string };
-}) {
-  const supabase = createServerComponentClient({ cookies });
-  
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (session) {
-    redirect("/dashboard");
-  }
-
-  if (!searchParams.token) {
-    redirect("/login");
-  }
-
-  return (
-    <div className="container flex h-screen w-screen flex-col items-center justify-center">
-      <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
-        <div className="flex flex-col space-y-2 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Welcome to the team
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Complete your account setup to get started
-          </p>
-        </div>
-        <InviteForm token={searchParams.token} />
-      </div>
-    </div>
-  );
-}
-```
-
 ### app/(auth)/login/page.tsx
 
 ```typescript
-import { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import { LoginForm } from "@/components/auth/login-form";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import * as z from "zod";
+import { Loader2 } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "Login | Data Management App",
-  description: "Login to your account",
-};
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 
-export default async function LoginPage() {
-  const supabase = createServerComponentClient({ cookies });
-  
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+// Form schema with validation
+const loginSchema = z.object({
+  email: z
+    .string()
+    .min(1, { message: "Email is required" })
+    .email({ message: "Must be a valid email" }),
+  password: z
+    .string()
+    .min(6, { message: "Password must be at least 6 characters" }),
+});
 
-  if (session) {
-    redirect("/dashboard");
-  }
+type LoginValues = z.infer<typeof loginSchema>;
+
+export default function LoginPage() {
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
+  const { toast } = useToast();
+  const supabase = createClientComponentClient();
+
+  // Initialize form with validation schema
+  const form = useForm<LoginValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
+
+  // Handle form submission
+  const onSubmit = async (values: LoginValues) => {
+    try {
+      setIsLoading(true);
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: values.email,
+        password: values.password,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // Show success message
+      toast({
+        title: "Success",
+        description: "You have successfully logged in.",
+      });
+
+      // Refresh and redirect
+      router.refresh();
+      router.push("/dashboard");
+    } catch (error) {
+      // Show error message
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to login",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="container relative h-screen flex-col items-center justify-center grid lg:max-w-none lg:grid-cols-2 lg:px-0">
+      {/* Left side - Brand section */}
       <div className="relative hidden h-full flex-col bg-muted p-10 text-white lg:flex dark:border-r">
         <div className="relative z-20 flex items-center text-lg font-medium">
           <svg
@@ -237,17 +193,19 @@ export default async function LoginPage() {
           >
             <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />
           </svg>
-          Data Management App
+          Restaurant Manager
         </div>
         <div className="relative z-20 mt-auto">
           <blockquote className="space-y-2">
             <p className="text-lg">
-              &ldquo;This platform has transformed how we handle our data operations, making it both efficient and secure.&rdquo;
+              &ldquo;This platform has transformed how we handle our restaurant operations, making it both efficient and enjoyable.&rdquo;
             </p>
             <footer className="text-sm">Sofia Davis</footer>
           </blockquote>
         </div>
       </div>
+
+      {/* Right side - Login form */}
       <div className="lg:p-8">
         <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
           <div className="flex flex-col space-y-2 text-center">
@@ -255,18 +213,89 @@ export default async function LoginPage() {
               Welcome back
             </h1>
             <p className="text-sm text-muted-foreground">
-              Enter your email to sign in to your account
+              Enter your credentials to sign in to your account
             </p>
           </div>
-          <LoginForm />
-          <p className="px-8 text-center text-sm text-muted-foreground">
-            <Link
-              href="/signup"
-              className="hover:text-brand underline underline-offset-4"
+
+          <Form {...form}>
+            <form 
+              onSubmit={form.handleSubmit(onSubmit)} 
+              className="space-y-6"
             >
-              Don&apos;t have an account? Sign Up
-            </Link>
-          </p>
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="name@example.com"
+                        type="email"
+                        autoCapitalize="none"
+                        autoComplete="email"
+                        autoCorrect="off"
+                        disabled={isLoading}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter your password"
+                        type="password"
+                        autoComplete="current-password"
+                        disabled={isLoading}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isLoading}
+              >
+                {isLoading && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Sign In
+              </Button>
+            </form>
+          </Form>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Or continue with
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col space-y-4">
+            <p className="px-8 text-center text-sm text-muted-foreground">
+              <Link
+                href="/signup"
+                className="underline underline-offset-4 hover:text-primary"
+              >
+                Don&apos;t have an account? Sign Up
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -277,28 +306,96 @@ export default async function LoginPage() {
 ### app/(auth)/signup/page.tsx
 
 ```typescript
-import { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import { SignUpForm } from "@/components/auth/signup-form";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import * as z from "zod";
+import { Loader2 } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "Sign Up | Data Management App",
-  description: "Create a new account",
-};
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 
-export default async function SignUpPage() {
-  const supabase = createServerComponentClient({ cookies });
-  
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+// Form schema with validation
+const signUpSchema = z.object({
+  email: z
+    .string()
+    .min(1, { message: "Email is required" })
+    .email({ message: "Must be a valid email" }),
+  password: z
+    .string()
+    .min(6, { message: "Password must be at least 6 characters" }),
+  confirmPassword: z
+    .string()
+    .min(1, { message: "Confirm Password is required" }),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
 
-  if (session) {
-    redirect("/dashboard");
-  }
+type SignUpValues = z.infer<typeof signUpSchema>;
+
+export default function SignUpPage() {
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
+  const { toast } = useToast();
+  const supabase = createClientComponentClient();
+
+  const form = useForm<SignUpValues>({
+    resolver: zodResolver(signUpSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+      confirmPassword: "",
+    },
+  });
+
+  const onSubmit = async (values: SignUpValues) => {
+    try {
+      setIsLoading(true);
+
+      // Sign up with Supabase
+      const { error } = await supabase.auth.signUp({
+        email: values.email,
+        password: values.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Success",
+        description: "Please check your email to confirm your account.",
+      });
+
+      router.push("/login");
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to sign up",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="container relative h-screen flex-col items-center justify-center grid lg:max-w-none lg:grid-cols-2 lg:px-0">
@@ -316,17 +413,18 @@ export default async function SignUpPage() {
           >
             <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />
           </svg>
-          Data Management App
+          Restaurant Manager
         </div>
         <div className="relative z-20 mt-auto">
           <blockquote className="space-y-2">
             <p className="text-lg">
-              &ldquo;Join our platform to streamline your data management process with powerful tools and intuitive interfaces.&rdquo;
+              &ldquo;Join our platform to streamline your restaurant management process with powerful tools and intuitive interfaces.&rdquo;
             </p>
             <footer className="text-sm">Alex Thompson</footer>
           </blockquote>
         </div>
       </div>
+
       <div className="lg:p-8">
         <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
           <div className="flex flex-col space-y-2 text-center">
@@ -334,18 +432,108 @@ export default async function SignUpPage() {
               Create an account
             </h1>
             <p className="text-sm text-muted-foreground">
-              Enter your email below to create your account
+              Enter your details to create your account
             </p>
           </div>
-          <SignUpForm />
-          <p className="px-8 text-center text-sm text-muted-foreground">
-            <Link
-              href="/login"
-              className="hover:text-brand underline underline-offset-4"
+
+          <Form {...form}>
+            <form 
+              onSubmit={form.handleSubmit(onSubmit)} 
+              className="space-y-6"
             >
-              Already have an account? Sign in
-            </Link>
-          </p>
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="name@example.com"
+                        type="email"
+                        autoCapitalize="none"
+                        autoComplete="email"
+                        autoCorrect="off"
+                        disabled={isLoading}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Create a password"
+                        type="password"
+                        autoComplete="new-password"
+                        disabled={isLoading}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirm Password</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Confirm your password"
+                        type="password"
+                        autoComplete="new-password"
+                        disabled={isLoading}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isLoading}
+              >
+                {isLoading && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Sign Up
+              </Button>
+            </form>
+          </Form>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Or
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col space-y-4">
+            <p className="px-8 text-center text-sm text-muted-foreground">
+              <Link
+                href="/login"
+                className="underline underline-offset-4 hover:text-primary"
+              >
+                Already have an account? Sign In
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -356,784 +544,196 @@ export default async function SignUpPage() {
 ### app/(auth)/layout.tsx
 
 ```typescript
-export default function AuthLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="min-h-screen">
-      {children}
-    </div>
-  );
-}
-```
-
-### app/api/auth/callback/route.ts
-
-```typescript
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import type { Database } from "@/lib/supabase/client";
+import { redirect } from "next/navigation";
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import type { Database } from "@/types";
 
-export async function GET(request: NextRequest) {
-  const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get("code");
+interface AuthLayoutProps {
+  children: React.ReactNode;
+}
 
-  if (code) {
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient<Database>({ cookies: () => cookieStore });
-    
-    // Exchange the code for a session
-    await supabase.auth.exchangeCodeForSession(code);
+async function getSession() {
+  const cookieStore = cookies();
+  const supabase = createServerComponentClient<Database>({ 
+    cookies: () => cookieStore 
+  });
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session;
+  } catch (error) {
+    console.error('Auth error:', error);
+    return null;
+  }
+}
+
+export default async function AuthLayout({ children }: AuthLayoutProps) {
+  const session = await getSession();
+
+  if (session) {
+    redirect("/dashboard");
   }
 
-  // URL to redirect to after sign in process completes
-  return NextResponse.redirect(new URL("/dashboard", request.url));
-}
+  return (
+    <div className="min-h-screen grid grid-cols-1 overflow-hidden antialiased">
+      {/* Gradient background */}
+      <div 
+        className="fixed inset-0 -z-10 opacity-40"
+        style={{
+          background: 
+            "radial-gradient(circle at 50% 50%, rgba(17, 24, 39, 0.1), rgba(0, 0, 0, 0.4))",
+        }}
+      />
 
-export const dynamic = "force-dynamic";
-```
+      {/* Background pattern */}
+      <div 
+        className="fixed inset-0 -z-10 h-full w-full bg-white" 
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='30' height='30' viewBox='0 0 30 30' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1.22676 0C1.91374 0 2.45351 0.539773 2.45351 1.22676C2.45351 1.91374 1.91374 2.45351 1.22676 2.45351C0.539773 2.45351 0 1.91374 0 1.22676C0 0.539773 0.539773 0 1.22676 0Z' fill='rgba(0,0,0,0.07)'/%3E%3C/svg%3E")`,
+          backgroundSize: "60px 60px",
+        }}
+      />
 
-### app/api/auth/signout/route.ts
+      {/* Content */}
+      <div className="relative flex flex-col">
+        {/* Header with Branding - Only shown on mobile */}
+        <div className="border-b lg:hidden">
+          <div className="flex h-14 items-center px-4">
+            <div className="flex items-center space-x-2">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-6 w-6"
+              >
+                <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />
+              </svg>
+              <span className="font-bold">Restaurant Manager</span>
+            </div>
+          </div>
+        </div>
 
-```typescript
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+        {/* Main Content */}
+        <main className="flex-1">
+          {children}
+        </main>
 
-export async function POST(request: Request) {
-  const supabase = createRouteHandlerClient({ cookies });
-
-  // Sign out the user
-  await supabase.auth.signOut();
-
-  // Redirect to login page
-  return NextResponse.redirect(new URL("/login", request.url));
-}
-```
-
-### app/dashboard/daily-menu/page.tsx
-
-```typescript
-'use client';
-
-import { useState, useCallback, useEffect } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Loader2, CalendarDays, ListTodo } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
-import { DateSelection } from "@/components/daily-menu/MenuDateSelection";
-import { MenuTemplateSelection } from "@/components/daily-menu/MenuTemplateSelection";
-import { Button } from "@/components/ui/button";
-import { CurrentMenuList } from "@/components/daily-menu/CurrentMenuList";
-
-/**
- * Interface representing a base menu item.
- */
-interface BaseMenuItem {
-  id: number;
-  daily_menu_id: number;
-  name: string;
-  display_order: number;
-}
-
-/**
- * Interface representing a daily menu.
- */
-interface DailyMenu {
-  id: number;
-  date: string;
-  price: number;
-  active: boolean;
-  created_at: string;
-  first_courses: BaseMenuItem[];
-  second_courses: BaseMenuItem[];
-}
-
-/**
- * Interface representing a template menu item.
- */
-interface TemplateMenuItem {
-  id: number;
-  name: string;
-  display_order: number;
-}
-
-/**
- * Interface representing a menu template.
- */
-interface MenuTemplate {
-  id: string;
-  name: string;
-  first_courses: TemplateMenuItem[];
-  second_courses: TemplateMenuItem[];
-  is_default?: boolean;
-  created_at?: string;
-}
-
-/**
- * Type representing the current step in the scheduling process.
- */
-type ScheduleStep = 'select-date' | 'select-menu' | 'customize' | 'confirm';
-
-/**
- * The main component for managing daily menus.
- */
-export default function DailyMenuPage() {
-  const [activeTab, setActiveTab] = useState<'current' | 'schedule'>('current');
-  const [currentStep, setCurrentStep] = useState<ScheduleStep>('select-date');
-  const [selectedDates, setSelectedDates] = useState<{ from: Date; to: Date } | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<MenuTemplate | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [menus, setMenus] = useState<DailyMenu[]>([]);
-  const { toast } = useToast();
-  const supabase = createClientComponentClient();
-
-  /**
-   * Function to verify the integrity and completeness of the menu template data.
-   * @param template - The menu template to validate.
-   * @returns An array of error messages. If empty, the template is valid.
-   */
-  
-
-  /**
-   * Function to load existing menus from Supabase.
-   */
-  const loadMenus = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      
-      const { data: dailyMenus, error: menusError } = await supabase
-        .from('daily_menus')
-        .select('*')
-        .order('date', { ascending: false });
-
-      if (menusError) throw menusError;
-
-      const fullMenus = await Promise.all(dailyMenus.map(async (menu) => {
-        const [firstCoursesResponse, secondCoursesResponse] = await Promise.all([
-          supabase
-            .from('daily_menu_first_courses')
-            .select('*')
-            .eq('daily_menu_id', menu.id)
-            .order('display_order'),
-          supabase
-            .from('daily_menu_second_courses')
-            .select('*')
-            .eq('daily_menu_id', menu.id)
-            .order('display_order')
-        ]);
-
-        if (firstCoursesResponse.error) throw firstCoursesResponse.error;
-        if (secondCoursesResponse.error) throw secondCoursesResponse.error;
-
-        return {
-          ...menu,
-          first_courses: firstCoursesResponse.data || [],
-          second_courses: secondCoursesResponse.data || [],
-        };
-      }));
-
-      setMenus(fullMenus);
-    } catch (error) {
-      console.error('Error loading menus:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load menus",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [supabase, toast]);
-
-  useEffect(() => {
-    loadMenus();
-  }, [loadMenus]);
-
-  /**
-   * Handler for date selection.
-   * @param dates - The selected date range.
-   */
-  const handleDateSelect = (dates: { from: Date; to: Date } | null) => {
-    if (dates) {
-      // Ensure the dates are set to midnight for consistent comparison
-      const from = new Date(dates.from);
-      const to = new Date(dates.to || dates.from); // If no 'to' date, use 'from' date
-      from.setHours(0, 0, 0, 0);
-      to.setHours(0, 0, 0, 0);
-      
-      setSelectedDates({ from, to });
-    } else {
-      setSelectedDates(null);
-    }
-  };
-
-  /**
-   * Handler for template selection.
-   * @param template - The selected menu template.
-   */
-  const handleTemplateSelect = (template: MenuTemplate) => {
-    setSelectedTemplate(template);
-  };
-
-  /**
-   * Validates the selected menu template to ensure it meets required criteria.
-   * @param template - The menu template to validate.
-   */
-  const validateTemplate = (template: MenuTemplate) => {
-    if (!template.first_courses.length) {
-      throw new Error('Template must have at least one first course');
-    }
-    if (!template.second_courses.length) {
-      throw new Error('Template must have at least one second course');
-    }
-  };
-
-  /**
-   * Handler to navigate to the next step in the scheduling process.
-   */
-  const handleNextStep = () => {
-    try {
-      switch (currentStep) {
-        case 'select-date':
-          if (!selectedDates) {
-            throw new Error('Please select dates first');
-          }
-          setCurrentStep('select-menu');
-          break;
-        case 'select-menu':
-          if (!selectedTemplate) {
-            throw new Error('Please select a menu template');
-          }
-          validateTemplate(selectedTemplate);
-          setCurrentStep('customize');
-          break;
-        case 'customize':
-          if (!selectedTemplate) {
-            throw new Error('Please select a menu template');
-          }
-          validateTemplate(selectedTemplate);
-          setCurrentStep('confirm');
-          break;
-        case 'confirm':
-          handleScheduleComplete();
-          break;
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : 'An error occurred',
-        variant: "destructive",
-      });
-    }
-  };
-
-  /**
-   * Function to handle the completion of the scheduling process.
-   * Validates the template, checks date ranges in Spain's timezone, creates menus and their courses with error handling.
-   */
-  const handleScheduleComplete = async () => {
-    if (!selectedDates || !selectedTemplate) {
-      toast({
-        title: "Error",
-        description: "Missing dates or template",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      console.log("Starting schedule process...");
-      setIsLoading(true);
-
-      const spainTimeFormatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Europe/Madrid',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      });
-
-      // Get current date in Spain
-      const serverDate = new Date();
-      const spainCurrentDate = new Date(spainTimeFormatter.format(serverDate));
-      spainCurrentDate.setHours(0, 0, 0, 0);
-
-      // Create new Date objects for start and end
-      const start = new Date(selectedDates.from);
-      const end = new Date(selectedDates.to);
-      start.setHours(0, 0, 0, 0);
-      end.setHours(0, 0, 0, 0);
-
-      console.log("Date Range:", {
-        start: start.toISOString(),
-        end: end.toISOString(),
-        isRange: start.getTime() !== end.getTime()
-      });
-
-      let currentDate = new Date(start);
-      let successCount = 0;
-      const totalDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-      console.log(`Processing ${totalDays} days...`);
-
-      // Process each date
-      while (currentDate.getTime() <= end.getTime()) {
-        const dateStr = spainTimeFormatter.format(currentDate);
-        console.log(`Processing day ${successCount + 1} of ${totalDays}: ${dateStr}`);
-
-        try {
-          // Check for existing menu
-          console.log("Checking for existing menu...");
-          const { data: existingMenu, error: checkError } = await supabase
-            .from("daily_menus")
-            .select("id")
-            .eq("date", dateStr)
-            .single();
-
-          if (checkError && checkError.code !== "PGRST116") { // Not found error code
-            console.error("Menu check error:", checkError);
-            throw new Error(checkError.message);
-          }
-
-          if (existingMenu) {
-            console.log(`Menu already exists for ${dateStr}, skipping...`);
-          } else {
-            console.log("Creating new menu...");
-            // Create menu
-            const menuData = {
-              date: dateStr,
-              price: 13.0,
-              active: true,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            };
-
-            const { data: newMenu, error: menuError } = await supabase
-              .from("daily_menus")
-              .insert([menuData])
-              .select()
-              .single();
-
-            if (menuError) {
-              console.error("Menu creation error:", menuError);
-              throw new Error(menuError.message);
-            }
-
-            console.log("Creating courses...");
-            // Create courses data
-            const firstCoursesData = selectedTemplate.first_courses.map((course, index) => ({
-              daily_menu_id: newMenu.id,
-              name: course.name.trim(),
-              display_order: course.display_order || index + 1,
-              created_at: new Date().toISOString(),
-            }));
-
-            const secondCoursesData = selectedTemplate.second_courses.map((course, index) => ({
-              daily_menu_id: newMenu.id,
-              name: course.name.trim(),
-              display_order: course.display_order || index + 1,
-              created_at: new Date().toISOString(),
-            }));
-
-            // Insert courses
-            const coursesPromises = await Promise.all([
-              supabase.from("daily_menu_first_courses").insert(firstCoursesData),
-              supabase.from("daily_menu_second_courses").insert(secondCoursesData),
-            ]);
-
-            const hasErrors = coursesPromises.some(result => result.error);
-            if (hasErrors) {
-              console.error("Course creation errors:", coursesPromises);
-              // Cleanup the menu if course creation failed
-              await supabase.from("daily_menus").delete().eq("id", newMenu.id);
-              throw new Error("Failed to create courses");
-            }
-
-            successCount++;
-            console.log(`Successfully created menu ${successCount} of ${totalDays}`);
-          }
-
-        } catch (error) {
-          console.error("Error in menu creation loop:", error);
-          throw error;
-        }
-
-        // Move to next date - IMPORTANT: Create a new date object
-        const nextDate = new Date(currentDate);
-        nextDate.setDate(currentDate.getDate() + 1);
-        currentDate = nextDate;
-      }
-
-      console.log(`Completed processing ${successCount} menus`);
-      toast({
-        title: "Success",
-        description: `Successfully created ${successCount} menu(s)`,
-      });
-
-      // Reset state and refresh
-      setSelectedDates(null);
-      setSelectedTemplate(null);
-      setCurrentStep("select-date");
-      setActiveTab("current");
-      await loadMenus();
-
-    } catch (error) {
-      console.error("Final error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to schedule menu";
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  /**
-   * Function to render the content of the scheduling tab based on the current step.
-   * @returns JSX element representing the current step's UI.
-   */
-  const renderScheduleContent = () => {
-    switch (currentStep) {
-      case 'select-date':
-        return (
-          <DateSelection
-            onDateSelect={handleDateSelect}
-            onNext={handleNextStep}
-            existingMenus={menus.map(menu => ({
-              date: menu.date,
-              active: menu.active,
-            }))}
-          />
-        );
-      case 'select-menu':
-        return (
-          <MenuTemplateSelection
-            selectedDates={selectedDates}
-            onNext={handleNextStep}
-            onEdit={handleTemplateSelect}
-          />
-        );
-      case 'customize':
-        return (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h2 className="text-xl font-semibold">Customize Menu</h2>
-                  <p className="text-muted-foreground">
-                    Selected dates: {selectedDates?.from.toLocaleDateString()} - {selectedDates?.to.toLocaleDateString()}
-                  </p>
-                </div>
-                <Button onClick={handleNextStep}>Continue</Button>
-              </div>
-              {selectedTemplate && (
-                <div>
-                  <p className="mb-4 font-medium">Template: {selectedTemplate.name}</p>
-                  <div className="grid md:grid-cols-2 gap-8">
-                    <div>
-                      <h3 className="font-semibold mb-2">First Courses</h3>
-                      <ul className="space-y-1">
-                        {selectedTemplate.first_courses.map(course => (
-                          <li key={course.id} className="p-2 rounded-md hover:bg-muted">
-                            {course.name}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold mb-2">Second Courses</h3>
-                      <ul className="space-y-1">
-                        {selectedTemplate.second_courses.map(course => (
-                          <li key={course.id} className="p-2 rounded-md hover:bg-muted">
-                            {course.name}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        );
-      case 'confirm':
-        return (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h2 className="text-xl font-semibold">Confirm Schedule</h2>
-                  <p className="text-muted-foreground">
-                    Selected dates: {selectedDates?.from.toLocaleDateString()} - {selectedDates?.to.toLocaleDateString()}
-                  </p>
-                </div>
-                <Button 
-                  onClick={handleScheduleComplete}
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Scheduling...
-                    </>
-                  ) : (
-                    "Schedule Menu"
-                  )}
-                </Button>
-              </div>
-              {selectedTemplate && (
-                <div>
-                  <p className="font-medium mb-4">Selected Template: {selectedTemplate.name}</p>
-                  <div className="grid md:grid-cols-2 gap-8">
-                    <div>
-                      <h3 className="font-semibold mb-2">First Courses</h3>
-                      <ul className="space-y-1 text-sm">
-                        {selectedTemplate.first_courses.map(course => (
-                          <li key={course.id} className="p-2 rounded-md hover:bg-muted">
-                            {course.name}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold mb-2">Second Courses</h3>
-                      <ul className="space-y-1 text-sm">
-                        {selectedTemplate.second_courses.map(course => (
-                          <li key={course.id} className="p-2 rounded-md hover:bg-muted">
-                            {course.name}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        );
-      default:
-        return null;
-    }
-  };
-
-  /**
-   * Renders a loading spinner while data is being fetched or operations are in progress.
-   */
-  if (isLoading && currentStep !== 'confirm') { // Avoid hiding loader during scheduling
-    return (
-      <div className="container mx-auto py-10">
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin" />
+        {/* Footer */}
+        <div className="border-t py-4 lg:hidden">
+          <div className="container flex items-center justify-between px-4">
+            <p className="text-sm text-muted-foreground">
+              &copy; {new Date().getFullYear()} Restaurant Manager. All rights reserved.
+            </p>
+          </div>
         </div>
       </div>
-    );
-  }
-
-  /**
-   * Main render of the component, displaying navigation tabs and corresponding content.
-   */
-  return (
-    <div className="container mx-auto py-10">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Daily Menu Management</h1>
-        <p className="text-muted-foreground">
-          Manage and schedule your restaurant&apos;s daily menus
-        </p>
-      </div>
-
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'current' | 'schedule')}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="current" className="flex items-center gap-2">
-            <ListTodo className="h-4 w-4" />
-            Current Menus
-          </TabsTrigger>
-          <TabsTrigger value="schedule" className="flex items-center gap-2">
-            <CalendarDays className="h-4 w-4" />
-            Schedule Menu
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="current">
-          {menus.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center h-32">
-                <p className="text-muted-foreground">No menus found</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <CurrentMenuList menus={menus} onMenuUpdate={loadMenus} />
-          )}
-        </TabsContent>
-
-        <TabsContent value="schedule">
-          {renderScheduleContent()}
-        </TabsContent>
-      </Tabs>
     </div>
   );
 }
-
 ```
 
-### app/dashboard/images/page.tsx
+### app/api/auth/[...supabase]/route.ts
 
 ```typescript
-"use client";
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import type { Database } from "@/types";
 
-import { useState, useCallback } from "react";
-import { ImageUpload } from "@/components/image/ImageUpload";
-import { ImageGallery } from "@/components/image/ImageGallery";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useToast } from "@/components/ui/use-toast";
-import type { MenuCategory } from '@/components/image/types';
+export async function GET(request: NextRequest) {
+  try {
+    const requestUrl = new URL(request.url);
+    const code = requestUrl.searchParams.get('code');
+    const next = requestUrl.searchParams.get('next') || '/dashboard';
 
-const MENU_CATEGORIES = [
-  { value: 'arroces', label: 'Arroces' },
-  { value: 'carnes', label: 'Carnes' },
-  { value: 'del-huerto', label: 'Del Huerto' },
-  { value: 'del-mar', label: 'Del Mar' },
-  { value: 'para-compartir', label: 'Para Compartir' },
-  { value: 'para-peques', label: 'Para Peques' },
-  { value: 'para-veganos', label: 'Para Veganos' },
-  { value: 'postres', label: 'Postres' }
-] as const;
+    if (!code) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
 
-export default function ImagesPage() {
-  const [selectedCategory, setSelectedCategory] = useState<MenuCategory>('arroces');
-  const [itemName, setItemName] = useState('');
-  const [refreshGallery, setRefreshGallery] = useState(0); // Counter to trigger gallery refresh
-  const { toast } = useToast();
-  
-  const handleUploadComplete = (url: string) => {
-    setItemName('');
-  };
-
-  const handleUploadError = (error: string) => {
-    toast({
-      title: "Error",
-      description: error,
-      variant: "destructive",
+    const cookieStore = cookies();
+    const supabase = createRouteHandlerClient<Database>({ 
+      cookies: () => cookieStore 
     });
-  };
 
-  // Callback to refresh gallery
-  const handleImageUploaded = useCallback(() => {
-    setRefreshGallery(prev => prev + 1); // Increment counter to trigger refresh
-  }, []);
+    // Exchange the code for a session
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw error;
 
-  return (
-    <div className="container mx-auto py-10">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Image Management</h1>
-        <p className="text-muted-foreground">
-          Upload and manage images for menu items
-        </p>
-      </div>
+    // Get the user data after successful authentication
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw userError || new Error('User not found');
+    }
 
-      <div className="grid gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Upload New Image</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Category</label>
-                  <Select
-                    value={selectedCategory}
-                    onValueChange={(value) => setSelectedCategory(value as MenuCategory)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MENU_CATEGORIES.map((category) => (
-                        <SelectItem 
-                          key={category.value} 
-                          value={category.value}
-                        >
-                          {category.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+    // Check if user profile exists
+    const { data: profile, error: profileError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', user.id)
+      .single();
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Item Name</label>
-                  <input
-                    type="text"
-                    placeholder="Enter item name"
-                    value={itemName}
-                    onChange={(e) => setItemName(e.target.value)}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  />
-                </div>
-              </div>
+    // If no profile exists, create one
+    if (!profile && !profileError && user.email) {
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert({
+          email: user.email,
+          name: user.email.split('@')[0] || 'New User',
+          role: 'user' as const,
+          active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
 
-              <ImageUpload
-                category={selectedCategory}
-                itemName={itemName}
-                onUploadComplete={handleUploadComplete}
-                onError={handleUploadError}
-                onItemNameChange={setItemName}
-                onImageUploaded={handleImageUploaded}
-              />
-            </div>
-          </CardContent>
-        </Card>
+      if (insertError) {
+        console.error('Error creating user profile:', insertError);
+      }
+    }
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Image Gallery</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-6">
-              <Select
-                value={selectedCategory}
-                onValueChange={(value) => setSelectedCategory(value as MenuCategory)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MENU_CATEGORIES.map((category) => (
-                    <SelectItem 
-                      key={category.value} 
-                      value={category.value}
-                    >
-                      {category.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <ImageGallery 
-              category={selectedCategory} 
-              refreshTrigger={refreshGallery} // Pass refresh trigger to gallery
-            />
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
+    return NextResponse.redirect(new URL(next, request.url));
+  } catch (error) {
+    console.error('Auth error:', error);
+    return NextResponse.redirect(
+      new URL('/login?error=Authentication%20failed', request.url)
+    );
+  }
 }
+
+export async function POST(request: NextRequest) {
+  try {
+    const cookieStore = cookies();
+    const supabase = createRouteHandlerClient<Database>({ 
+      cookies: () => cookieStore 
+    });
+
+    const { action } = await request.json();
+
+    if (action === 'signout') {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      return NextResponse.json({ success: true }, { status: 200 });
+    }
+
+    return NextResponse.json(
+      { error: 'Unknown action' },
+      { status: 400 }
+    );
+  } catch (error) {
+    console.error('Auth action error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+export const dynamic = 'force-dynamic';
 ```
 
 ### app/dashboard/menu/page.tsx
@@ -1141,448 +741,387 @@ export default function ImagesPage() {
 ```typescript
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useState, useEffect } from "react";
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, AlertCircle } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { useToast } from "@/hooks/use-toast";
+import { MenuList, MenuSearch, MenuItem } from "@/components/features/menu";
 
-import MenuNav from "@/components/menu/MenuNav";
-import MenuSearch from "@/components/menu/MenuSearch";
-import MenuCard from "@/components/menu/MenuCard";
-import {
-  getCategories,
-  getAllergens,
-  getMenuItems,
-  getWines,
-  createMenuItem,
-  createWine,
-  updateMenuItem,
-  updateWine,
-  deleteMenuItem,
-  deleteWine,
-  subscribeToMenuChanges,
-  subscribeToWineChanges,
-} from "@/lib/supabase/menu";
-import type {
-  MenuItem,
-  Wine,
-  Category,
-  Allergen,
-  MenuItemFormData,
-  WineFormData,
-  RealtimePayload,
-} from "@/types/menu";
+type MenuItemAllergen = {
+  allergens: {
+    id: number;
+    name: string;
+  };
+};
 
-type TabType = "menu" | "wine";
-
-type EditFormData = {
-  menu: MenuItemFormData;
-  wine: WineFormData;
-}[TabType];
-
-interface LoadingState {
-  auth: boolean;
-  categories: boolean;
-  allergens: boolean;
-  menuItems: boolean;
-  wines: boolean;
-}
-
-interface ErrorState {
-  auth?: string;
-  categories?: string;
-  allergens?: string;
-  menuItems?: string;
-  wines?: string;
-}
+type MenuItemResponse = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category_id: number;
+  image_url: string | null;
+  active: boolean;
+  categories: {
+    id: number;
+    name: string;
+  } | null;
+  menu_item_allergens: MenuItemAllergen[];
+};
 
 export default function MenuPage() {
-  // State management with correct types
-  const [activeTab, setActiveTab] = useState<TabType>("menu");
-  const [activeCategory, setActiveCategory] = useState<number | null>(null);
+  const [items, setItems] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [editingId, setEditingId] = useState<number | null>(null);
-
-  const [loadingState, setLoadingState] = useState<LoadingState>({
-    auth: true,
-    categories: true,
-    allergens: true,
-    menuItems: true,
-    wines: true,
-  });
-  const [errorState, setErrorState] = useState<ErrorState>({});
-
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [wines, setWines] = useState<Wine[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [allergens, setAllergens] = useState<Allergen[]>([]);
-
-  const { toast } = useToast();
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  
   const supabase = createClientComponentClient();
+  const { toast } = useToast();
 
-  // Auth check
+  // Fetch menu items and categories
   useEffect(() => {
-    const checkAuth = async () => {
+    const fetchData = async () => {
       try {
-        const {
-          data: { session },
-          error: authError,
-        } = await supabase.auth.getSession();
+        setIsLoading(true);
+        
+        // Fetch categories
+        const { data: categoriesData, error: categoriesError } = await supabase
+          .from('categories')
+          .select('name')
+          .order('name');
 
-        if (authError) throw authError;
-        if (!session) throw new Error("No authenticated session");
+        if (categoriesError) throw categoriesError;
 
-        console.log("Auth successful:", session.user.email);
-        setLoadingState((prev) => ({ ...prev, auth: false }));
-      } catch (error) {
-        console.error("Auth error:", error);
-        setErrorState((prev) => ({
-          ...prev,
-          auth:
-            error instanceof Error ? error.message : "Authentication failed",
+        // Fetch menu items
+        const { data: itemsData, error: itemsError } = await supabase
+          .from('menu_items')
+          .select(`
+            *,
+            categories (id, name),
+            menu_item_allergens (
+              allergens (id, name)
+            )
+          `)
+          .order('name');
+
+        if (itemsError) throw itemsError;
+
+        // Transform categories data to array of strings
+        const categoryNames = (categoriesData ?? []).map((cat) => cat.name);
+        setCategories(categoryNames);
+
+        // Transform menu items data
+        const transformedItems: MenuItem[] = (itemsData ?? []).map((item: MenuItemResponse) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          price: item.price,
+          category_id: item.category_id,
+          category: item.categories?.name ?? '',
+          image_url: item.image_url,
+          allergens: item.menu_item_allergens.map((allergen) => allergen.allergens.name),
+          active: item.active
         }));
-        setLoadingState((prev) => ({ ...prev, auth: false }));
-      }
-    };
-
-    checkAuth();
-  }, [supabase.auth]);
-
-  // Data fetching
-  useEffect(() => {
-    const loadData = async () => {
-      if (errorState.auth) return;
-
-      const fetchData = async <T,>(
-        key: keyof LoadingState,
-        fetcher: () => Promise<T>,
-        setter: (data: T) => void
-      ) => {
-        try {
-          setLoadingState((prev) => ({ ...prev, [key]: true }));
-          const data = await fetcher();
-          setter(data);
-          setLoadingState((prev) => ({ ...prev, [key]: false }));
-        } catch (error) {
-          console.error(`Error fetching ${key}:`, error);
-          setErrorState((prev) => ({
-            ...prev,
-            [key]:
-              error instanceof Error ? error.message : `Failed to load ${key}`,
-          }));
-          setLoadingState((prev) => ({ ...prev, [key]: false }));
-        }
-      };
-
-      await Promise.all([
-        fetchData("categories", getCategories, setCategories),
-        fetchData("allergens", getAllergens, setAllergens),
-        fetchData("menuItems", getMenuItems, setMenuItems),
-        fetchData("wines", getWines, setWines),
-      ]);
-    };
-
-    loadData();
-  }, [errorState.auth]);
-
-  // Real-time subscriptions
-  useEffect(() => {
-    if (Object.keys(errorState).length > 0) return;
-
-    const menuUnsubscribe = subscribeToMenuChanges(
-      (payload: RealtimePayload<MenuItem>) => {
-        const { eventType, new: newRecord, old } = payload;
-
-        setMenuItems((current) => {
-          switch (eventType) {
-            case "INSERT":
-              return [...current, newRecord];
-            case "UPDATE":
-              return current.map((item) =>
-                item.id === old.id ? newRecord : item
-              );
-            case "DELETE":
-              return current.filter((item) => item.id !== old.id);
-            default:
-              return current;
-          }
+        
+        setItems(transformedItems);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load menu items",
+          variant: "destructive",
         });
+      } finally {
+        setIsLoading(false);
       }
-    );
-
-    const wineUnsubscribe = subscribeToWineChanges(
-      (payload: RealtimePayload<Wine>) => {
-        const { eventType, new: newRecord, old } = payload;
-
-        setWines((current) => {
-          switch (eventType) {
-            case "INSERT":
-              return [...current, newRecord];
-            case "UPDATE":
-              return current.map((wine) =>
-                wine.id === old.id ? newRecord : wine
-              );
-            case "DELETE":
-              return current.filter((wine) => wine.id !== old.id);
-            default:
-              return current;
-          }
-        });
-      }
-    );
-
-    return () => {
-      menuUnsubscribe();
-      wineUnsubscribe();
     };
-  }, [errorState]);
 
-  // Filtered items
-  const filteredItems = useMemo(() => {
-    const items = activeTab === "menu" ? menuItems : wines;
-    return items.filter((item) => {
-      const matchesSearch =
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.description.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory =
-        !activeCategory || item.category_id === activeCategory;
-      return matchesSearch && matchesCategory;
+    fetchData();
+  }, [supabase, toast]);
+
+  // Filter items based on search and category
+  const filteredItems = items.filter((item) => {
+    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         item.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = !selectedCategory || item.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  // Handle edit item
+  const handleEditItem = (item: MenuItem) => {
+    toast({
+      title: "Coming Soon",
+      description: `Edit functionality for "${item.name}" is under development`,
     });
-  }, [activeTab, menuItems, wines, searchQuery, activeCategory]);
-
-  // CRUD handlers
-  const handleCreate = async () => {
-    try {
-      if (activeTab === "menu") {
-        const newItem = await createMenuItem({
-          name: "Nuevo plato",
-          description: "Descripción del plato",
-          price: 0,
-          category_id: activeCategory || categories[0]?.id || 0,
-          image_path: "",
-          allergens: [],
-          active: true,
-        });
-        setEditingId(newItem.id);
-      } else {
-        const newWine = await createWine({
-          name: "Nuevo vino",
-          description: "Descripción del vino",
-          bottle_price: 0,
-          glass_price: 0,
-          category_id: activeCategory || categories[0]?.id || 0,
-          active: true,
-        });
-        setEditingId(newWine.id);
-      }
-    } catch (error) {
-      console.error("Error creating item:", error);
-      toast({
-        title: "Error",
-        description: "Failed to create item",
-        variant: "destructive",
-      });
-    }
   };
 
-  const handleEdit = async (id: number, data: EditFormData) => {
+  // Handle delete item
+  const handleDeleteItem = async (id: string) => {
     try {
-      if (activeTab === "menu") {
-        await updateMenuItem(id, data as MenuItemFormData);
-      } else {
-        await updateWine(id, data as WineFormData);
-      }
-      setEditingId(null);
+      const { error } = await supabase
+        .from('menu_items')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setItems((currentItems) => currentItems.filter((item) => item.id !== id));
+      
       toast({
         title: "Success",
-        description: "Item updated successfully",
+        description: "Menu item deleted successfully",
       });
     } catch (error) {
-      console.error("Error updating item:", error);
+      console.error('Error deleting item:', error);
       toast({
         title: "Error",
-        description: "Failed to update item",
+        description: "Failed to delete menu item",
         variant: "destructive",
       });
     }
   };
 
-  const handleDelete = async (id: number) => {
-    try {
-      if (activeTab === "menu") {
-        await deleteMenuItem(id);
-      } else {
-        await deleteWine(id);
-      }
-      toast({
-        title: "Success",
-        description: "Item deleted successfully",
-      });
-    } catch (error) {
-      console.error("Error deleting item:", error);
-      toast({
-        title: "Error",
-        description: "Failed to delete item",
-        variant: "destructive",
-      });
-    }
+  // Handle new item creation
+  const handleCreateItem = () => {
+    toast({
+      title: "Coming Soon",
+      description: "This feature is under development",
+    });
   };
-
-  if (errorState.auth) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-lg font-semibold mb-2">Authentication Error</p>
-          <p className="text-gray-600 mb-4">{errorState.auth}</p>
-          <Button onClick={() => (window.location.href = "/login")}>
-            Return to Login
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  const isLoading = Object.values(loadingState).some(Boolean);
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading menu data...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const hasErrors = Object.keys(errorState).length > 0;
-  if (hasErrors) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-lg font-semibold mb-2">Error Loading Data</p>
-          <p className="text-gray-600 mb-4">
-            {Object.values(errorState).filter(Boolean).join(", ")}
-          </p>
-          <Button onClick={() => window.location.reload()}>Try Again</Button>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Tabs
-        value={activeTab}
-        onValueChange={(value: string) => setActiveTab(value as TabType)}
-      >
-        <div className="sticky top-0 z-50 bg-white border-b">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between mb-4">
-              <TabsList>
-                <TabsTrigger value="menu">Carta</TabsTrigger>
-                <TabsTrigger value="wine">Vinos</TabsTrigger>
-              </TabsList>
-              <Button onClick={handleCreate}>
-                <Plus className="w-4 h-4 mr-2" />
-                {activeTab === "menu" ? "Nuevo plato" : "Nuevo vino"}
-              </Button>
-            </div>
-            <MenuSearch
-              onSearch={setSearchQuery}
-              onCategoryFilter={setActiveCategory}
-              categories={categories.filter((cat) =>
-                activeTab === "menu"
-                  ? !cat.name.toLowerCase().includes("vino")
-                  : cat.name.toLowerCase().includes("vino")
-              )}
-            />
-          </div>
+    <div className="container mx-auto px-4">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold">Menu Items</h1>
+          <p className="text-muted-foreground mt-2">
+            Manage your restaurant&apos;s menu items
+          </p>
         </div>
+        <Button onClick={handleCreateItem}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Item
+        </Button>
+      </div>
 
-        <div className="container mx-auto px-4 py-8">
-          <MenuNav
-            categories={categories.filter((cat) =>
-              activeTab === "menu"
-                ? !cat.name.toLowerCase().includes("vino")
-                : cat.name.toLowerCase().includes("vino")
-            )}
-            activeCategory={activeCategory}
-            onCategoryChange={setActiveCategory}
-            type={activeTab}
-          />
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8"
-            >
-              {filteredItems.map((item) => (
-                <MenuCard
-                  key={item.id}
-                  item={item}
-                  type={activeTab}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                  categories={categories}
-                  allergens={activeTab === "menu" ? allergens : undefined}
-                  isEditing={item.id === editingId}
-                  onEditToggle={setEditingId}
-                />
-              ))}
-            </motion.div>
-          </AnimatePresence>
-
-          {filteredItems.length === 0 && (
-            <div className="text-center py-12 text-gray-500">
-              No items found
-            </div>
-          )}
-        </div>
-      </Tabs>
+      <div className="space-y-4">
+        <MenuSearch
+          onSearch={setSearchQuery}
+          onFilter={setSelectedCategory}
+          categories={categories}
+        />
+        <MenuList
+          items={filteredItems}
+          isLoading={isLoading}
+          onEdit={handleEditItem}
+          onDelete={handleDeleteItem}
+        />
+      </div>
     </div>
   );
 }
-
 ```
 
 ### app/dashboard/users/page.tsx
 
 ```typescript
 
-import { createServerClient } from "@/lib/supabase/server";
-import { UsersTable } from "@/components/users/users-table";
-import InviteUser from "@/components/users/invite-user";
+"use client";
 
-export default async function UsersPage() {
-  const supabase = createServerClient();
+import { useState, useEffect } from "react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { UserPlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { UsersTable, InviteUserDialog } from "@/components/features/users";
+import type { User, Role } from "@/types";
 
-  const { data: users, error } = await supabase
-    .from('users')
-    .select('*')
-    .order('created_at', { ascending: false });
+export default function UsersPage() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  
+  const supabase = createClientComponentClient();
+  const { toast } = useToast();
 
-  if (error) {
-    console.error("Error:", error);
-  }
+  // Fetch users
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        setUsers(data || []);
+      } catch (error) {
+        console.error('Error fetching users:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load users",
+          variant: "destructive",
+        });
+      }
+    };
+
+    fetchUsers();
+  }, [supabase, toast]);
+
+  // Handle user status toggle
+  const handleUserStatusChange = async (userId: string, isActive: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ 
+          active: isActive,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      setUsers((currentUsers) =>
+        currentUsers.map((user) =>
+          user.id === userId ? { ...user, active: isActive } : user
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: `User ${isActive ? 'activated' : 'deactivated'} successfully.`,
+      });
+    } catch (error) {
+      console.error('Error updating user status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update user status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle user role change
+  const handleRoleChange = async (userId: string, newRole: Role) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ 
+          role: newRole,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      setUsers((currentUsers) =>
+        currentUsers.map((user) =>
+          user.id === userId ? { ...user, role: newRole } : user
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: "User role updated successfully.",
+      });
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update user role",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle user invitation
+  const handleInviteUser = async (email: string, role: Role) => {
+    try {
+      // Check if user already exists
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') throw checkError;
+      if (existingUser) {
+        toast({
+          title: "Error",
+          description: "This email is already registered",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Send invitation
+      const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
+        email,
+        { data: { role } }
+      );
+
+      if (inviteError) throw inviteError;
+
+      // Create user record
+      const { error: createError } = await supabase
+        .from('users')
+        .insert([{
+          email,
+          role,
+          active: false,
+          name: email.split('@')[0],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }]);
+
+      if (createError) throw createError;
+
+      toast({
+        title: "Success",
+        description: "Invitation sent successfully",
+      });
+
+      setIsInviteDialogOpen(false);
+    } catch (error) {
+      console.error('Error inviting user:', error);
+      toast({
+        title: "Error",
+        description: "Failed to send invitation",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
-    <div className="container mx-auto py-10">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="container mx-auto px-4">
+      <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold">Users</h1>
-          <p className="text-muted-foreground">Manage your users here.</p>
+          <p className="text-muted-foreground mt-2">
+            Manage user access and permissions
+          </p>
         </div>
-        <InviteUser />
+        <Button onClick={() => setIsInviteDialogOpen(true)}>
+          <UserPlus className="mr-2 h-4 w-4" />
+          Invite User
+        </Button>
       </div>
-      <UsersTable initialData={users || []} />
+
+      <div className="space-y-4">
+        <UsersTable
+          users={users}
+          onStatusChange={handleUserStatusChange}
+          onRoleChange={handleRoleChange}
+        />
+
+        <InviteUserDialog
+          open={isInviteDialogOpen}
+          onOpenChange={setIsInviteDialogOpen}
+          onInvite={handleInviteUser}
+        />
+      </div>
     </div>
   );
 }
@@ -1597,7 +1136,7 @@ import { useRouter } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import {
   LayoutDashboard,
   Users,
@@ -1606,17 +1145,17 @@ import {
   Loader2,
   ImageIcon,
   MenuSquare,
-  ClipboardList, // Added for menu link
-  Wine // Added for wine menu
+  ClipboardList,
+  Wine,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import type { Database } from "@/lib/supabase/client";
+import type { Database } from "@/types/index";
 
-export default function DashboardLayout({
-  children,
-}: {
+interface DashboardLayoutProps {
   children: React.ReactNode;
-}) {
+}
+
+export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const router = useRouter();
@@ -1673,13 +1212,17 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Sidebar */}
       <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-background">
         <div className="flex h-full flex-col">
+          {/* Sidebar Header */}
           <div className="border-b px-6 py-4">
             <h1 className="text-lg font-semibold">Restaurant Dashboard</h1>
           </div>
 
+          {/* Navigation */}
           <nav className="flex-1 space-y-1 px-3 py-4">
+            {/* Dashboard Link */}
             <Link href="/dashboard">
               <Button
                 variant="ghost"
@@ -1766,6 +1309,7 @@ export default function DashboardLayout({
             </div>
           </nav>
 
+          {/* User Section */}
           <div className="border-t p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center">
@@ -1792,6 +1336,7 @@ export default function DashboardLayout({
         </div>
       </aside>
 
+      {/* Main Content */}
       <main className="pl-64">
         <div className="h-full py-12">
           {children}
@@ -1802,107 +1347,7 @@ export default function DashboardLayout({
 }
 ```
 
-### app/dashboard/page.tsx
-
-```typescript
-import { createServerClient } from "@/lib/supabase/server";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, UserCheck, UserX } from "lucide-react";
-
-export default async function DashboardPage() {
-  const supabase = createServerClient();
-
-  // Fetch user stats
-  const { data: users } = await supabase
-    .from('users')
-    .select('*');
-
-  const totalUsers = users?.length || 0;
-  const activeUsers = users?.filter(user => user.active)?.length || 0;
-  const inactiveUsers = totalUsers - activeUsers;
-
-  const stats = [
-    {
-      title: "Total Users",
-      value: totalUsers,
-      icon: Users,
-      description: "Total registered users",
-    },
-    {
-      title: "Active Users",
-      value: activeUsers,
-      icon: UserCheck,
-      description: "Users with active accounts",
-    },
-    {
-      title: "Inactive Users",
-      value: inactiveUsers,
-      icon: UserX,
-      description: "Users with inactive accounts",
-    },
-  ];
-
-  return (
-    <div className="container">
-      <h1 className="mb-8 text-3xl font-bold">Dashboard</h1>
-
-      {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {stats.map((stat) => (
-          <Card key={stat.title}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {stat.title}
-              </CardTitle>
-              <stat.icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground">
-                {stat.description}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Recent Activity or Additional Content */}
-      <div className="mt-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              No recent activity to display.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
-```
-
-### app/fonts/GeistMonoVF.woff
-
-```woff
-Error reading file: 'utf-8' codec can't decode byte 0xee in position 18: invalid continuation byte
-```
-
-### app/fonts/GeistVF.woff
-
-```woff
-Error reading file: 'utf-8' codec can't decode byte 0xdc in position 11: invalid continuation byte
-```
-
-### app/favicon.ico
-
-```ico
-Error reading file: 'utf-8' codec can't decode byte 0x96 in position 50: invalid start byte
-```
-
-### app/globals.css
+### app/global.css
 
 ```css
 @tailwind base;
@@ -1913,108 +1358,132 @@ Error reading file: 'utf-8' codec can't decode byte 0x96 in position 50: invalid
   :root {
     --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+ 
     --muted: 240 4.8% 95.9%;
     --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+ 
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+ 
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+ 
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
+ 
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+ 
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+ 
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+ 
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+ 
+    --ring: 240 5% 64.9%;
+ 
     --radius: 0.5rem;
   }
  
   .dark {
     --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
+ 
     --muted: 240 3.7% 15.9%;
     --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+ 
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+ 
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+ 
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+ 
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+ 
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+ 
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+ 
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+ 
+    --ring: 240 3.7% 15.9%;
   }
 }
-
+ 
 @layer base {
   * {
     @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
-@layer components {
-  .menu-group-header {
-    @apply transition-colors hover:bg-muted/80;
+
+/* Custom scrollbar */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
   }
   
-  .badge-success {
-    @apply bg-green-100 text-green-800 hover:bg-green-200;
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/30 rounded-full;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/50;
   }
 }
-@layer components {
-  .badge-success {
-    @apply bg-green-100 text-green-800 hover:bg-green-200;
-  }
-}
-@layer components {
-  .calendar-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 1px;
-  }
 
-  .calendar-day {
-    @apply relative aspect-square flex items-center justify-center text-sm transition-all;
+/* Custom animations */
+@layer utilities {
+  .animate-in {
+    animation: animateIn 0.3s ease-in-out;
   }
-
-  .calendar-day:hover:not(:disabled) {
-    @apply bg-primary/10;
+  
+  .animate-out {
+    animation: animateOut 0.3s ease-in-out;
   }
-
-  .calendar-day[aria-selected="true"] {
-    @apply bg-primary text-primary-foreground;
+  
+  @keyframes animateIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
-
-  .calendar-day.day-range-start {
-    @apply rounded-l-md;
-  }
-
-  .calendar-day.day-range-end {
-    @apply rounded-r-md;
-  }
-
-  .calendar-day.day-range-middle {
-    @apply bg-accent/50;
-  }
-
-  .calendar-navigation {
-    @apply flex items-center justify-between mb-4;
-  }
-
-  .calendar-month-title {
-    @apply text-lg font-semibold;
+  
+  @keyframes animateOut {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(10px);
+    }
   }
 }
 ```
@@ -2022,39 +1491,61 @@ Error reading file: 'utf-8' codec can't decode byte 0x96 in position 50: invalid
 ### app/layout.tsx
 
 ```typescript
-// app/layout.tsx
-import type { Metadata } from "next";
-import localFont from "next/font/local";
-import "./globals.css";
+import type { Metadata, Viewport } from "next";
+import { Lato, JetBrains_Mono } from "next/font/google";
+import { Toaster } from "@/components/ui/toaster";
+import "./global.css";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
+const lato = Lato({
+  subsets: ['latin'],
+  weight: ['100', '300', '400', '700', '900'],
+  variable: '--font-lato',
+  display: 'swap',
 });
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+  display: 'swap',
 });
+
+const APP_NAME = "Restaurant Manager";
+const APP_DESCRIPTION = "A modern restaurant management platform";
 
 export const metadata: Metadata = {
-  title: "Create Next App",
-  description: "Generated by create next app",
+  title: {
+    default: APP_NAME,
+    template: `%s | ${APP_NAME}`,
+  },
+  description: APP_DESCRIPTION,
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
+interface RootLayoutProps {
   children: React.ReactNode;
-}>) {
+}
+
+export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        suppressHydrationWarning
-      >
-        {children}
+    <html 
+      lang="en" 
+      className={`${lato.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
+      <body className="min-h-screen bg-background font-sans antialiased">
+        <main className="relative flex min-h-screen flex-col">
+          {children}
+        </main>
+        <Toaster />
       </body>
     </html>
   );
@@ -2064,3098 +1555,755 @@ export default function RootLayout({
 ### app/page.tsx
 
 ```typescript
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import { DataManagement } from "@/components/data/data-management";
 
-export default async function Home() {
+export default async function HomePage() {
   const supabase = createServerComponentClient({ cookies });
-  
+
+  // Check auth status
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
+  // Redirect based on auth status
   if (!session) {
     redirect("/login");
+  } else {
+    redirect("/dashboard");
   }
 
-  const { data: entries, error } = await supabase
-    .from("data_entries")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Error fetching entries:", error);
-  }
-
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="container py-10">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Data Management</h1>
-          <p className="text-muted-foreground">
-            View and manage your data entries.
-          </p>
-        </div>
-
-        <DataManagement initialData={entries || []} />
-      </div>
-    </div>
-  );
+  // This return is technically unreachable but satisfies TypeScript
+  return null;
 }
+
+// Prevent caching of this page
+export const revalidate = 0;
+
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
+// Disable static generation
+export const fetchCache = 'force-no-store';
 ```
 
-### src/components/auth/invite-form.tsx
+### src/components/core/forms.tsx
 
 ```typescript
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Slot } from "@radix-ui/react-slot";
+import * as LabelPrimitive from "@radix-ui/react-label";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/ui/use-toast";
-
-const formSchema = z.object({
-  password: z.string().min(6, {
-    message: "Password must be at least 6 characters.",
-  }),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
-});
-
-interface InviteFormProps {
-  token: string;
-}
-
-export function InviteForm({ token }: InviteFormProps) {
-  const router = useRouter();
-  const { toast } = useToast();
-  const supabase = createClientComponentClient();
-  const [isVerifying, setIsVerifying] = React.useState(true);
-
-  // Verify the invite token when component mounts
-  React.useEffect(() => {
-    async function verifyInviteToken() {
-      try {
-        // Verify the token with Supabase
-        const { error } = await supabase.auth.verifyOtp({
-          token_hash: token,
-          type: 'invite',
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        setIsVerifying(false);
-      } catch (error) {
-        console.error('Error verifying invite:', error);
-        toast({
-          title: "Invalid Invitation",
-          description: "This invitation link is invalid or has expired.",
-          variant: "destructive",
-        });
-        router.push('/login');
-      }
-    }
-
-    verifyInviteToken();
-  }, [token, router, supabase.auth, toast]);
-
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      password: "",
-      confirmPassword: "",
-    },
-  });
-
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    try {
-      // Accept the invitation and set the password
-      const { error } = await supabase.auth.updateUser({
-        password: values.password,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      toast({
-        title: "Success",
-        description: "Your account has been set up successfully.",
-      });
-
-      router.push("/dashboard");
-    } catch (error) {
-      console.error("Error:", error);
-      toast({
-        title: "Error",
-        description: "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  if (isVerifying) {
-    return (
-      <div className="flex items-center justify-center space-x-2">
-        <Loader2 className="h-6 w-6 animate-spin" />
-        <p>Verifying invitation...</p>
-      </div>
-    );
-  }
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <Input 
-                  type="password" 
-                  placeholder="Create a password" 
-                  {...field} 
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Confirm Password</FormLabel>
-              <FormControl>
-                <Input 
-                  type="password" 
-                  placeholder="Confirm your password" 
-                  {...field} 
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button 
-          type="submit" 
-          className="w-full" 
-          disabled={form.formState.isSubmitting}
-        >
-          {form.formState.isSubmitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Setting up account...
-            </>
-          ) : (
-            "Complete setup"
-          )}
-        </Button>
-      </form>
-    </Form>
-  );
-}
-```
-
-### src/components/auth/login-form.tsx
-
-```typescript
-"use client";
-
-import * as React from "react";
-import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/ui/use-toast";
-
-const formSchema = z.object({
-  email: z.string().email({
-    message: "Please enter a valid email address.",
-  }),
-  password: z.string().min(6, {
-    message: "Password must be at least 6 characters.",
-  }),
-});
-
-export function LoginForm() {
-  const router = useRouter();
-  const { toast } = useToast();
-  const supabase = createClientComponentClient();
-
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
-  });
-
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: values.email,
-        password: values.password,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      toast({
-        title: "Success",
-        description: "You have been logged in successfully.",
-      });
-
-      router.refresh();
-      router.push("/dashboard");
-    } catch (error) {
-      console.error("Error:", error);
-      toast({
-        title: "Error",
-        description: "Invalid email or password. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <Input 
-                  type="email" 
-                  placeholder="Enter your email" 
-                  {...field} 
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <Input 
-                  type="password" 
-                  placeholder="Enter your password" 
-                  {...field} 
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button 
-          type="submit" 
-          className="w-full" 
-          disabled={form.formState.isSubmitting}
-        >
-          {form.formState.isSubmitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Signing in...
-            </>
-          ) : (
-            "Sign in"
-          )}
-        </Button>
-      </form>
-    </Form>
-  );
-}
-```
-
-### src/components/auth/signup-form.tsx
-
-```typescript
-"use client";
-
-import * as React from "react";
-import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/ui/use-toast";
-
-const formSchema = z.object({
-  email: z.string().email({
-    message: "Please enter a valid email address.",
-  }),
-  password: z.string().min(6, {
-    message: "Password must be at least 6 characters.",
-  }),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
-});
-
-export function SignUpForm() {
-  const router = useRouter();
-  const { toast } = useToast();
-  const supabase = createClientComponentClient();
-
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-      confirmPassword: "",
-    },
-  });
-
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    try {
-      const { error } = await supabase.auth.signUp({
-        email: values.email,
-        password: values.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      toast({
-        title: "Success",
-        description: "Please check your email to confirm your account.",
-      });
-
-      router.push("/login");
-    } catch (error) {
-      console.error("Error:", error);
-      toast({
-        title: "Error",
-        description: "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <Input 
-                  type="email" 
-                  placeholder="Enter your email" 
-                  {...field} 
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <Input 
-                  type="password" 
-                  placeholder="Create a password" 
-                  {...field} 
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Confirm Password</FormLabel>
-              <FormControl>
-                <Input 
-                  type="password" 
-                  placeholder="Confirm your password" 
-                  {...field} 
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button 
-          type="submit" 
-          className="w-full" 
-          disabled={form.formState.isSubmitting}
-        >
-          {form.formState.isSubmitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Creating account...
-            </>
-          ) : (
-            "Create account"
-          )}
-        </Button>
-      </form>
-    </Form>
-  );
-}
-```
-
-### src/components/daily-menu/CurrentMenuList.tsx
-
-```typescript
-// components/daily-menu/CurrentMenuList.tsx
-"use client";
-
-import { useState, useMemo } from "react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
-import { 
-  DragDropContext, 
-  Draggable, 
-  Droppable, 
-  DropResult 
-} from "@hello-pangea/dnd";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { 
-  Pencil, 
-  Trash2, 
-  Plus, 
-  GripVertical, 
-  X,
-} from "lucide-react";
-
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogFooter 
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+  Controller,
+  ControllerProps,
+  FieldPath,
+  FieldValues,
+  FormProvider,
+  useFormContext,
+} from "react-hook-form";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { useToast } from "@/components/ui/use-toast";
-import { 
-  AlertDialog, 
-  AlertDialogAction, 
-  AlertDialogCancel, 
-  AlertDialogContent, 
-  AlertDialogDescription, 
-  AlertDialogFooter, 
-  AlertDialogHeader, 
-  AlertDialogTitle 
-} from "@/components/ui/alert-dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { MenuHeader } from "./MenuHeader"; // Ensure this path is correct
-
-interface MenuItem {
-  id: number;
-  daily_menu_id: number;
-  name: string;
-  display_order: number;
-}
-
-interface DailyMenu {
-  id: number;
-  date: string;
-  price: number;
-  active: boolean;
-  created_at: string;
-  first_courses: MenuItem[];
-  second_courses: MenuItem[];
-}
-
-interface CurrentMenuListProps {
-  menus: DailyMenu[];
-  onMenuUpdate: () => void;
-}
-
-export function CurrentMenuList({ menus, onMenuUpdate }: CurrentMenuListProps) {
-  // Existing state
-  const [isEditing, setIsEditing] = useState(false);
-  const [menuToDelete, setMenuToDelete] = useState<number | null>(null);
-  const [editedMenu, setEditedMenu] = useState<DailyMenu | null>(null);
-  const [newFirstCourse, setNewFirstCourse] = useState("");
-  const [newSecondCourse, setNewSecondCourse] = useState("");
-
-  // New state for search and filter
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
-
-  const { toast } = useToast();
-  const supabase = createClientComponentClient();
-
-  /**
-   * **Filtering Logic**
-   * Filters the menus based on search term and status filter.
-   */
-  const filteredMenus = useMemo(() => {
-    return menus.filter(menu => {
-      // Search Filter (search by date)
-      const matchesSearch = searchTerm === "" || 
-        format(new Date(menu.date), 'PP', { locale: es })
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase());
-      
-      // Status Filter
-      const matchesStatus = statusFilter === "all" || 
-        (statusFilter === "active" ? menu.active : !menu.active);
-      
-      return matchesSearch && matchesStatus;
-    });
-  }, [menus, searchTerm, statusFilter]);
-
-  /**
-   * Handler to toggle the active status of a menu.
-   */
-  const handleStatusChange = async (menu: DailyMenu, checked: boolean) => {
-    try {
-      const { error } = await supabase
-        .from('daily_menus')
-        .update({ active: checked })
-        .eq('id', menu.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Status updated",
-        description: `Menu for ${format(new Date(menu.date), 'PP', { locale: es })} is now ${checked ? 'active' : 'inactive'}`,
-      });
-
-      onMenuUpdate();
-    } catch (error) {
-      console.error('Error updating status:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update menu status",
-        variant: "destructive",
-      });
-    }
-  };
-
-  /**
-   * Handler for editing a menu.
-   */
-  const handleEditMenu = (menu: DailyMenu) => {
-    setEditedMenu({
-      ...menu,
-      first_courses: [...menu.first_courses],
-      second_courses: [...menu.second_courses]
-    });
-    setIsEditing(true);
-  };
-
-  /**
-   * Function to handle drag and drop reordering of courses.
-   */
-  const handleDragEnd = async (result: DropResult) => {
-    if (!editedMenu) return;
-    
-    const { source, destination } = result;
-    if (!destination) return;
-
-    const courseType = source.droppableId.includes('first') ? 'first_courses' : 'second_courses';
-    
-    const newCourses = Array.from(editedMenu[courseType]);
-    const [removed] = newCourses.splice(source.index, 1);
-    newCourses.splice(destination.index, 0, removed);
-
-    // Update display orders
-    const updatedCourses = newCourses.map((course, index) => ({
-      ...course,
-      display_order: index + 1
-    }));
-
-    setEditedMenu({
-      ...editedMenu,
-      [courseType]: updatedCourses
-    });
-  };
-
-  /**
-   * Function to handle saving edited menu details.
-   */
-  const handleSaveMenu = async () => {
-    if (!editedMenu) return;
-
-    try {
-      // Update menu details
-      const { error: menuError } = await supabase
-        .from('daily_menus')
-        .update({
-          date: editedMenu.date,
-          price: editedMenu.price,
-          active: editedMenu.active
-        })
-        .eq('id', editedMenu.id);
-
-      if (menuError) throw menuError;
-
-      // Update first courses
-      for (const course of editedMenu.first_courses) {
-        const { error } = await supabase
-          .from('daily_menu_first_courses')
-          .update({
-            name: course.name,
-            display_order: course.display_order
-          })
-          .eq('id', course.id);
-
-        if (error) throw error;
-      }
-
-      // Update second courses
-      for (const course of editedMenu.second_courses) {
-        const { error } = await supabase
-          .from('daily_menu_second_courses')
-          .update({
-            name: course.name,
-            display_order: course.display_order
-          })
-          .eq('id', course.id);
-
-        if (error) throw error;
-      }
-
-      toast({
-        title: "Success",
-        description: "Menu updated successfully",
-      });
-
-      setIsEditing(false);
-      setEditedMenu(null);
-      onMenuUpdate();
-    } catch (error) {
-      console.error('Error updating menu:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update menu",
-        variant: "destructive",
-      });
-    }
-  };
-
-  /**
-   * Function to handle deleting a menu.
-   */
-  const handleDeleteMenu = async () => {
-    if (!menuToDelete) return;
-
-    try {
-      // Delete first courses
-      const { error: firstCoursesError } = await supabase
-        .from('daily_menu_first_courses')
-        .delete()
-        .eq('daily_menu_id', menuToDelete);
-
-      if (firstCoursesError) throw firstCoursesError;
-
-      // Delete second courses
-      const { error: secondCoursesError } = await supabase
-        .from('daily_menu_second_courses')
-        .delete()
-        .eq('daily_menu_id', menuToDelete);
-
-      if (secondCoursesError) throw secondCoursesError;
-
-      // Delete menu
-      const { error: menuError } = await supabase
-        .from('daily_menus')
-        .delete()
-        .eq('id', menuToDelete);
-
-      if (menuError) throw menuError;
-
-      toast({
-        title: "Success",
-        description: "Menu deleted successfully",
-      });
-
-      setMenuToDelete(null);
-      onMenuUpdate();
-    } catch (error) {
-      console.error('Error deleting menu:', error);
-      toast({
-        title: "Error",
-        description: "Failed to delete menu",
-        variant: "destructive",
-      });
-    }
-  };
-
-  /**
-   * Function to handle adding a new course.
-   */
-  const handleAddCourse = async (type: 'first' | 'second') => {
-    if (!editedMenu) return;
-
-    const newName = type === 'first' ? newFirstCourse : newSecondCourse;
-    if (!newName.trim()) return;
-
-    const courses = type === 'first' ? editedMenu.first_courses : editedMenu.second_courses;
-    const newOrder = courses.length + 1;
-
-    try {
-      const { data, error } = await supabase
-        .from(type === 'first' ? 'daily_menu_first_courses' : 'daily_menu_second_courses')
-        .insert({
-          daily_menu_id: editedMenu.id,
-          name: newName,
-          display_order: newOrder
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      const courseType = type === 'first' ? 'first_courses' : 'second_courses';
-      setEditedMenu({
-        ...editedMenu,
-        [courseType]: [...courses, data]
-      });
-
-      if (type === 'first') {
-        setNewFirstCourse('');
-      } else {
-        setNewSecondCourse('');
-      }
-
-      toast({
-        title: "Success",
-        description: "Course added successfully",
-      });
-    } catch (error) {
-      console.error('Error adding course:', error);
-      toast({
-        title: "Error",
-        description: "Failed to add course",
-        variant: "destructive",
-      });
-    }
-  };
-
-  /**
-   * Function to handle deleting a course.
-   */
-  const handleDeleteCourse = async (courseId: number, type: 'first' | 'second') => {
-    if (!editedMenu) return;
-
-    try {
-      const { error } = await supabase
-        .from(type === 'first' ? 'daily_menu_first_courses' : 'daily_menu_second_courses')
-        .delete()
-        .eq('id', courseId);
-
-      if (error) throw error;
-
-      const courseType = type === 'first' ? 'first_courses' : 'second_courses';
-      setEditedMenu({
-        ...editedMenu,
-        [courseType]: editedMenu[courseType].filter(course => course.id !== courseId)
-      });
-
-      toast({
-        title: "Success",
-        description: "Course deleted successfully",
-      });
-    } catch (error) {
-      console.error('Error deleting course:', error);
-      toast({
-        title: "Error",
-        description: "Failed to delete course",
-        variant: "destructive",
-      });
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* **Menu Header for Search and Filter** */}
-      <MenuHeader 
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
-        totalMenus={filteredMenus.length}
-      />
-
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Price</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredMenus.length === 0 ? (
-              <TableRow>
-                <TableCell 
-                  colSpan={4} 
-                  className="h-32 text-center text-muted-foreground"
-                >
-                  No menus found
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredMenus.map((menu) => (
-                <TableRow key={menu.id}>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium">
-                        {format(new Date(menu.date), 'PP', { locale: es })}
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        {menu.first_courses.length + menu.second_courses.length} courses
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>{menu.price.toFixed(2)}€</TableCell>
-                  <TableCell>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Badge 
-                            variant={menu.active ? "success" : "secondary"} // Using 'success' variant
-                            className="cursor-pointer"
-                            onClick={() => handleStatusChange(menu, !menu.active)}
-                          >
-                            <span className="flex items-center gap-2">
-                              <span className={`h-2 w-2 rounded-full ${
-                                menu.active ? "bg-green-500" : "bg-gray-400"
-                              }`} />
-                              {menu.active ? "Active" : "Inactive"}
-                            </span>
-                          </Badge>
-                        </TooltipTrigger>
-                        <TooltipContent>Click to toggle status</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEditMenu(menu)}
-                        aria-label={`Edit menu for ${format(new Date(menu.date), 'PP', { locale: es })}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setMenuToDelete(menu.id)}
-                        aria-label={`Delete menu for ${format(new Date(menu.date), 'PP', { locale: es })}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
-
-      {/* **Edit Menu Dialog** */}
-      <Dialog open={isEditing} onOpenChange={(open) => !open && setIsEditing(false)}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Edit Menu</DialogTitle>
-          </DialogHeader>
-          {editedMenu && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="date">Date</Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={editedMenu.date}
-                    onChange={(e) => setEditedMenu({
-                      ...editedMenu,
-                      date: e.target.value
-                    })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="price">Price</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    step="0.01"
-                    value={editedMenu.price}
-                    onChange={(e) => setEditedMenu({
-                      ...editedMenu,
-                      price: parseFloat(e.target.value)
-                    })}
-                  />
-                </div>
-              </div>
-
-              <DragDropContext onDragEnd={handleDragEnd}>
-                <div className="grid grid-cols-2 gap-8">
-                  {/* First Courses */}
-                  <div>
-                    <h3 className="font-semibold mb-4">First Courses</h3>
-                    <Droppable droppableId="first-courses">
-                      {(provided) => (
-                        <div
-                          {...provided.droppableProps}
-                          ref={provided.innerRef}
-                          className="space-y-2"
-                        >
-                          {editedMenu.first_courses.map((course, index) => (
-                            <Draggable
-                              key={course.id}
-                              draggableId={`first-${course.id}`}
-                              index={index}
-                            >
-                              {(provided) => (
-                                <div
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  className="flex items-center gap-2 bg-muted p-2 rounded-md"
-                                >
-                                  <div {...provided.dragHandleProps}>
-                                    <GripVertical className="h-4 w-4" />
-                                  </div>
-                                  <Input
-                                    value={course.name}
-                                    onChange={(e) => {
-                                      const newCourses = [...editedMenu.first_courses];
-                                      newCourses[index] = {
-                                        ...course,
-                                        name: e.target.value
-                                      };
-                                      setEditedMenu({
-                                        ...editedMenu,
-                                        first_courses: newCourses
-                                      });
-                                    }}
-                                  />
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleDeleteCourse(course.id, 'first')}
-                                    aria-label={`Delete course ${course.name}`}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              )}
-                            </Draggable>
-                          ))}
-                          {provided.placeholder}
-                        </div>
-                      )}
-                    </Droppable>
-                    <div className="flex gap-2 mt-4">
-                      <Input
-                        placeholder="New first course"
-                        value={newFirstCourse}
-                        onChange={(e) => setNewFirstCourse(e.target.value)}
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleAddCourse('first')}
-                        aria-label="Add new first course"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Second Courses */}
-                  <div>
-                    <h3 className="font-semibold mb-4">Second Courses</h3>
-                    <Droppable droppableId="second-courses">
-                      {(provided) => (
-                        <div
-                          {...provided.droppableProps}
-                          ref={provided.innerRef}
-                          className="space-y-2"
-                        >
-                          {editedMenu.second_courses.map((course, index) => (
-                            <Draggable
-                              key={course.id}
-                              draggableId={`second-${course.id}`}
-                              index={index}
-                            >
-                              {(provided) => (
-                                <div
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  className="flex items-center gap-2 bg-muted p-2 rounded-md"
-                                >
-                                  <div {...provided.dragHandleProps}>
-                                    <GripVertical className="h-4 w-4" />
-                                  </div>
-                                  <Input
-                                    value={course.name}
-                                    onChange={(e) => {
-                                      const newCourses = [...editedMenu.second_courses];
-                                      newCourses[index] = {
-                                        ...course,
-                                        name: e.target.value
-                                      };
-                                      setEditedMenu({
-                                        ...editedMenu,
-                                        second_courses: newCourses
-                                      });
-                                    }}
-                                  />
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleDeleteCourse(course.id, 'second')}
-                                    aria-label={`Delete course ${course.name}`}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              )}
-                            </Draggable>
-                          ))}
-                          {provided.placeholder}
-                        </div>
-                      )}
-                    </Droppable>
-                    <div className="flex gap-2 mt-4">
-                      <Input
-                        placeholder="New second course"
-                        value={newSecondCourse}
-                        onChange={(e) => setNewSecondCourse(e.target.value)}
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleAddCourse('second')}
-                        aria-label="Add new second course"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </DragDropContext>
-              
-              <div className="flex items-center justify-between pt-4">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={editedMenu.active}
-                    onCheckedChange={(checked) => setEditedMenu({
-                      ...editedMenu,
-                      active: checked
-                    })}
-                    aria-label="Toggle menu active status"
-                  />
-                  <Label>Active</Label>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsEditing(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleSaveMenu}>
-                    Save Changes
-                  </Button>
-                </DialogFooter>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* **Delete Menu Alert Dialog** */}
-      <AlertDialog open={!!menuToDelete} onOpenChange={() => setMenuToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the menu and all its courses.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteMenu}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  );
-}
-
-```
-
-### src/components/daily-menu/DailyMenuEditor.tsx
-
-```typescript
-// components/daily-menu/DailyMenuEditor.tsx
-'use client';
-
-import { useState, useEffect } from 'react';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  category: string;
-  is_available: boolean;
-}
-
-interface DailyMenuEditorProps {
-  item?: MenuItem | null;
-  onSave: (item: Partial<MenuItem>) => void;
-  onCancel: () => void;
-}
-
-const MENU_CATEGORIES = [
-  { value: 'arroces', label: 'Arroces' },
-  { value: 'carnes', label: 'Carnes' },
-  { value: 'del-huerto', label: 'Del Huerto' },
-  { value: 'del-mar', label: 'Del Mar' },
-  { value: 'para-compartir', label: 'Para Compartir' },
-  { value: 'para-peques', label: 'Para Peques' },
-  { value: 'para-veganos', label: 'Para Veganos' },
-  { value: 'postres', label: 'Postres' }
-] as const;
-
-export function DailyMenuEditor({ item, onSave, onCancel }: DailyMenuEditorProps) {
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    price: '',
-    category: 'arroces',
-    is_available: true,
-  });
-
-  useEffect(() => {
-    if (item) {
-      setFormData({
-        name: item.name,
-        description: item.description,
-        price: item.price.toString(),
-        category: item.category,
-        is_available: item.is_available,
-      });
-    }
-  }, [item]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave({
-      name: formData.name,
-      description: formData.description,
-      price: parseFloat(formData.price),
-      category: formData.category,
-      is_available: formData.is_available,
-    });
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <Label htmlFor="name">Item Name</Label>
-          <Input
-            id="name"
-            value={formData.name}
-            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-            required
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="category">Category</Label>
-          <Select
-            value={formData.category}
-            onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select category" />
-            </SelectTrigger>
-            <SelectContent>
-              {MENU_CATEGORIES.map((category) => (
-                <SelectItem key={category.value} value={category.value}>
-                  {category.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="price">Price (€)</Label>
-          <Input
-            id="price"
-            type="number"
-            step="0.01"
-            min="0"
-            value={formData.price}
-            onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
-            required
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="is_available" className="block mb-2">Availability</Label>
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="is_available"
-              checked={formData.is_available}
-              onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_available: checked }))}
-            />
-            <Label htmlFor="is_available">Available</Label>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="description">Description</Label>
-        <Textarea
-          id="description"
-          value={formData.description}
-          onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-          rows={3}
-        />
-      </div>
-
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" type="button" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit">
-          {item ? 'Update Item' : 'Add Item'}
-        </Button>
-      </div>
-    </form>
-  );
-}
-```
-
-### src/components/daily-menu/MenuDateSelection.tsx
-
-```typescript
-// components/daily-menu/DateSelection.tsx
-'use client';
-
-import { useState } from "react";
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
-  CardTitle, 
-  CardDescription 
-} from "@/components/ui/card";
-import { Calendar } from "@/components/ui/calendar";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { DateRange } from "react-day-picker";
-import { format, isAfter, isBefore, addDays } from "date-fns";
-import { es } from "date-fns/locale";
-import {
-  Calendar as CalendarIcon,
-  ArrowRight,
-  X,
-  AlertCircle,
-  Info,
-  Loader2,
-  ChevronLeft,
-  ChevronRight
-} from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-// Calendar Styles
-const calendarStyles = {
-  months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-  month: "space-y-4",
-  caption: "flex justify-center pt-1 relative items-center gap-2",
-  caption_label: "text-sm font-medium",
-  nav: "flex items-center gap-1",
-  nav_button: cn(
-    "inline-flex items-center justify-center rounded-md text-sm font-medium shadow-sm transition-colors",
-    "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 hover:bg-muted",
-    "disabled:pointer-events-none disabled:opacity-30"
-  ),
-  nav_button_previous: "absolute left-1",
-  nav_button_next: "absolute right-1",
-  table: "w-full border-collapse space-y-1",
-  head_row: "flex",
-  head_cell: cn(
-    "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem] capitalize"
-  ),
-  row: "flex w-full mt-2",
-  cell: cn(
-    "relative p-0 text-center text-sm focus-within:relative focus-within:z-20",
-    "first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md",
-    "[&:has([aria-selected].day-outside)]:bg-accent/50",
-    "[&:has([aria-selected].day-range-end)]:rounded-r-md"
-  ),
-  day: cn(
-    "inline-flex items-center justify-center rounded-md text-sm transition-colors",
-    "h-9 w-9 p-0 font-normal hover:bg-accent hover:text-accent-foreground",
-    "aria-selected:opacity-100 hover:bg-primary/10",
-    "disabled:pointer-events-none disabled:opacity-30",
-    "focus:bg-primary focus:text-primary-foreground focus:outline-none"
-  ),
-  day_range_start: "day-range-start",
-  day_range_end: "day-range-end",
-  day_selected: cn(
-    "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
-    "focus:bg-primary focus:text-primary-foreground"
-  ),
-  day_today: "bg-accent/50 text-accent-foreground",
-  day_outside: cn(
-    "day-outside text-muted-foreground opacity-50",
-    "aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30"
-  ),
-  day_disabled: "text-muted-foreground opacity-30",
-  day_range_middle: cn(
-    "aria-selected:bg-accent aria-selected:text-accent-foreground",
-    "hover:bg-accent/50 hover:text-accent-foreground"
-  ),
-  day_hidden: "invisible",
+// Context and Provider
+const Form = FormProvider;
+
+type FormFieldContextValue<
+  TFieldValues extends FieldValues = FieldValues,
+  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
+> = {
+  name: TName;
 };
 
-interface DateSelectionProps {
-  onDateSelect: (dates: { from: Date; to: Date } | null) => void;
-  onNext: () => void;
-  existingMenus?: { date: string; active: boolean }[];
-  isLoading?: boolean;
-}
+const FormFieldContext = React.createContext<FormFieldContextValue>(
+  {} as FormFieldContextValue
+);
 
-type SelectionMode = 'single' | 'range';
-
-type CalendarComponentProps = {
-  mode: "single" | "range";
+// Form Field
+const FormField = <
+  TFieldValues extends FieldValues = FieldValues,
+  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
+>({
+  ...props
+}: ControllerProps<TFieldValues, TName>) => {
+  return (
+    <FormFieldContext.Provider value={{ name: props.name }}>
+      <Controller {...props} />
+    </FormFieldContext.Provider>
+  );
 };
-export function DateSelection({ 
-  onDateSelect, 
-  onNext, 
-  existingMenus = [],
-  isLoading = false 
-}: DateSelectionProps) {
-  const [mode, setMode] = useState<SelectionMode>('single');
-  const [selected, setSelected] = useState<DateRange | undefined>();
-  const [error, setError] = useState<string | null>(null);
 
-  const existingMenuDates = existingMenus.map(menu => ({
-    date: new Date(menu.date),
-    active: menu.active
-  }));
+// Hook for accessing form field context
+const useFormField = () => {
+  const fieldContext = React.useContext(FormFieldContext);
+  const itemContext = React.useContext(FormItemContext);
+  const { getFieldState, formState } = useFormContext();
 
-  const handleSelect = (range: DateRange | undefined) => {
-    setSelected(range);
-    setError(null);
+  const fieldState = getFieldState(fieldContext.name, formState);
 
-    if (!range?.from) {
-      onDateSelect(null);
-      return;
-    }
+  if (!fieldContext) {
+    throw new Error("useFormField should be used within <FormField>");
+  }
 
-    const effectiveRange = {
-      from: range.from,
-      to: mode === 'single' ? range.from : range.to || range.from
-    };
-    
-    const conflictingDates = existingMenuDates.filter(menuDate => 
-      menuDate.date.toDateString() === effectiveRange.from.toDateString() ||
-      (effectiveRange.to && 
-       menuDate.date.toDateString() === effectiveRange.to.toDateString())
-    );
+  const { id } = itemContext;
 
-    if (conflictingDates.length > 0) {
-      setError('Selected dates already have menus scheduled');
-      return;
-    }
-
-    onDateSelect(effectiveRange);
+  return {
+    id,
+    name: fieldContext.name,
+    formItemId: `${id}-form-item`,
+    formDescriptionId: `${id}-form-item-description`,
+    formMessageId: `${id}-form-item-message`,
+    ...fieldState,
   };
+};
 
-  const handleQuickSelect = (date: Date, days: number = 0) => {
-    const from = date;
-    const to = days > 0 ? addDays(date, days) : date;
+// Form Item Context
+type FormItemContextValue = {
+  id: string;
+};
 
-    const conflictingDates = existingMenuDates.filter(menuDate => 
-      isAfter(menuDate.date, from) && isBefore(menuDate.date, to)
-    );
+const FormItemContext = React.createContext<FormItemContextValue>(
+  {} as FormItemContextValue
+);
 
-    if (conflictingDates.length > 0) {
-      setError('Some selected dates already have menus scheduled');
-      return;
-    }
-
-    const newRange = { from, to };
-    setSelected(newRange);
-    onDateSelect(newRange);
-  };
-
-  const handleClearSelection = () => {
-    setSelected(undefined);
-    setError(null);
-    onDateSelect(null);
-  };
-
-  const handleNext = () => {
-    if (!selected?.from) {
-      setError('Please select a date');
-      return;
-    }
-    onNext();
-  };
-
-  const CalendarComponent = ({ mode }: CalendarComponentProps) => {
-    if (mode === "single") {
-      return (
-        <Calendar
-          mode="single"
-          selected={selected?.from}
-          onSelect={(date: Date | undefined) => 
-            handleSelect(date ? { from: date } : undefined)
-          }
-          numberOfMonths={2}
-          disabled={{ before: new Date() }}
-          modifiers={{
-            booked: existingMenuDates.map(m => m.date),
-            active: existingMenuDates.filter(m => m.active).map(m => m.date),
-            today: new Date(),
-          }}
-          modifiersStyles={{
-            booked: { 
-              backgroundColor: '#cbd5e1',
-              color: '#1e293b',
-              transform: 'scale(0.95)',
-              transition: 'all 0.2s ease'
-            },
-            active: { 
-              backgroundColor: '#86efac',
-              color: '#065f46',
-              transform: 'scale(0.95)',
-              transition: 'all 0.2s ease'
-            },
-            today: {
-              fontWeight: 'bold',
-              border: '2px solid currentColor'
-            }
-          }}
-          locale={es}
-          showOutsideDays={false}
-          className="rounded-md border-none"
-          classNames={{
-            ...calendarStyles,
-            day_today: cn(
-              calendarStyles.day_today,
-              "font-semibold border-2 border-primary"
-            ),
-            day_selected: cn(
-              calendarStyles.day_selected,
-              "hover:bg-primary/90 transition-all duration-200"
-            )
-          }}
-          components={{
-            IconLeft: ({ ...props }) => (
-              <ChevronLeft className="h-4 w-4 stroke-2" {...props} />
-            ),
-            IconRight: ({ ...props }) => (
-              <ChevronRight className="h-4 w-4 stroke-2" {...props} />
-            ),
-            DayContent: ({ date }: { date: Date }) => (
-              <div
-                className={cn(
-                  "relative h-9 w-9 flex items-center justify-center",
-                  "hover:bg-accent/20 rounded-md transition-colors",
-                  existingMenuDates.some(m => 
-                    m.date.toDateString() === date.toDateString()
-                  ) && "cursor-not-allowed"
-                )}
-              >
-                {date.getDate()}
-                {existingMenuDates.some(m => 
-                  m.date.toDateString() === date.toDateString() && m.active
-                ) && (
-                  <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-emerald-500" />
-                )}
-              </div>
-            ),
-          }}
-        />
-      );
-    }
-
-    return (
-      <Calendar
-        mode="range"
-        selected={selected}
-        onSelect={handleSelect}
-        numberOfMonths={2}
-        disabled={{ before: new Date() }}
-        modifiers={{
-          booked: existingMenuDates.map(m => m.date),
-          active: existingMenuDates.filter(m => m.active).map(m => m.date),
-          today: new Date(),
-        }}
-        modifiersStyles={{
-          booked: { 
-            backgroundColor: '#cbd5e1',
-            color: '#1e293b',
-            transform: 'scale(0.95)',
-            transition: 'all 0.2s ease'
-          },
-          active: { 
-            backgroundColor: '#86efac',
-            color: '#065f46',
-            transform: 'scale(0.95)',
-            transition: 'all 0.2s ease'
-          },
-          today: {
-            fontWeight: 'bold',
-            border: '2px solid currentColor'
-          }
-        }}
-        locale={es}
-        showOutsideDays={false}
-        className="rounded-md border-none"
-        classNames={{
-          ...calendarStyles,
-          day_today: cn(
-            calendarStyles.day_today,
-            "font-semibold border-2 border-primary"
-          ),
-          day_selected: cn(
-            calendarStyles.day_selected,
-            "hover:bg-primary/90 transition-all duration-200"
-          )
-        }}
-        components={{
-          IconLeft: ({ ...props }) => (
-            <ChevronLeft className="h-4 w-4 stroke-2" {...props} />
-          ),
-          IconRight: ({ ...props }) => (
-            <ChevronRight className="h-4 w-4 stroke-2" {...props} />
-          ),
-          DayContent: ({ date }: { date: Date }) => (
-            <div
-              className={cn(
-                "relative h-9 w-9 flex items-center justify-center",
-                "hover:bg-accent/20 rounded-md transition-colors",
-                existingMenuDates.some(m => 
-                  m.date.toDateString() === date.toDateString()
-                ) && "cursor-not-allowed"
-              )}
-            >
-              {date.getDate()}
-              {existingMenuDates.some(m => 
-                m.date.toDateString() === date.toDateString() && m.active
-              ) && (
-                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-emerald-500" />
-              )}
-            </div>
-          ),
-        }}
-      />
-    );
-  };
+// Form Item Component
+const FormItem = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => {
+  const id = React.useId();
 
   return (
-    <div className="space-y-6">
-      <Card className="border-2">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Select Date(s)</CardTitle>
-              <CardDescription>
-                Choose when you want to schedule the menu
-              </CardDescription>
-            </div>
-            <Badge
-              variant={mode === "single" ? "default" : "secondary"}
-              className="px-4 py-1 text-sm cursor-pointer hover:bg-primary/90"
-              onClick={() => {
-                setMode(mode === "single" ? "range" : "single");
-                handleClearSelection();
-              }}
-            >
-              {mode === "single" ? "Single Day" : "Date Range"}
-            </Badge>
-          </div>
+    <FormItemContext.Provider value={{ id }}>
+      <div ref={ref} className={cn("space-y-2", className)} {...props} />
+    </FormItemContext.Provider>
+  );
+});
+FormItem.displayName = "FormItem";
 
-          <div className="flex flex-wrap gap-2 mt-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleQuickSelect(new Date())}
-              disabled={isLoading}
-            >
-              Today
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleQuickSelect(addDays(new Date(), 1))}
-              disabled={isLoading}
-            >
-              Tomorrow
-            </Button>
-            {mode === "range" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleQuickSelect(new Date(), 6)}
-                disabled={isLoading}
-              >
-                Next 7 Days
-              </Button>
-            )}
-          </div>
-        </CardHeader>
+// Form Label Component
+const FormLabel = React.forwardRef<
+  React.ElementRef<typeof LabelPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>
+>(({ className, ...props }, ref) => {
+  const { error, formItemId } = useFormField();
 
-        <CardContent>
-          <div className="space-y-6">
-            {selected?.from && (
-              <div className="flex items-center justify-between bg-muted/50 p-3 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">
-                    {format(selected.from, "PPP", { locale: es })}
-                    {selected.to && mode === "range" && (
-                      <>
-                        <ArrowRight className="inline mx-2 h-4 w-4" />
-                        {format(selected.to, "PPP", { locale: es })}
-                      </>
-                    )}
-                  </span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleClearSelection}
-                  className="h-8 w-8 p-0"
-                  disabled={isLoading}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
+  return (
+    <Label
+      ref={ref}
+      className={cn(error && "text-destructive", className)}
+      htmlFor={formItemId}
+      {...props}
+    />
+  );
+});
+FormLabel.displayName = "FormLabel";
 
-            <div className="border rounded-lg p-6 bg-card">
-              <div className="flex items-start gap-4 mb-6">
-                <Info className="h-4 w-4 text-muted-foreground mt-1 flex-shrink-0" />
-                <p className="text-sm text-muted-foreground">
-                  Select {mode === "single" ? "a date" : "a date range"} to
-                  schedule the menu. Green dates indicate active menus, and gray
-                  dates indicate inactive menus.
-                </p>
-              </div>
+// Form Control Component
+const FormControl = React.forwardRef<
+  React.ElementRef<typeof Slot>,
+  React.ComponentPropsWithoutRef<typeof Slot>
+>(({ ...props }, ref) => {
+  const { error, formItemId, formDescriptionId, formMessageId } = useFormField();
 
-              <div className="relative">
-                {isLoading && (
-                  <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-50 rounded-lg">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                  </div>
-                )}
+  return (
+    <Slot
+      ref={ref}
+      id={formItemId}
+      aria-describedby={
+        !error
+          ? `${formDescriptionId}`
+          : `${formDescriptionId} ${formMessageId}`
+      }
+      aria-invalid={!!error}
+      {...props}
+    />
+  );
+});
+FormControl.displayName = "FormControl";
 
-                <CalendarComponent mode={mode} />
+// Form Description Component
+const FormDescription = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => {
+  const { formDescriptionId } = useFormField();
 
-                <div className="flex flex-wrap items-center gap-4 text-sm mt-6 pt-4 border-t">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-[#86efac]" />
-                    <span className="text-muted-foreground">Active Menu</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-[#cbd5e1]" />
-                    <span className="text-muted-foreground">Inactive Menu</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-primary/20" />
-                    <span className="text-muted-foreground">Selected</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+  return (
+    <p
+      ref={ref}
+      id={formDescriptionId}
+      className={cn("text-[0.8rem] text-muted-foreground", className)}
+      {...props}
+    />
+  );
+});
+FormDescription.displayName = "FormDescription";
 
-            {error && (
-              <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-lg">
-                <AlertCircle className="h-4 w-4" />
-                {error}
-              </div>
-            )}
+// Form Message Component
+const FormMessage = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, children, ...props }, ref) => {
+  const { error, formMessageId } = useFormField();
+  const body = error ? String(error?.message) : children;
 
-            <div className="flex justify-end gap-4 pt-2">
-              {selected?.from && (
-                <Button
-                  variant="outline"
-                  onClick={handleClearSelection}
-                  disabled={isLoading}
-                >
-                  Clear Selection
-                </Button>
-              )}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div>
-                      <Button
-                        onClick={handleNext}
-                        disabled={!selected?.from || isLoading}
-                        className="min-w-[120px]"
-                      >
-                        {isLoading ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Processing...
-                          </>
-                        ) : !selected?.from ? (
-                          "Select Date"
-                        ) : (
-                          <>
-                            Next Step
-                            <ArrowRight className="ml-2 h-4 w-4" />
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {!selected?.from
-                      ? "Please select a date first"
-                      : "Proceed to menu selection"}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+  if (!body) {
+    return null;
+  }
+
+  return (
+    <p
+      ref={ref}
+      id={formMessageId}
+      className={cn("text-[0.8rem] font-medium text-destructive", className)}
+      {...props}
+    >
+      {body}
+    </p>
+  );
+});
+FormMessage.displayName = "FormMessage";
+
+export {
+  useFormField,
+  Form,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormDescription,
+  FormMessage,
+  FormField,
+};
+```
+
+### src/components/core/layout.tsx
+
+```typescript
+"use client";
+
+import * as React from "react";
+import { cn } from "@/lib/utils";
+
+// PageContainer Component
+export function PageContainer({ 
+  children,
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn(
+        "container mx-auto px-4 sm:px-6 lg:px-8",
+        className
+      )}
+      {...props}
+    >
+      {children}
     </div>
   );
 }
-```
 
-### src/components/daily-menu/MenuHeader.tsx
-
-```typescript
-// components/daily-menu/MenuHeader.tsx
-import { Search } from "lucide-react";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-
-interface MenuHeaderProps {
-  searchTerm: string;
-  onSearchChange: (value: string) => void;
-  statusFilter: "all" | "active" | "inactive";
-  onStatusFilterChange: (value: "all" | "active" | "inactive") => void;
-  totalMenus: number;
+// PageHeader Component
+interface PageHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+  heading: string;
+  text?: string;
+  children?: React.ReactNode;
 }
 
-export function MenuHeader({ 
-  searchTerm, 
-  onSearchChange, 
-  statusFilter, 
-  onStatusFilterChange,
-  totalMenus 
-}: MenuHeaderProps) {
+export function PageHeader({
+  heading,
+  text,
+  children,
+  className,
+  ...props
+}: PageHeaderProps) {
   return (
-    <div className="mb-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight">Current Menus</h2>
-          <p className="text-sm text-muted-foreground">
-            {totalMenus} {totalMenus === 1 ? 'menu' : 'menus'} available
+    <div
+      className={cn(
+        "flex items-center justify-between pb-4 md:pb-6",
+        className
+      )}
+      {...props}
+    >
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+          {heading}
+        </h1>
+        {text && (
+          <p className="text-muted-foreground">
+            {text}
           </p>
-        </div>
+        )}
       </div>
+      {children}
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="relative col-span-3">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-          <Input
-            placeholder="Search by date..."
-            value={searchTerm}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-8 w-full"
-          />
-        </div>
-        
-        <Select
-          value={statusFilter}
-          onValueChange={(value: "all" | "active" | "inactive") => 
-            onStatusFilterChange(value)
-          }
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Menus</SelectItem>
-            <SelectItem value="active">Active Menus</SelectItem>
-            <SelectItem value="inactive">Inactive Menus</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+// Section Component
+interface SectionProps extends React.HTMLAttributes<HTMLDivElement> {
+  title?: string;
+  description?: string;
+}
 
-      {searchTerm && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>
-            Found {totalMenus} {totalMenus === 1 ? 'result' : 'results'} for &quot;<span className="font-medium">{searchTerm}</span>&quot;
-          </span>
-          {totalMenus > 0 && statusFilter !== 'all' && (
-            <span>with status &quot;<span className="font-medium">{statusFilter}</span>&quot;</span>
+export function Section({
+  title,
+  description,
+  children,
+  className,
+  ...props
+}: SectionProps) {
+  return (
+    <div
+      className={cn("grid gap-6", className)}
+      {...props}
+    >
+      {(title || description) && (
+        <div className="space-y-1">
+          {title && (
+            <h2 className="text-lg font-semibold tracking-tight">
+              {title}
+            </h2>
+          )}
+          {description && (
+            <p className="text-sm text-muted-foreground">
+              {description}
+            </p>
           )}
         </div>
       )}
+      {children}
     </div>
   );
 }
-```
 
-### src/components/daily-menu/MenuList.tsx
-
-```typescript
-'use client';
-
-import { useState } from 'react';
-import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Switch } from "@/components/ui/switch";
-import { Pencil, Trash2 } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  category: string;
-  is_available: boolean;
+// Separator Component
+interface SeparatorProps extends React.HTMLAttributes<HTMLDivElement> {
+  orientation?: "horizontal" | "vertical";
 }
 
-interface MenuListProps {
-  items: MenuItem[];
-  onEdit: (item: MenuItem) => void;
-  onDelete: (id: string) => void;
-}
-
-export function MenuList({ items, onEdit, onDelete }: MenuListProps) {
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-
-  const filteredItems = selectedCategory === 'all'
-    ? items
-    : items.filter(item => item.category === selectedCategory);
-
-  const getCategoryLabel = (value: string) => {
-    return MENU_CATEGORIES.find(cat => cat.value === value)?.label || value;
-  };
-
-  const MENU_CATEGORIES = [
-    { value: 'all', label: 'All Categories' },
-    { value: 'arroces', label: 'Arroces' },
-    { value: 'carnes', label: 'Carnes' },
-    { value: 'del-huerto', label: 'Del Huerto' },
-    { value: 'del-mar', label: 'Del Mar' },
-    { value: 'para-compartir', label: 'Para Compartir' },
-    { value: 'para-peques', label: 'Para Peques' },
-    { value: 'para-veganos', label: 'Para Veganos' },
-    { value: 'postres', label: 'Postres' }
-  ] as const;
-
-  const handleConfirmDelete = () => {
-    if (deleteId) {
-      onDelete(deleteId);
-      setDeleteId(null);
-    }
-  };
-
+export function Separator({
+  orientation = "horizontal",
+  className,
+  ...props
+}: SeparatorProps) {
   return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <Select
-          value={selectedCategory}
-          onValueChange={setSelectedCategory}
-        >
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Filter by category" />
-          </SelectTrigger>
-          <SelectContent>
-            {MENU_CATEGORIES.map((category) => (
-              <SelectItem key={category.value} value={category.value}>
-                {category.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+    <div
+      className={cn(
+        "shrink-0 bg-border",
+        orientation === "horizontal" ? "h-[1px] w-full" : "h-full w-[1px]",
+        className
+      )}
+      {...props}
+    />
+  );
+}
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Price</TableHead>
-              <TableHead>Available</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredItems.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
-                  No menu items found
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredItems.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell>{getCategoryLabel(item.category)}</TableCell>
-                  <TableCell className="max-w-xs truncate">
-                    {item.description || '-'}
-                  </TableCell>
-                  <TableCell>{item.price.toFixed(2)}€</TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={item.is_available}
-                      disabled
-                      className="cursor-not-allowed"
-                    />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onEdit(item)}
-                        className="hover:bg-primary/5"
-                      >
-                        <Pencil className="h-4 w-4" />
-                        <span className="sr-only">Edit</span>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeleteId(item.id)}
-                        className="hover:bg-destructive/5 hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Delete</span>
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+// Grid Component
+interface GridProps extends React.HTMLAttributes<HTMLDivElement> {
+  columns?: number;
+  gap?: number;
+}
 
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the menu item.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+export function Grid({
+  columns = 1,
+  gap = 6,
+  className,
+  children,
+  ...props
+}: GridProps) {
+  return (
+    <div
+      className={cn(
+        "grid",
+        `grid-cols-${columns}`,
+        `gap-${gap}`,
+        className
+      )}
+      {...props}
+    >
+      {children}
     </div>
   );
 }
+
+// Card Components
+export const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      "rounded-lg border bg-card text-card-foreground shadow-sm",
+      className
+    )}
+    {...props}
+  />
+));
+Card.displayName = "Card";
+
+export const CardHeader = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    {...props}
+  />
+));
+CardHeader.displayName = "CardHeader";
+
+export const CardContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("p-6 pt-0", className)}
+    {...props}
+  />
+));
+CardContent.displayName = "CardContent";
+
+export const CardFooter = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex items-center p-6 pt-0", className)}
+    {...props}
+  />
+));
+CardFooter.displayName = "CardFooter";
 ```
 
-### src/components/daily-menu/MenuTemplateSelection.tsx
-
-```typescript
-'use client';
-
-import { useEffect, useState, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Plus, Copy, Pencil } from "lucide-react";
-
-interface BaseMenuItem {
-  id: number;
-  daily_menu_id: number;
-  name: string;
-  display_order: number;
-}
-
-interface TemplateMenuItem {
-  id: number;
-  name: string;
-  display_order: number;
-}
-
-interface MenuTemplate {
-  id: string;
-  name: string;
-  first_courses: TemplateMenuItem[];
-  second_courses: TemplateMenuItem[];
-  is_default?: boolean;
-  created_at?: string;
-}
-
-interface MenuTemplateSelectionProps {
-  selectedDates: { from: Date; to: Date } | null;
-  onNext: () => void;
-  onEdit: (template: MenuTemplate) => void;
-}
-
-export function MenuTemplateSelection({ selectedDates, onNext, onEdit }: MenuTemplateSelectionProps) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [templates, setTemplates] = useState<MenuTemplate[]>([]);
-  const [defaultTemplate, setDefaultTemplate] = useState<MenuTemplate | null>(null);
-  const { toast } = useToast();
-  const supabase = createClientComponentClient();
-
-  const convertToTemplateItem = (item: BaseMenuItem): TemplateMenuItem => ({
-    id: item.id,
-    name: item.name,
-    display_order: item.display_order
-  });
-
-  const loadTemplates = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      console.log('Loading templates for dates:', selectedDates);
-
-      const { data: latestMenu, error: menuError } = await supabase
-        .from('daily_menus')
-        .select('id, date')
-        .order('date', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (menuError) throw menuError;
-
-      if (latestMenu) {
-        const [firstCoursesResponse, secondCoursesResponse] = await Promise.all([
-          supabase
-            .from('daily_menu_first_courses')
-            .select('*')
-            .eq('daily_menu_id', latestMenu.id)
-            .order('display_order'),
-          supabase
-            .from('daily_menu_second_courses')
-            .select('*')
-            .eq('daily_menu_id', latestMenu.id)
-            .order('display_order')
-        ]);
-
-        if (firstCoursesResponse.error) throw firstCoursesResponse.error;
-        if (secondCoursesResponse.error) throw secondCoursesResponse.error;
-
-        const defaultTemplate: MenuTemplate = {
-          id: 'default',
-          name: `Current Menu Template (${new Date(latestMenu.date).toLocaleDateString()})`,
-          first_courses: (firstCoursesResponse.data || []).map(convertToTemplateItem),
-          second_courses: (secondCoursesResponse.data || []).map(convertToTemplateItem),
-          is_default: true,
-          created_at: latestMenu.date
-        };
-
-        setDefaultTemplate(defaultTemplate);
-        setTemplates([defaultTemplate]);
-      }
-
-    } catch (error) {
-      console.error('Error loading templates:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load menu templates",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [supabase, toast, selectedDates]);
-
-  useEffect(() => {
-    loadTemplates();
-  }, [loadTemplates]);
-
-  const handleUseTemplate = (template: MenuTemplate) => {
-    console.log('Using template for dates:', selectedDates);
-    onEdit(template);
-    onNext();
-  };
-
-  const handleCreateNew = () => {
-    const emptyTemplate: MenuTemplate = {
-      id: 'new',
-      name: `New Template (${selectedDates?.from.toLocaleDateString()})`,
-      first_courses: [],
-      second_courses: []
-    };
-    onEdit(emptyTemplate);
-    onNext();
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>Select Menu Template</CardTitle>
-            <p className="text-sm text-muted-foreground mt-2">
-              {selectedDates && (
-                <>
-                  Scheduling for: {selectedDates.from.toLocaleDateString()}
-                  {selectedDates.to !== selectedDates.from && 
-                    ` - ${selectedDates.to.toLocaleDateString()}`
-                  }
-                </>
-              )}
-            </p>
-          </div>
-          <Button onClick={handleCreateNew} className="flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Create New
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-4">
-          {defaultTemplate && (
-            <Card className="border-2 border-primary/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  {defaultTemplate.name}
-                  <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
-                    Default
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid md:grid-cols-2 gap-8">
-                  <div>
-                    <h3 className="font-semibold mb-2">First Courses</h3>
-                    <ul className="space-y-1">
-                      {defaultTemplate.first_courses.map((course) => (
-                        <li key={course.id} className="text-sm">
-                          {course.name}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold mb-2">Second Courses</h3>
-                    <ul className="space-y-1">
-                      {defaultTemplate.second_courses.map((course) => (
-                        <li key={course.id} className="text-sm">
-                          {course.name}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 mt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => onEdit(defaultTemplate)}
-                    className="flex items-center gap-2"
-                  >
-                    <Pencil className="h-4 w-4" />
-                    Edit
-                  </Button>
-                  <Button
-                    onClick={() => handleUseTemplate(defaultTemplate)}
-                    className="flex items-center gap-2"
-                  >
-                    <Copy className="h-4 w-4" />
-                    Use Template
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {templates.filter(t => !t.is_default).map((template) => (
-            <Card key={template.id}>
-              {/* Similar structure to default template */}
-            </Card>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-```
-
-### src/components/data/data-entry.tsx
-
-```typescript
-import type { DbDataEntryWithUser } from '@/lib/supabase/client';
-
-interface DataEntryListProps {
-  entries: DbDataEntryWithUser[];
-}
-
-export function DataEntryList({ entries }: DataEntryListProps) {
-  return (
-    <div className="space-y-4">
-      {entries.map(entry => (
-        <div key={entry.id} className="p-4 border rounded-lg">
-          <h3 className="text-lg font-semibold">{entry.title}</h3>
-          <p className="mt-2 text-gray-600">{entry.content}</p>
-          <div className="mt-2 text-sm text-gray-500">
-            Created by: {entry.user.name} ({entry.user.email})
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-```
-
-### src/components/data/data-management.tsx
+### src/components/core/ui.tsx
 
 ```typescript
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Button } from "@/components/ui/button";
-import { DataTable } from "@/components/data/data-table";
-import { EditForm } from "@/components/data/edit-form";
-import { useToast } from "../ui/use-toast";
-import { Plus } from "lucide-react";
+import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-type DataEntry = {
-  id: string;
-  name: string;
-  random_number: number;
-  created_at: string;
-  updated_at: string;
-  updated_by: string;
-};
+// Button Component
+const buttonVariants = cva(
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default:
+          "bg-primary text-primary-foreground shadow hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
+        outline:
+          "border border-input bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-9 px-4 py-2",
+        sm: "h-8 rounded-md px-3 text-xs",
+        lg: "h-10 rounded-md px-8",
+        icon: "h-9 w-9",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+);
 
-interface DataManagementProps {
-  initialData: DataEntry[];
-}
-
-export function DataManagement({ initialData }: DataManagementProps) {
-  const [data, setData] = useState<DataEntry[]>(initialData);
-  const [isLoading, setIsLoading] = useState(false);
-  const [editingEntry, setEditingEntry] = useState<DataEntry | null>(null);
-  const [isEditFormOpen, setIsEditFormOpen] = useState(false);
-  
-  const router = useRouter();
-  const { toast } = useToast();
-  const supabase = createClientComponentClient();
-
-  const handleEdit = (entry: DataEntry) => {
-    setEditingEntry(entry);
-    setIsEditFormOpen(true);
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
+  VariantProps<typeof buttonVariants> & {
+    isLoading?: boolean;
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      setIsLoading(true);
-      const { error } = await supabase
-        .from("data_entries")
-        .delete()
-        .eq("id", id);
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, isLoading, children, ...props }, ref) => (
+    <button
+      className={cn(buttonVariants({ variant, size, className }))}
+      ref={ref}
+      disabled={isLoading || props.disabled}
+      {...props}
+    >
+      {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+      {children}
+    </button>
+  )
+);
+Button.displayName = "Button";
 
-      if (error) throw error;
+// Input Component
+export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
-      setData((prev) => prev.filter((entry) => entry.id !== id));
-      toast({
-        title: "Entry deleted",
-        description: "The entry has been successfully deleted.",
-      });
-      router.refresh();
-    } catch (error) {
-      console.error("Error deleting entry:", error);
-      toast({
-        title: "Error",
-        description: "Failed to delete the entry. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, ...props }, ref) => (
+    <input
+      type={type}
+      className={cn(
+        "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      ref={ref}
+      {...props}
+    />
+  )
+);
+Input.displayName = "Input";
 
-  const handleSubmit = async (formData: { name: string; random_number: number }) => {
-    try {
-      setIsLoading(true);
-      if (editingEntry) {
-        // Update existing entry
-        const { error } = await supabase
-          .from("data_entries")
-          .update({
-            ...formData,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", editingEntry.id);
+// Badge Component
+const badgeVariants = cva(
+  "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  {
+    variants: {
+      variant: {
+        default:
+          "border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80",
+        secondary:
+          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        destructive:
+          "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
+        outline: "text-foreground",
+        success:
+          "border-transparent bg-green-100 text-green-800 shadow hover:bg-green-100/80",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+);
 
-        if (error) throw error;
+type BadgeProps = React.HTMLAttributes<HTMLDivElement> &
+  VariantProps<typeof badgeVariants>;
 
-        toast({
-          title: "Entry updated",
-          description: "The entry has been successfully updated.",
-        });
-      } else {
-        // Create new entry
-        const { error } = await supabase
-          .from("data_entries")
-          .insert([
-            {
-              ...formData,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-          ]);
-
-        if (error) throw error;
-
-        toast({
-          title: "Entry created",
-          description: "The new entry has been successfully created.",
-        });
-      }
-      
-      router.refresh();
-    } catch (error) {
-      console.error("Error saving entry:", error);
-      toast({
-        title: "Error",
-        description: "Failed to save the entry. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-      setIsEditFormOpen(false);
-      setEditingEntry(null);
-    }
-  };
-
+export function Badge({ className, variant, ...props }: BadgeProps) {
   return (
-    <>
-      <div className="mb-4 flex justify-end">
-        <Button
-          onClick={() => {
-            setEditingEntry(null);
-            setIsEditFormOpen(true);
-          }}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add New Entry
-        </Button>
-      </div>
-
-      <DataTable
-        data={data}
-        isLoading={isLoading}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-      />
-
-      <EditForm
-        isOpen={isEditFormOpen}
-        onClose={() => {
-          setIsEditFormOpen(false);
-          setEditingEntry(null);
-        }}
-        onSubmit={handleSubmit}
-        initialData={editingEntry || undefined}
-        isLoading={isLoading}
-      />
-    </>
+    <div className={cn(badgeVariants({ variant }), className)} {...props} />
   );
 }
-```
 
-### src/components/data/data-table.tsx
+// Loading Component
+type LoadingSpinnerProps = React.HTMLAttributes<HTMLDivElement>;
 
-```typescript
-import React from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Loader2 } from "lucide-react";
-import { TableActions } from "./table-actions";
-
-interface DataEntry {
-  id: string;
-  name: string;
-  random_number: number;
-  created_at: string;
-  updated_at: string;
-  updated_by: string;
-}
-
-interface DataTableProps {
-  data: DataEntry[];
-  isLoading: boolean;
-  onEdit: (entry: DataEntry) => void;
-  onDelete: (id: string) => void;
-}
-
-export function DataTable({ data, isLoading, onEdit, onDelete }: DataTableProps) {
-  if (isLoading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
+export function LoadingSpinner({ className, ...props }: LoadingSpinnerProps) {
   return (
-    <div className="rounded-md border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Random Number</TableHead>
-            <TableHead>Last Updated</TableHead>
-            <TableHead className="w-24">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.map((entry) => (
-            <TableRow key={entry.id}>
-              <TableCell>{entry.name}</TableCell>
-              <TableCell>{entry.random_number}</TableCell>
-              <TableCell>
-                {new Date(entry.updated_at).toLocaleDateString()}
-              </TableCell>
-              <TableCell>
-                <TableActions 
-                  onEdit={() => onEdit(entry)}
-                  onDelete={() => onDelete(entry.id)}
-                />
-              </TableCell>
-            </TableRow>
-          ))}
-          {data.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={4} className="h-24 text-center">
-                No data available
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+    <div
+      className={cn(
+        "flex h-[100px] w-full items-center justify-center",
+        className
+      )}
+      {...props}
+    >
+      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
     </div>
   );
 }
+
+// Empty State Component
+type EmptyStateProps = React.HTMLAttributes<HTMLDivElement> & {
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+  icon?: React.ReactNode;
+};
+
+export function EmptyState({
+  title,
+  description,
+  action,
+  icon,
+  className,
+  ...props
+}: EmptyStateProps) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-[400px] flex-col items-center justify-center rounded-md border border-dashed p-8 text-center animate-in fade-in-50",
+        className
+      )}
+      {...props}
+    >
+      {icon && <div className="mx-auto mb-4 h-12 w-12 text-muted-foreground">{icon}</div>}
+      <h3 className="mb-1 text-lg font-semibold">{title}</h3>
+      <p className="mb-4 text-sm text-muted-foreground">{description}</p>
+      {action && <div className="mt-4">{action}</div>}
+    </div>
+  );
+}
+
+// Textarea Component
+export type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement>;
+
+export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
+  ({ className, ...props }, ref) => (
+    <textarea
+      className={cn(
+        "flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      ref={ref}
+      {...props}
+    />
+  )
+);
+Textarea.displayName = "Textarea";
+
+// Label Component
+export type LabelProps = React.LabelHTMLAttributes<HTMLLabelElement>;
+
+export const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
+  ({ className, ...props }, ref) => (
+    <label
+      ref={ref}
+      className={cn(
+        "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+        className
+      )}
+      {...props}
+    />
+  )
+);
+Label.displayName = "Label";
+
+// Alert Component
+type AlertProps = React.HTMLAttributes<HTMLDivElement> & {
+  variant?: "default" | "destructive";
+};
+
+export function Alert({
+  className,
+  variant = "default",
+  ...props
+}: AlertProps) {
+  return (
+    <div
+      role="alert"
+      className={cn(
+        "relative w-full rounded-lg border p-4",
+        variant === "default" && "bg-background text-foreground",
+        variant === "destructive" &&
+          "border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive",
+        className
+      )}
+      {...props}
+    />
+  );
+}
+
+export const AlertTitle = React.forwardRef<
+  HTMLHeadingElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h5
+    ref={ref}
+    className={cn("mb-1 font-medium leading-none tracking-tight", className)}
+    {...props}
+  />
+));
+AlertTitle.displayName = "AlertTitle";
+
+export const AlertDescription = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("text-sm [&_p]:leading-relaxed", className)}
+    {...props}
+  />
+));
+AlertDescription.displayName = "AlertDescription";
+
+export {
+  buttonVariants,
+  badgeVariants,
+};
 ```
 
-### src/components/data/edit-form.tsx
+### src/components/features/images.tsx
 
 ```typescript
-import React from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
+"use client";
+
+import { useState, useCallback } from "react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { Loader2, UploadCloud, X } from "lucide-react";
+import Image from "next/image";
+import { useDropzone } from "react-dropzone";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Loader2 } from "lucide-react";
-
-const formSchema = z.object({
-  name: z.string().min(2, {
-    message: "Name must be at least 2 characters.",
-  }),
-  random_number: z.coerce
-    .number()
-    .min(0, {
-      message: "Number must be positive.",
-    })
-    .max(1000000, {
-      message: "Number must be less than 1,000,000.",
-    }),
-});
-
-type FormData = z.infer<typeof formSchema>;
-
-interface EditFormProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (data: FormData) => Promise<void>;
-  initialData?: {
-    name: string;
-    random_number: number;
-  };
-  isLoading?: boolean;
-}
-
-export function EditForm({
-  isOpen,
-  onClose,
-  onSubmit,
-  initialData,
-  isLoading = false,
-}: EditFormProps) {
-  const form = useForm<FormData>({
-    resolver: zodResolver(formSchema),
-    defaultValues: initialData || {
-      name: "",
-      random_number: 0,
-    },
-  });
-
-  const handleSubmit = async (data: FormData) => {
-    try {
-      await onSubmit(data);
-      form.reset();
-      onClose();
-    } catch (error) {
-      console.error("Error submitting form:", error);
-    }
-  };
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {initialData ? "Edit Entry" : "Create New Entry"}
-          </DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name</FormLabel>
-                  <FormControl>
-                    <Input {...field} placeholder="Enter name" disabled={isLoading} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="random_number"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Random Number</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      {...field} 
-                      placeholder="Enter number"
-                      disabled={isLoading}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                disabled={isLoading}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  "Save Changes"
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-```
-
-### src/components/data/table-actions.tsx
-
-```typescript
-import React from "react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-
-interface TableActionsProps {
-  onEdit: () => void;
-  onDelete: () => void;
-}
-
-export function TableActions({ onEdit, onDelete }: TableActionsProps) {
-  const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
-
-  return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="h-8 w-8 p-0">
-            <span className="sr-only">Open menu</span>
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={onEdit}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => setShowDeleteDialog(true)}
-            className="text-destructive focus:text-destructive"
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the data
-              entry from the database.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                onDelete();
-                setShowDeleteDialog(false);
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
-  );
-}
-```
-
-### src/components/image/ImageGallery.tsx
-
-```typescript
-'use client';
-
-import { useEffect, useState } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Loader2, Trash2 } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
-import { MenuCategory } from './types';
-
-interface ImageGalleryProps {
-  category: MenuCategory;
-  refreshTrigger: number;
-}
-
-interface ImageItem {
-  name: string;
-  url: string;
-  updatedAt: string;
-}
-
-export function ImageGallery({ category, refreshTrigger }: ImageGalleryProps) {
-  const [images, setImages] = useState<ImageItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const supabase = createClientComponentClient();
-  const { toast } = useToast();
-
-  const loadImages = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const { data: files, error: listError } = await supabase
-        .storage
-        .from('menu-images')
-        .list(category);
-
-      if (listError) throw listError;
-
-      if (!files) {
-        setImages([]);
-        return;
-      }
-
-      // Filter for image files
-      const imageFiles = files.filter(file => 
-        !file.name.startsWith('.') && 
-        file.name.match(/\.(jpg|jpeg|png|webp)$/i)
-      );
-
-      // Create signed URLs for each image
-      const imageItems = await Promise.all(
-        imageFiles.map(async (file) => {
-          // Get a signed URL that's valid for 1 hour
-          const { data: signedUrlData, error: signedUrlError } = await supabase
-            .storage
-            .from('menu-images')
-            .createSignedUrl(`${category}/${file.name}`, 3600);
-
-          if (signedUrlError) throw signedUrlError;
-
-          return {
-            name: file.name,
-            url: signedUrlData.signedUrl,
-            updatedAt: file.updated_at,
-          };
-        })
-      );
-
-      console.log('Loaded images:', imageItems); // Debug log
-      setImages(imageItems);
-    } catch (err) {
-      console.error('Error loading images:', err);
-      setError(err instanceof Error ? err.message : 'Error loading images');
-      toast({
-        title: "Error",
-        description: "Failed to load images",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadImages();
-  }, [category, refreshTrigger]);
-
-  const handleDelete = async (imageName: string) => {
-    try {
-      const { error: deleteError } = await supabase
-        .storage
-        .from('menu-images')
-        .remove([`${category}/${imageName}`]);
-
-      if (deleteError) throw deleteError;
-
-      setImages(current => current.filter(img => img.name !== imageName));
-      
-      toast({
-        title: "Success",
-        description: "Image deleted successfully",
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error('Error deleting image:', error);
-      toast({
-        title: "Error",
-        description: "Failed to delete image",
-        variant: "destructive",
-      });
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-center text-red-500 p-4">
-        Error: {error}
-      </div>
-    );
-  }
-
-  if (images.length === 0) {
-    return (
-      <div className="text-center text-muted-foreground p-8">
-        No images found in {category}
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-      {images.map((image) => (
-        <div 
-          key={image.name}
-          className="group relative aspect-square rounded-lg overflow-hidden bg-muted"
-        >
-          {/* Regular img tag with error handling */}
-          <img
-            src={image.url}
-            alt={image.name.split('-')[0]} // Use the first part of the filename as alt text
-            className="absolute inset-0 w-full h-full object-cover transition-all group-hover:scale-105"
-            loading="lazy"
-            onError={(e) => {
-              console.error(`Failed to load image: ${image.url}`);
-              // Set a fallback image or placeholder
-              (e.target as HTMLImageElement).src = '/placeholder-image.jpg';
-            }}
-          />
-          
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
-            <p className="text-white text-sm text-center break-all">
-              {image.name.split('-')[0]} {/* Display the first part of the filename */}
-            </p>
-            <button
-              onClick={() => handleDelete(image.name)}
-              className="flex items-center gap-1 text-white bg-red-500 px-3 py-1.5 rounded-md hover:bg-red-600 transition-colors text-sm"
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-```
-
-### src/components/image/ImageUpload.tsx
-
-```typescript
-'use client';
-
-import { useState, useCallback } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { Loader2, Upload, ImageIcon } from 'lucide-react';
-import Image from 'next/image';
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { StorageError } from '@supabase/storage-js';
-import { useToast } from "@/components/ui/use-toast";
 
 interface ImageUploadProps {
   category: string;
-  itemName: string;
   onUploadComplete: (url: string) => void;
-  onError: (error: string) => void;
-  onItemNameChange: (name: string) => void;
-  onImageUploaded: () => void;
 }
 
-export function ImageUpload({ 
-  category,
-  itemName,
-  onUploadComplete,
-  onError,
-  onItemNameChange,
-  onImageUploaded
-}: ImageUploadProps) {
+export function ImageUpload({ category, onUploadComplete }: ImageUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const supabase = createClientComponentClient();
   const { toast } = useToast();
+
+  const handleUpload = useCallback(async (file: File) => {
+    try {
+      setIsUploading(true);
+
+      // Generate file name
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${category}-${Date.now()}.${fileExt}`;
+      const filePath = `${category}/${fileName}`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('images')
+        .getPublicUrl(filePath);
+
+      toast({
+        title: "Success",
+        description: "Image uploaded successfully!",
+      });
+
+      onUploadComplete(publicUrl);
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to upload image",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      setPreview(null);
+    }
+  }, [category, onUploadComplete, supabase.storage, toast]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -5163,29 +2311,29 @@ export function ImageUpload({
 
     // Validate file
     if (!file.type.startsWith('image/')) {
-      onError('Please upload an image file');
+      toast({
+        title: "Error",
+        description: "Please upload an image file",
+        variant: "destructive",
+      });
       return;
     }
 
-    // File size validation (2MB)
+    // Validate size (2MB)
     if (file.size > 2 * 1024 * 1024) {
-      onError('Image size should be less than 2MB');
+      toast({
+        title: "Error",
+        description: "Image must be less than 2MB",
+        variant: "destructive",
+      });
       return;
     }
 
-    // Create preview
     const objectUrl = URL.createObjectURL(file);
     setPreview(objectUrl);
-    setSelectedFile(file);
 
-    // Set item name from file name
-    const fileName = file.name.split('.')[0]
-      .replace(/[-_]/g, ' ') // Replace hyphens and underscores with spaces
-      .replace(/\b\w/g, c => c.toUpperCase()); // Capitalize first letter of each word
-    onItemNameChange(fileName);
-
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [onError, onItemNameChange]);
+    handleUpload(file);
+  }, [handleUpload, toast]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -5198,1339 +2346,171 @@ export function ImageUpload({
     multiple: false
   });
 
-  const handleUpload = async () => {
-    if (!selectedFile || !itemName) {
-      onError('Please select an image and enter an item name');
-      return;
-    }
-
-    setIsUploading(true);
-
-    try {
-      // Generate file name
-      const fileExt = selectedFile.name.split('.').pop();
-      const fileName = `${itemName.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.${fileExt}`;
-      const filePath = `${category}/${fileName}`;
-
-      // Upload to Supabase
-      const { data, error: uploadError } = await supabase.storage
-        .from('menu-images')
-        .upload(filePath, selectedFile, {
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (uploadError) throw uploadError;
-
-      // Get the public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('menu-images')
-        .getPublicUrl(filePath);
-
-      setIsUploading(false);
-      setPreview(null);
-      setSelectedFile(null);
-      onItemNameChange(''); // Clear item name after successful upload
-      onUploadComplete(publicUrl);
-      onImageUploaded(); // Trigger refresh of gallery
-      
-      // Show success toast
-      toast({
-        title: "Success",
-        description: "Image uploaded successfully!",
-        duration: 3000,
-      });
-
-    } catch (error) {
-      console.error('Upload error:', error);
-      const errorMessage = error instanceof StorageError 
-        ? error.message 
-        : error instanceof Error 
-          ? error.message 
-          : 'Failed to upload image';
-      onError(errorMessage);
-      
-      // Show error toast
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-        duration: 5000,
-      });
-      
-      setIsUploading(false);
-    }
-  };
-
-  const handleClear = () => {
-    if (preview) {
-      URL.revokeObjectURL(preview);
-    }
-    setSelectedFile(null);
-    setPreview(null);
-    onItemNameChange(''); // Clear item name when clearing image
-  };
-
   return (
-    <div className="w-full space-y-4">
+    <div className="space-y-4">
       <div
         {...getRootProps()}
-        className={cn(
-          "border-2 border-dashed rounded-lg p-8 transition-colors duration-200 ease-in-out cursor-pointer",
-          isDragActive 
-            ? "border-primary bg-primary/5" 
-            : "border-gray-300 hover:border-primary",
-          isUploading && "pointer-events-none opacity-50"
-        )}
+        className={`
+          border-2 border-dashed rounded-lg p-8 transition-colors
+          ${isDragActive ? 'border-primary' : 'border-muted-foreground/25'}
+          ${isUploading ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:border-primary/50'}
+        `}
       >
         <input {...getInputProps()} />
-        <div className="flex flex-col items-center justify-center gap-4">
+        <div className="flex flex-col items-center justify-center text-center">
           {preview ? (
-            <div className="relative w-40 h-40 rounded-lg overflow-hidden">
+            <div className="relative w-40 h-40">
               <Image
                 src={preview}
                 alt="Preview"
                 fill
-                className="object-cover"
+                className="object-cover rounded-lg"
               />
             </div>
           ) : (
-            <div className="w-40 h-40 rounded-lg bg-gray-50 flex items-center justify-center">
-              {isUploading ? (
-                <Loader2 className="h-10 w-10 animate-spin text-gray-400" />
-              ) : (
-                <ImageIcon className="h-10 w-10 text-gray-400" />
-              )}
-            </div>
+            <UploadCloud className="w-10 h-10 text-muted-foreground mb-4" />
           )}
-
-          <div className="text-center">
-            {isUploading ? (
-              <div className="text-sm text-gray-600">Uploading...</div>
-            ) : (
-              <>
-                <div className="flex items-center justify-center gap-1">
-                  <Upload className="h-4 w-4" />
-                  <span className="font-medium">Drop image here or click to select</span>
-                </div>
-                <p className="text-sm text-gray-500 mt-2">
-                  Supports JPG, PNG, WEBP (max 2MB)
-                </p>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {selectedFile && itemName && (
-        <div className="flex justify-end gap-2">
-          <Button
-            variant="outline"
-            onClick={handleClear}
-            disabled={isUploading}
-          >
-            Clear
-          </Button>
-          <Button
-            onClick={handleUpload}
-            disabled={isUploading}
-            className="flex items-center gap-2"
-          >
-            {isUploading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Uploading...
-              </>
-            ) : (
-              <>
-                <Upload className="h-4 w-4" />
-                Upload Image
-              </>
-            )}
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-```
-
-### src/components/image/types.ts
-
-```typescript
-// src/components/image/types.ts
-export type MenuCategory = 
-  | 'arroces' 
-  | 'carnes' 
-  | 'del-huerto' 
-  | 'del-mar' 
-  | 'para-compartir' 
-  | 'para-peques' 
-  | 'para-veganos' 
-  | 'postres';
-
-export interface ImageUploadProps {
-  category: MenuCategory;
-  itemName: string;
-  onUploadComplete: (url: string) => void;
-  onError: (error: string) => void;
-}
-
-export interface FilePreview {
-  file: File;
-  preview: string;
-}
-
-export interface ValidationResult {
-  isValid: boolean;
-  error?: string;
-}
-```
-
-### src/components/image/utils.ts
-
-```typescript
-// components/image/utils.ts
-import { ValidationResult } from './types';
-
-export const validateFile = (file: File): ValidationResult => {
-  // Check file type
-  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
-  if (!validTypes.includes(file.type)) {
-    return {
-      isValid: false,
-      error: 'Only JPG, PNG or WebP files are allowed'
-    };
-  }
-
-  // Check file size (2MB max)
-  const maxSize = 2 * 1024 * 1024;
-  if (file.size > maxSize) {
-    return {
-      isValid: false,
-      error: 'File is too large. Maximum size is 2MB'
-    };
-  }
-
-  return { isValid: true };
-};
-
-export const generateFileName = (itemName: string, originalName: string): string => {
-  const extension = originalName.split('.').pop()?.toLowerCase() || 'jpg';
-  const cleanName = itemName
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')  // Remove diacritics
-    .replace(/[^a-z0-9\s-]/g, '')     // Remove special characters
-    .trim()
-    .replace(/\s+/g, '-');            // Replace spaces with hyphens
-
-  const timestamp = Date.now();
-  return `${cleanName}-${timestamp}.${extension}`;
-};
-```
-
-### src/components/menu/ImageSelector.tsx
-
-```typescript
-"use client";
-
-import { useState, useEffect } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import Image from "next/image";
-import { motion } from "framer-motion";
-import { useToast } from "@/components/ui/use-toast";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Loader2, Search, ImageIcon } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import type { ValidImageSource } from "@/types/menu";
-
-interface ImageFile {
-  name: string;
-  url: string;
-  updatedAt: string;
-  error?: boolean;
-}
-
-interface ImageSelectorProps {
-  onSelect: (imagePath: ValidImageSource) => void;
-  onClose: () => void;
-  categoryId: string;
-}
-
-const DEFAULT_IMAGE_EXPIRY = 3600; // 1 hour
-
-const ImageSelector = ({ onSelect, onClose, categoryId }: ImageSelectorProps) => {
-  const [images, setImages] = useState<ImageFile[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const supabase = createClientComponentClient();
-  const { toast } = useToast();
-
-  const getFolderName = async (categoryId: string): Promise<string> => {
-    try {
-      const { data: category, error } = await supabase
-        .from("categories")
-        .select("name")
-        .eq("id", categoryId)
-        .single();
-
-      if (error) throw error;
-      if (!category?.name) throw new Error("Category not found");
-
-      return category.name.toLowerCase().replace(/\s+/g, "-");
-    } catch (error) {
-      console.error("Error getting folder name:", error);
-      throw new Error("Failed to get category folder name");
-    }
-  };
-
-  const getSignedUrl = async (folderName: string, fileName: string): Promise<string> => {
-    try {
-      const { data, error } = await supabase
-        .storage
-        .from("menu-images")
-        .createSignedUrl(`${folderName}/${fileName}`, DEFAULT_IMAGE_EXPIRY);
-
-      if (error) throw error;
-      if (!data?.signedUrl) throw new Error("Failed to get signed URL");
-
-      return data.signedUrl;
-    } catch (error) {
-      console.error("Error getting signed URL:", error);
-      throw new Error("Failed to get image URL");
-    }
-  };
-  useEffect(() => {
-    const loadImages = async () => {
-      try {
-        setIsLoading(true);
-        setLoadError(null);
-
-        if (!categoryId) {
-          throw new Error("Category ID is required");
-        }
-
-        // Get folder name from category
-        const folderName = await getFolderName(categoryId);
-
-        // List files from category folder
-        const { data: files, error: listError } = await supabase
-          .storage
-          .from("menu-images")
-          .list(folderName);
-
-        if (listError) throw listError;
-        if (!files?.length) {
-          setImages([]);
-          return;
-        }
-
-        // Process image files
-        const imageFiles = await Promise.all(
-          files
-            .filter(file => 
-              !file.name.startsWith(".") && 
-              file.name.match(/\.(jpg|jpeg|png|webp)$/i)
-            )
-            .map(async (file) => {
-              try {
-                const signedUrl = await getSignedUrl(folderName, file.name);
-                
-                return {
-                  name: file.name,
-                  url: signedUrl,
-                  updatedAt: file.updated_at,
-                  error: false
-                };
-              } catch (error) {
-                console.error(`Error processing image ${file.name}:`, error);
-                return {
-                  name: file.name,
-                  url: "",
-                  updatedAt: file.updated_at,
-                  error: true
-                };
-              }
-            })
-        );
-
-        // Filter out failed images
-        setImages(imageFiles.filter(img => !img.error && img.url));
-
-      } catch (error) {
-        console.error("Error loading images:", error);
-        setLoadError(error instanceof Error ? error.message : "Failed to load images");
-        toast({
-          title: "Error",
-          description: "No se pudieron cargar las imágenes",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (categoryId) {
-      loadImages();
-    }
-  }, [categoryId, supabase, toast]);
-
-  const filteredImages = images.filter(image =>
-    image.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const handleImageSelect = (url: string) => {
-    try {
-      // Validate URL before selecting
-      new URL(url);
-      setSelectedImage(url);
-    } catch (error) {
-      console.error("Invalid image URL:", error);
-      toast({
-        title: "Error",
-        description: "URL de imagen inválida",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleConfirm = () => {
-    if (!selectedImage) return;
-    
-    try {
-      // Final validation before sending back
-      new URL(selectedImage);
-      onSelect(selectedImage as ValidImageSource);
-      onClose();
-    } catch (error) {
-      console.error("Invalid image URL on confirm:", error);
-      toast({
-        title: "Error",
-        description: "URL de imagen inválida",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const imageMotion = {
-    initial: { opacity: 0, scale: 0.9 },
-    animate: { opacity: 1, scale: 1 },
-    exit: { opacity: 0, scale: 0.9 },
-    transition: { duration: 0.2 }
-  };
-}
-```
-
-### src/components/menu/MenuCard.tsx
-
-```typescript
-"use client";
-
-import { useState, useCallback, Suspense } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Edit2, Trash2, Euro } from "lucide-react";
-import Image from "next/image";
-import type { 
-  MenuCardProps, 
-  MenuItem, 
-  Wine, 
-  MenuItemFormData, 
-  WineFormData, 
-  ValidImageSource, 
-  DEFAULT_IMAGE_PLACEHOLDER 
-} from "@/types/menu";
-import MenuEditor from "./MenuEditor";
-
-const LoadingEditor = () => (
-  <div className="bg-white rounded-lg shadow-sm p-4 animate-pulse h-[400px]" />
-);
-
-const typography = {
-  display: {
-    title: "font-garamond text-2xl sm:text-3xl leading-tight tracking-tight",
-    subtitle: "font-garamond text-xl leading-snug",
-  },
-  body: {
-    large: "text-lg leading-relaxed",
-    base: "text-base leading-relaxed",
-    small: "text-sm leading-relaxed"
-  },
-  label: "text-xs uppercase tracking-[0.25em] font-light"
-};
-
-const motionVariants = {
-  card: {
-    initial: { opacity: 0, y: 20 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -20 },
-    transition: { duration: 0.6, ease: [0.23, 1, 0.32, 1] }
-  }
-};
-
-// Image Helper Utility
-const getValidImagePath = (path: string | null): ValidImageSource => {
-  if (!path) return DEFAULT_IMAGE_PLACEHOLDER;
-  if (path.startsWith('http')) return path as ValidImageSource;
-  if (path.startsWith('/images/')) return path as ValidImageSource;
-  return `/images/${path}` as ValidImageSource;
-};
-
-const MenuCard: React.FC<MenuCardProps> = ({
-  item,
-  type,
-  onEdit,
-  onDelete,
-  categories,
-  allergens,
-  isEditing,
-  onEditToggle
-}) => {
-  const [isDeleting, setIsDeleting] = useState(false);
-  
-  // Image Error State
-  const [imageError, setImageError] = useState(false);
-
-  const isMenuItem = (item: MenuItem | Wine): item is MenuItem => {
-    return 'allergens' in item;
-  };
-
-  const isWine = (item: MenuItem | Wine): item is Wine => {
-    return 'bottle_price' in item;
-  };
-
-  const handleDelete = useCallback(async () => {
-    try {
-      setIsDeleting(true);
-      await onDelete(item.id);
-    } finally {
-      setIsDeleting(false);
-    }
-  }, [item.id, onDelete]);
-
-  const handleEditSave = useCallback(async (data: MenuItemFormData | WineFormData) => {
-    await onEdit(item.id, data);
-    onEditToggle(null);
-  }, [item.id, onEdit, onEditToggle]);
-
-  const handleEditCancel = useCallback(() => {
-    onEditToggle(null);
-  }, [onEditToggle]);
-
-  const getCategory = useCallback(() => {
-    const category = categories.find(c => c.id === item.category_id);
-    return category?.name || 'Sin categoría';
-  }, [categories, item.category_id]);
-
-  const getDisplayPrice = useCallback(() => {
-    if (isMenuItem(item)) {
-      return item.price.toFixed(2);
-    }
-    if (isWine(item)) {
-      return `${item.bottle_price.toFixed(2)}`;
-    }
-    return '0.00';
-  }, [item]);
-
-  // Image Render Function
-  const renderImage = useCallback(() => {
-    if (!isMenuItem(item)) return null;
-
-    const imagePath = getValidImagePath(item.image_path);
-    
-    return (
-      <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
-        <Image
-          src={imageError ? DEFAULT_IMAGE_PLACEHOLDER : imagePath}
-          alt={item.name}
-          fill
-          className="object-cover transition-all duration-200"
-          onError={() => setImageError(true)}
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-        />
-      </div>
-    );
-  }, [item, imageError]);
-
-  return (
-    <AnimatePresence mode="wait">
-      {isEditing ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="bg-white rounded-lg shadow-sm"
-        >
-          <Suspense fallback={<LoadingEditor />}>
-            <MenuEditor
-              key={`editor-${item.id}`}
-              item={item}
-              type={type}
-              onSave={handleEditSave}
-              onCancel={handleEditCancel}
-              categories={categories}
-              allergens={allergens}
-            />
-          </Suspense>
-        </motion.div>
-      ) : (
-        <motion.div
-          layout
-          variants={motionVariants}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          className="group relative bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300"
-        >
-          {/* Replaced Current Image Section with renderImage() */}
-          {renderImage()}
-
-          <div className="p-6">
-            <span className={`${typography.label} text-muted-foreground`}>
-              {getCategory()}
-            </span>
-
-            <div className="flex justify-between items-start mt-2 mb-4">
-              <h3 className={typography.display.title}>{item.name}</h3>
-              <span className="flex items-center text-xl font-light">
-                <Euro className="h-4 w-4 mr-1" />
-                {getDisplayPrice()}
-              </span>
+          {isUploading ? (
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <p className="text-sm text-muted-foreground">Uploading...</p>
             </div>
-
-            <p className={`${typography.body.base} text-muted-foreground`}>
-              {item.description}
-            </p>
-
-            {type === 'menu' && allergens && isMenuItem(item) && item.allergens && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {item.allergens.map((allergenId) => {
-                  const allergen = allergens.find(a => a.id === allergenId);
-                  return allergen && (
-                    <span
-                      key={allergen.id}
-                      className="px-2 py-1 text-xs bg-secondary/10 rounded-full"
-                    >
-                      {allergen.name}
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-
-            {isWine(item) && (
-              <div className="mt-4">
-                <span className="text-sm font-medium">
-                  Copa: €{item.glass_price.toFixed(2)}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Enhanced Button Accessibility */}
-          <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-            <button
-              onClick={() => onEditToggle(item.id)}
-              type="button"
-              className="p-2 rounded-full bg-white/90 hover:bg-white shadow-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary"
-              aria-label={`Editar ${item.name}`}
-            >
-              <Edit2 className="h-4 w-4" />
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={isDeleting}
-              type="button"
-              className="p-2 rounded-full bg-white/90 hover:bg-red-500 hover:text-white shadow-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label={`Eliminar ${item.name}`}
-            >
-              {isDeleting ? (
-                <span className="animate-spin">
-                  <Trash2 className="h-4 w-4" />
-                </span>
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-            </button>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-};
-
-export default MenuCard;
-
-```
-
-### src/components/menu/MenuEditor.tsx
-
-```typescript
-"use client";
-
-import { useState, useCallback } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import Image from "next/image";
-import * as z from "zod";
-import { Loader2, Image as ImageIcon, Check, X } from "lucide-react";
-import type {
-  MenuEditorProps,
-  MenuItem,
-  Wine,
-  MenuItemFormData,
-  WineFormData,
-  ValidImageSource,
-  DEFAULT_IMAGE_PLACEHOLDER,
-  ImageValidationError,
-} from "@/types/menu";
-import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge";
-import dynamic from "next/dynamic";
-import { cn } from "@/lib/utils";
-
-const ImageSelector = dynamic(() => import("./ImageSelector"), {
-  ssr: false,
-  loading: () => (
-    <div className="h-[400px] bg-gray-100 animate-pulse rounded-lg" />
-  ),
-});
-
-// Utility function to validate and format image paths
-const getValidImagePath = (path: string | null): ValidImageSource => {
-  if (!path) return null;
-  if (path.startsWith("http")) return path as ValidImageSource;
-  if (path.startsWith("/images/")) return path as ValidImageSource;
-  return `/images/${path}` as ValidImageSource;
-};
-
-const menuItemSchema = z.object({
-  name: z.string().min(1, "El nombre es requerido"),
-  description: z.string().min(1, "La descripción es requerida"),
-  price: z.coerce.number().min(0, "El precio debe ser mayor a 0"),
-  category_id: z.coerce.number().min(1, "La categoría es requerida"),
-  image_path: z
-    .union([
-      z.string().startsWith("/images/"),
-      z.string().startsWith("http"),
-      z.string().length(0),
-    ])
-    .optional(),
-  allergens: z.array(z.coerce.number()).optional(),
-});
-
-const wineSchema = z.object({
-  name: z.string().min(1, "El nombre es requerido"),
-  description: z.string().min(1, "La descripción es requerida"),
-  bottle_price: z.coerce
-    .number()
-    .min(0, "El precio de botella debe ser mayor a 0"),
-  glass_price: z.coerce.number().min(0, "El precio de copa debe ser mayor a 0"),
-  category_id: z.coerce.number().min(1, "La categoría es requerida"),
-});
-
-type MenuItemFormValues = z.infer<typeof menuItemSchema>;
-type WineFormValues = z.infer<typeof wineSchema>;
-
-const MenuEditor: React.FC<MenuEditorProps> = ({
-  item,
-  type,
-  onSave,
-  onCancel,
-  categories,
-  allergens = [],
-}) => {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSelectingImage, setIsSelectingImage] = useState(false);
-  const [openAllergens, setOpenAllergens] = useState(false);
-  const [imageError, setImageError] = useState<string | null>(null);
-
-  const isMenuItem = (item: MenuItem | Wine): item is MenuItem => {
-    return "allergens" in item;
-  };
-
-  const isWine = (item: MenuItem | Wine): item is Wine => {
-    return "bottle_price" in item;
-  };
-
-  const defaultAllergens =
-    type === "menu" && isMenuItem(item) ? item.allergens : [];
-
-  const validateImagePath = (path: string | null): boolean => {
-    if (!path) return true;
-    return path.startsWith("/images/") || path.startsWith("http");
-  };
-
-  const form = useForm<MenuItemFormValues | WineFormValues>({
-    resolver: zodResolver(type === "menu" ? menuItemSchema : wineSchema),
-    defaultValues:
-      type === "menu"
-        ? {
-            name: item.name,
-            description: item.description,
-            price: isMenuItem(item) ? item.price : 0,
-            category_id: item.category_id,
-            image_path: isMenuItem(item)
-              ? getValidImagePath(item.image_path) || ""
-              : "",
-            allergens: defaultAllergens,
-          }
-        : {
-            name: item.name,
-            description: item.description,
-            bottle_price: isWine(item) ? item.bottle_price : 0,
-            glass_price: isWine(item) ? item.glass_price : 0,
-            category_id: item.category_id,
-          },
-  });
-
-  const selectedAllergens =
-    type === "menu" ? form.watch("allergens") || [] : [];
-
-  const handleSubmit = useCallback(
-    async (data: MenuItemFormValues | WineFormValues) => {
-      try {
-        setIsSubmitting(true);
-        if (type === "menu") {
-          const imagePath = (data as MenuItemFormValues).image_path;
-          if (imagePath && !validateImagePath(imagePath)) {
-            setImageError("Invalid image path format");
-            return;
-          }
-
-          const menuData: MenuItemFormData = {
-            ...(data as MenuItemFormValues),
-            category_id: Number(data.category_id),
-            allergens:
-              (data as MenuItemFormValues).allergens?.map(Number) || [],
-            image_path: getValidImagePath(imagePath || null),
-          };
-          await onSave(menuData);
-        } else {
-          const wineData: WineFormData = {
-            ...(data as WineFormValues),
-            category_id: Number(data.category_id),
-          };
-          await onSave(wineData);
-        }
-      } catch (error) {
-        setImageError(
-          error instanceof Error ? error.message : "Error submitting form"
-        );
-      } finally {
-        setIsSubmitting(false);
-      }
-    },
-    [type, onSave]
-  );
-
-  const handleImageSelect = useCallback(
-    (imagePath: string) => {
-      const validPath = getValidImagePath(imagePath);
-      if (!validPath) {
-        setImageError("Invalid image path received");
-        return;
-      }
-
-      setImageError(null);
-      if (type === "menu") {
-        form.setValue("image_path", validPath, { shouldValidate: true });
-      }
-      setIsSelectingImage(false);
-    },
-    [form, type]
-  );
-
-  const renderImagePreview = (imagePath: string | null) => {
-    if (!imagePath) {
-      return <ImageIcon className="w-8 h-8 text-gray-400" />;
-    }
-
-    return (
-      <div className="relative w-full h-full">
-        <Image
-          src={getValidImagePath(imagePath) || DEFAULT_IMAGE_PLACEHOLDER}
-          alt="Preview"
-          fill
-          className="object-cover"
-          onError={() => {
-            setImageError("Failed to load image");
-            form.setValue("image_path", "", { shouldValidate: true });
-          }}
-        />
-      </div>
-    );
-  };
-  return (
-    <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit(handleSubmit)}
-        className="p-6 space-y-6"
-      >
-        {type === "menu" && (
-          <FormField
-            control={form.control}
-            name="image_path"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Imagen</FormLabel>
-                <div className="flex gap-4 items-center">
-                  <div className="relative w-20 h-20 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
-                    {renderImagePreview(field.value)}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsSelectingImage(true)}
-                  >
-                    Seleccionar Imagen
-                  </Button>
-                </div>
-                {imageError && (
-                  <p className="text-sm text-destructive mt-1">{imageError}</p>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Nombre</FormLabel>
-                <FormControl>
-                  <Input placeholder="Nombre del item" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {type === "menu" ? (
-            <FormField
-              control={form.control}
-              name="price"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Precio</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      {...field}
-                      onChange={(e) =>
-                        field.onChange(parseFloat(e.target.value) || 0)
-                      }
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
           ) : (
             <>
-              <FormField
-                control={form.control}
-                name="bottle_price"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Precio Botella</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        {...field}
-                        onChange={(e) =>
-                          field.onChange(parseFloat(e.target.value) || 0)
-                        }
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="glass_price"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Precio Copa</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        {...field}
-                        onChange={(e) =>
-                          field.onChange(parseFloat(e.target.value) || 0)
-                        }
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <p className="text-sm font-medium mb-1">
+                Drag & drop or click to upload
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Maximum file size: 2MB
+              </p>
             </>
           )}
         </div>
-
-        <FormField
-          control={form.control}
-          name="category_id"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Categoría</FormLabel>
-              <Select
-                onValueChange={(value) => field.onChange(Number(value))}
-                value={field.value?.toString()}
-              >
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona una categoría" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem
-                      key={category.id}
-                      value={category.id.toString()}
-                    >
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Descripción</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Descripción del item"
-                  rows={3}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {type === "menu" && (
-          <FormField
-            control={form.control}
-            name="allergens"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Alérgenos</FormLabel>
-                <Popover open={openAllergens} onOpenChange={setOpenAllergens}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      role="combobox"
-                      className={cn(
-                        "w-full justify-between",
-                        !field.value?.length && "text-muted-foreground"
-                      )}
-                    >
-                      {field.value?.length
-                        ? `${field.value.length} seleccionados`
-                        : "Seleccionar alérgenos"}
-                      <X
-                        className={cn(
-                          "ml-2 h-4 w-4 shrink-0 opacity-50",
-                          openAllergens && "rotate-90"
-                        )}
-                      />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0">
-                    <Command>
-                      <CommandInput placeholder="Buscar alérgenos..." />
-                      <CommandEmpty>No se encontraron alérgenos.</CommandEmpty>
-                      <CommandGroup>
-                        {allergens.map((allergen) => (
-                          <CommandItem
-                            key={allergen.id}
-                            onSelect={() => {
-                              const values = field.value || [];
-                              const newValues = values.includes(allergen.id)
-                                ? values.filter((id) => id !== allergen.id)
-                                : [...values, allergen.id];
-                              field.onChange(newValues);
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                (field.value || []).includes(allergen.id)
-                                  ? "opacity-100"
-                                  : "opacity-0"
-                              )}
-                            />
-                            {allergen.name}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {selectedAllergens.map((allergenId) => {
-                    const allergen = allergens.find((a) => a.id === allergenId);
-                    return (
-                      allergen && (
-                        <Badge
-                          key={allergen.id}
-                          variant="secondary"
-                          className="cursor-pointer"
-                          onClick={() => {
-                            const values = field.value || [];
-                            field.onChange(
-                              values.filter((id) => id !== allergen.id)
-                            );
-                          }}
-                        >
-                          {allergen.name}
-                          <X className="ml-1 h-3 w-3" />
-                        </Badge>
-                      )
-                    );
-                  })}
-                </div>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        <div className="flex justify-end gap-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onCancel}
-            disabled={isSubmitting}
-          >
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Guardando...
-              </>
-            ) : (
-              "Guardar"
-            )}
-          </Button>
-        </div>
-      </form>
-
-      {isSelectingImage && type === "menu" && (
-        <ImageSelector
-          onSelect={handleImageSelect}
-          onClose={() => setIsSelectingImage(false)}
-          categoryId={form.watch("category_id").toString()}
-        />
-      )}
-    </Form>
+      </div>
+    </div>
   );
-};
+}
 
-export default MenuEditor;
+interface ImageGalleryProps {
+  images: string[];
+  onSelect?: (url: string) => void;
+  onDelete?: (url: string) => void;
+}
 
-```
+export function ImageGallery({ images, onSelect, onDelete }: ImageGalleryProps) {
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-### src/components/menu/MenuNav.tsx
+  const handleImageClick = useCallback((url: string) => {
+    setSelectedImage(url);
+    onSelect?.(url);
+  }, [onSelect]);
 
-```typescript
-"use client";
-
-import { useState, useEffect } from "react";
-import { motion} from "framer-motion";
-import type { MenuNavProps } from "@/types/menu";
-
-// Typography system
-const typography = {
-  nav: {
-    category: "font-garamond text-lg tracking-tight",
-    label: "text-xs uppercase tracking-[0.25em] font-light"
-  },
-  number: "text-xs tracking-[0.25em] text-olimpia-text-light uppercase font-light"
-};
-
-// Animation variants
-const motionVariants = {
-  nav: {
-    initial: { y: 100, opacity: 0 },
-    animate: { y: 0, opacity: 1 },
-    exit: { y: 100, opacity: 0 },
-    transition: { duration: 0.6, ease: [0.23, 1, 0.32, 1] }
-  },
-  item: {
-    initial: { opacity: 0, y: 20 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.6, ease: [0.23, 1, 0.32, 1] }
-  }
-};
-
-const MenuNav: React.FC<MenuNavProps> = ({
-  categories,
-  activeCategory,
-  onCategoryChange,
-  type
-}) => {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
+  const handleDelete = useCallback(async (url: string) => {
+    if (!onDelete) return;
     
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+    try {
+      // Extract file path from URL
+      const path = url.split('/').pop();
+      if (!path) throw new Error('Invalid file path');
 
-  const NavContent = () => (
-    <>
-      {/* Section Label */}
-      <div className="mb-4">
-        <span className={typography.nav.label}>
-          {type === 'menu' ? 'Secciones del menú' : 'Tipos de vino'}
-        </span>
-      </div>
+      onDelete(url);
+    } catch (error) {
+      console.error('Error deleting image:', error);
+    }
+  }, [onDelete]);
 
-      {/* Categories Grid */}
-      <div className={`grid ${isMobile ? 'grid-cols-2' : 'grid-cols-4'} gap-6`}>
-        {categories.map((category, index) => (
-          <motion.button
-            key={category.id}
-            onClick={() => onCategoryChange(category.id)}
-            {...motionVariants.item}
-            transition={{
-              ...motionVariants.item.transition,
-              delay: index * 0.1
-            }}
-            className="group text-left"
-          >
-            {/* Category Number */}
-            <span className={typography.number}>
-              {String(index + 1).padStart(2, '0')}
-            </span>
-
-            {/* Category Name */}
-            <span className={`
-              block ${typography.nav.category}
-              transition-colors duration-300
-              ${activeCategory === category.id 
-                ? 'text-olimpia-primary' 
-                : 'text-olimpia-text-secondary'
-              }
-            `}>
-              {category.name}
-            </span>
-
-            {/* Active Indicator */}
-            <div className={`
-              mt-3 h-[1px] w-full transform 
-              transition-all duration-500 ease-out origin-left
-              ${activeCategory === category.id
-                ? 'scale-x-100 bg-olimpia-primary'
-                : 'scale-x-0 bg-olimpia-text-light/20 group-hover:scale-x-100'
-              }
-            `} />
-          </motion.button>
-        ))}
-      </div>
-    </>
-  );
-
-  if (isMobile) {
+  if (!images.length) {
     return (
-      <motion.nav 
-        {...motionVariants.nav}
-        className="fixed bottom-0 left-0 right-0 z-50 backdrop-blur-md"
-      >
-        <div className="absolute inset-0 bg-white/95" />
-        <div className="container mx-auto px-6 py-6 pb-safe relative">
-          <NavContent />
-          <div className="h-[env(safe-area-inset-bottom)]" />
-        </div>
-        <div className="absolute top-0 left-0 right-0 h-[1px] bg-olimpia-primary/10" />
-      </motion.nav>
+      <div className="text-center py-12 text-muted-foreground">
+        No images found
+      </div>
     );
   }
 
   return (
-    <motion.nav 
-      {...motionVariants.nav}
-      className="sticky top-0 z-50 backdrop-blur-md bg-white/95 border-b border-olimpia-primary/10"
-    >
-      <div className="container mx-auto px-6 py-6">
-        <NavContent />
+    <>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {images.map((url) => (
+          <div
+            key={url}
+            className="group relative aspect-square rounded-lg overflow-hidden bg-muted"
+          >
+            <Image
+              src={url}
+              alt="Gallery image"
+              fill
+              className="object-cover transition-all group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => handleImageClick(url)}
+              >
+                Select
+              </Button>
+              {onDelete && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => handleDelete(url)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
-    </motion.nav>
-  );
-};
 
-export default MenuNav;
+      <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Image Preview</DialogTitle>
+          </DialogHeader>
+          {selectedImage && (
+            <div className="relative aspect-video">
+              <Image
+                src={selectedImage}
+                alt="Preview"
+                fill
+                className="object-contain"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 ```
 
-### src/components/menu/MenuSearch.tsx
+### src/components/features/menu.tsx
 
 ```typescript
 "use client";
 
 import { useState } from "react";
-import { Search } from "lucide-react";
-import type { MenuSearchProps } from "@/types/menu";
+import { Edit2, MoreHorizontal, Trash2, Loader2 } from "lucide-react";
+import Image from "next/image";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -6540,82 +2520,449 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const MenuSearch: React.FC<MenuSearchProps> = ({
-  onSearch,
-  onCategoryFilter,
-  categories
-}) => {
-  const [searchValue, setSearchValue] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+// Types
+export type MenuItem = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category_id: number;
+  category: string;
+  image_url: string | null;
+  allergens: string[];
+  active: boolean;
+};
 
-  const handleSearch = (value: string) => {
-    setSearchValue(value);
-    onSearch(value);
-  };
+interface MenuItemCardProps {
+  item: MenuItem;
+  onEdit: (item: MenuItem) => void;
+  onDelete: (id: string) => void;
+}
 
-  const handleCategoryChange = (value: string) => {
-    setSelectedCategory(value);
-    // Convert to number for API call, but handle "all" case
-    if (value === "all") {
-      onCategoryFilter(null);
-    } else {
-      onCategoryFilter(parseInt(value, 10));
-    }
-  };
+interface MenuListProps {
+  items: MenuItem[];
+  isLoading: boolean;
+  onEdit: (item: MenuItem) => void;
+  onDelete: (id: string) => void;
+}
+
+interface MenuSearchProps {
+  onSearch: (query: string) => void;
+  onFilter: (category: string) => void;
+  categories: string[];
+}
+
+// Components
+export function MenuItemCard({ item, onEdit, onDelete }: MenuItemCardProps) {
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   return (
-    <div className="flex flex-col sm:flex-row gap-4 p-4 bg-white/50 backdrop-blur-sm rounded-lg">
-      <div className="relative flex-grow">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+    <div className="group relative bg-card rounded-lg overflow-hidden shadow-sm border">
+      {item.image_url && (
+        <div className="relative aspect-[4/3] bg-muted">
+          <Image
+            src={item.image_url}
+            alt={item.name}
+            fill
+            className="object-cover"
+          />
+        </div>
+      )}
+      <div className="p-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="font-semibold">{item.name}</h3>
+            <p className="text-sm text-muted-foreground">{item.description}</p>
+          </div>
+          <Badge variant={item.active ? "success" : "secondary"}>
+            {item.active ? "Active" : "Inactive"}
+          </Badge>
+        </div>
+        <div className="mt-4">
+          <div className="text-lg font-semibold">€{item.price.toFixed(2)}</div>
+          {item.allergens.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {item.allergens.map((allergen) => (
+                <Badge key={allergen} variant="outline" className="text-xs">
+                  {allergen}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onEdit(item)}>
+              <Edit2 className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setIsDeleteDialogOpen(true)}
+              className="text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete {item.name}. This action cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                onDelete(item.id);
+                setIsDeleteDialogOpen(false);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+export function MenuList({ items, isLoading, onEdit, onDelete }: MenuListProps) {
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!items.length) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        No items found
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {items.map((item) => (
+        <MenuItemCard
+          key={item.id}
+          item={item}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function MenuSearch({ onSearch, onFilter, categories }: MenuSearchProps) {
+  return (
+    <div className="flex items-center gap-4">
+      <div className="flex-1">
         <Input
           type="text"
-          placeholder="Buscar..."
-          value={searchValue}
-          onChange={(e) => handleSearch(e.target.value)}
-          className="pl-10 bg-white"
+          placeholder="Search menu items..."
+          onChange={(e) => onSearch(e.target.value)}
         />
       </div>
-      
-      <Select
-        value={selectedCategory}
-        onValueChange={handleCategoryChange}
-      >
-        <SelectTrigger className="w-full sm:w-[200px] bg-white">
-          <SelectValue placeholder="Todas las categorías" />
+      <Select onValueChange={onFilter}>
+        <SelectTrigger className="w-[180px]">
+          <SelectValue placeholder="All Categories" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">Todas las categorías</SelectItem>
+          <SelectItem value="">All Categories</SelectItem>
           {categories.map((category) => (
-            <SelectItem 
-              key={category.id} 
-              value={category.id.toString()}
-            >
-              {category.name}
+            <SelectItem key={category} value={category}>
+              {category}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
     </div>
   );
-};
+}
+```
 
-export default MenuSearch;
+### src/components/features/users.tsx
+
+```typescript
+"use client";
+
+import { useState } from "react";
+import { formatDistanceToNow } from "date-fns";
+import { Loader2, UserPlus, UserX, UserCheck, Mail, MoreHorizontal } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import type { User, Role } from "@/types";
+
+// Types
+interface UsersTableProps {
+  users: User[];
+  onStatusChange: (userId: string, isActive: boolean) => Promise<void>;
+  onRoleChange: (userId: string, role: Role) => Promise<void>;
+}
+
+interface InviteUserDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onInvite: (email: string, role: Role) => Promise<void>;
+}
+
+// Components
+export function UsersTable({ users, onStatusChange, onRoleChange }: UsersTableProps) {
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  const handleStatusToggle = async (user: User) => {
+    try {
+      setLoadingId(user.id);
+      await onStatusChange(user.id, !user.active);
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Email</TableHead>
+          <TableHead>Role</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Joined</TableHead>
+          <TableHead className="text-right">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {users.map((user) => (
+          <TableRow key={user.id}>
+            <TableCell>
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                {user.email}
+              </div>
+            </TableCell>
+            <TableCell>
+              <Select
+                defaultValue={user.role}
+                onValueChange={(value) => onRoleChange(user.id, value as Role)}
+              >
+                <SelectTrigger className="w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </TableCell>
+            <TableCell>
+              <Badge
+                variant={user.active ? "success" : "secondary"}
+                className="cursor-pointer"
+                onClick={() => handleStatusToggle(user)}
+              >
+                {user.active ? (
+                  <UserCheck className="mr-1 h-3 w-3" />
+                ) : (
+                  <UserX className="mr-1 h-3 w-3" />
+                )}
+                {user.active ? "Active" : "Inactive"}
+              </Badge>
+            </TableCell>
+            <TableCell>
+              {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
+            </TableCell>
+            <TableCell className="text-right">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                    {loadingId === user.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <MoreHorizontal className="h-4 w-4" />
+                    )}
+                    <span className="sr-only">Open menu</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => handleStatusToggle(user)}
+                    disabled={loadingId === user.id}
+                  >
+                    {user.active ? (
+                      <>
+                        <UserX className="mr-2 h-4 w-4" />
+                        Deactivate
+                      </>
+                    ) : (
+                      <>
+                        <UserCheck className="mr-2 h-4 w-4" />
+                        Activate
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+export function InviteUserDialog({ open, onOpenChange, onInvite }: InviteUserDialogProps) {
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<Role>("user");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsLoading(true);
+      await onInvite(email, role);
+      setEmail("");
+      setRole("user");
+      onOpenChange(false);
+    } catch {
+      // Error handling is done in the parent component
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Invite User</DialogTitle>
+          <DialogDescription>
+            Send an invitation email to add a new user.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Email</label>
+            <Input
+              type="email"
+              placeholder="Enter email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={isLoading}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Role</label>
+            <Select
+              value={role}
+              onValueChange={(value) => setRole(value as Role)}
+              disabled={isLoading}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="user">User</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Send Invitation
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 ```
 
 ### src/components/ui/alert-dialog.tsx
 
 ```typescript
-import * as React from "react"
-import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
+"use client";
 
-import { cn } from "@/lib/utils"
-import { buttonVariants } from "@/components/ui/button"
+import * as React from "react";
+import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
 
-const AlertDialog = AlertDialogPrimitive.Root
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 
-const AlertDialogTrigger = AlertDialogPrimitive.Trigger
-
-const AlertDialogPortal = AlertDialogPrimitive.Portal
+const AlertDialog = AlertDialogPrimitive.Root;
+const AlertDialogTrigger = AlertDialogPrimitive.Trigger;
+const AlertDialogPortal = AlertDialogPrimitive.Portal;
 
 const AlertDialogOverlay = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Overlay>,
@@ -6629,8 +2976,8 @@ const AlertDialogOverlay = React.forwardRef<
     {...props}
     ref={ref}
   />
-))
-AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName
+));
+AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName;
 
 const AlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
@@ -6647,8 +2994,8 @@ const AlertDialogContent = React.forwardRef<
       {...props}
     />
   </AlertDialogPortal>
-))
-AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName
+));
+AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName;
 
 const AlertDialogHeader = ({
   className,
@@ -6661,8 +3008,8 @@ const AlertDialogHeader = ({
     )}
     {...props}
   />
-)
-AlertDialogHeader.displayName = "AlertDialogHeader"
+);
+AlertDialogHeader.displayName = "AlertDialogHeader";
 
 const AlertDialogFooter = ({
   className,
@@ -6675,8 +3022,8 @@ const AlertDialogFooter = ({
     )}
     {...props}
   />
-)
-AlertDialogFooter.displayName = "AlertDialogFooter"
+);
+AlertDialogFooter.displayName = "AlertDialogFooter";
 
 const AlertDialogTitle = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Title>,
@@ -6687,8 +3034,8 @@ const AlertDialogTitle = React.forwardRef<
     className={cn("text-lg font-semibold", className)}
     {...props}
   />
-))
-AlertDialogTitle.displayName = AlertDialogPrimitive.Title.displayName
+));
+AlertDialogTitle.displayName = AlertDialogPrimitive.Title.displayName;
 
 const AlertDialogDescription = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Description>,
@@ -6699,21 +3046,16 @@ const AlertDialogDescription = React.forwardRef<
     className={cn("text-sm text-muted-foreground", className)}
     {...props}
   />
-))
-AlertDialogDescription.displayName =
-  AlertDialogPrimitive.Description.displayName
+));
+AlertDialogDescription.displayName = AlertDialogPrimitive.Description.displayName;
 
 const AlertDialogAction = React.forwardRef<
   HTMLButtonElement,
   React.ButtonHTMLAttributes<HTMLButtonElement>
 >(({ className, ...props }, ref) => (
-  <button
-    ref={ref}
-    className={cn(buttonVariants(), className)}
-    {...props}
-  />
-))
-AlertDialogAction.displayName = "AlertDialogAction"
+  <button ref={ref} className={cn(buttonVariants(), className)} {...props} />
+));
+AlertDialogAction.displayName = "AlertDialogAction";
 
 const AlertDialogCancel = React.forwardRef<
   HTMLButtonElement,
@@ -6728,11 +3070,13 @@ const AlertDialogCancel = React.forwardRef<
     )}
     {...props}
   />
-))
-AlertDialogCancel.displayName = "AlertDialogCancel"
+));
+AlertDialogCancel.displayName = "AlertDialogCancel";
 
 export {
   AlertDialog,
+  AlertDialogPortal,
+  AlertDialogOverlay,
   AlertDialogTrigger,
   AlertDialogContent,
   AlertDialogHeader,
@@ -6741,15 +3085,15 @@ export {
   AlertDialogDescription,
   AlertDialogAction,
   AlertDialogCancel,
-}
+};
 ```
 
 ### src/components/ui/badge.tsx
 
 ```typescript
-import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
   "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
@@ -6764,14 +3108,14 @@ const badgeVariants = cva(
           "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
         outline: "text-foreground",
         success:
-          "border-transparent bg-emerald-100 text-emerald-800 shadow hover:bg-emerald-100/80", // Added success variant
+          "border-transparent bg-green-100 text-green-800 shadow hover:bg-green-100/80",
       },
     },
     defaultVariants: {
       variant: "default",
     },
   }
-)
+);
 
 export interface BadgeProps
   extends React.HTMLAttributes<HTMLDivElement>,
@@ -6780,10 +3124,10 @@ export interface BadgeProps
 function Badge({ className, variant, ...props }: BadgeProps) {
   return (
     <div className={cn(badgeVariants({ variant }), className)} {...props} />
-  )
+  );
 }
 
-export { Badge, badgeVariants }
+export { Badge, badgeVariants };
 ```
 
 ### src/components/ui/button.tsx
@@ -6846,321 +3190,6 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button"
 
 export { Button, buttonVariants }
-
-```
-
-### src/components/ui/calendar.tsx
-
-```typescript
-import * as React from "react"
-import { ChevronLeft, ChevronRight } from "lucide-react"
-import { DayPicker } from "react-day-picker"
-
-import { cn } from "@/lib/utils"
-import { buttonVariants } from "@/components/ui/button"
-
-export type CalendarProps = React.ComponentProps<typeof DayPicker>
-
-function Calendar({
-  className,
-  classNames,
-  showOutsideDays = true,
-  ...props
-}: CalendarProps) {
-  return (
-    <DayPicker
-      showOutsideDays={showOutsideDays}
-      className={cn("p-3", className)}
-      classNames={{
-        months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-        month: "space-y-4",
-        caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-medium",
-        nav: "space-x-1 flex items-center",
-        nav_button: cn(
-          buttonVariants({ variant: "outline" }),
-          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100"
-        ),
-        nav_button_previous: "absolute left-1",
-        nav_button_next: "absolute right-1",
-        table: "w-full border-collapse space-y-1",
-        head_row: "flex",
-        head_cell:
-          "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem]",
-        row: "flex w-full mt-2",
-        cell: cn(
-          "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected].day-range-end)]:rounded-r-md",
-          props.mode === "range"
-            ? "[&:has(>.day-range-end)]:rounded-r-md [&:has(>.day-range-start)]:rounded-l-md first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md"
-            : "[&:has([aria-selected])]:rounded-md"
-        ),
-        day: cn(
-          buttonVariants({ variant: "ghost" }),
-          "h-8 w-8 p-0 font-normal aria-selected:opacity-100"
-        ),
-        day_range_start: "day-range-start",
-        day_range_end: "day-range-end",
-        day_selected:
-          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-        day_today: "bg-accent text-accent-foreground",
-        day_outside:
-          "day-outside text-muted-foreground aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
-        day_disabled: "text-muted-foreground opacity-50",
-        day_range_middle:
-          "aria-selected:bg-accent aria-selected:text-accent-foreground",
-        day_hidden: "invisible",
-        ...classNames,
-      }}
-      components={{
-        IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
-        IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
-      }}
-      {...props}
-    />
-  )
-}
-Calendar.displayName = "Calendar"
-
-export { Calendar }
-
-```
-
-### src/components/ui/card.tsx
-
-```typescript
-import * as React from "react"
-
-import { cn } from "@/lib/utils"
-
-const Card = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn(
-      "rounded-xl border bg-card text-card-foreground shadow",
-      className
-    )}
-    {...props}
-  />
-))
-Card.displayName = "Card"
-
-const CardHeader = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn("flex flex-col space-y-1.5 p-6", className)}
-    {...props}
-  />
-))
-CardHeader.displayName = "CardHeader"
-
-const CardTitle = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn("font-semibold leading-none tracking-tight", className)}
-    {...props}
-  />
-))
-CardTitle.displayName = "CardTitle"
-
-const CardDescription = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn("text-sm text-muted-foreground", className)}
-    {...props}
-  />
-))
-CardDescription.displayName = "CardDescription"
-
-const CardContent = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
-))
-CardContent.displayName = "CardContent"
-
-const CardFooter = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn("flex items-center p-6 pt-0", className)}
-    {...props}
-  />
-))
-CardFooter.displayName = "CardFooter"
-
-export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
-
-```
-
-### src/components/ui/command.tsx
-
-```typescript
-import * as React from "react"
-import { type DialogProps } from "@radix-ui/react-dialog"
-import { Command as CommandPrimitive } from "cmdk"
-import { Search } from "lucide-react"
-
-import { cn } from "@/lib/utils"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
-
-const Command = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive
-    ref={ref}
-    className={cn(
-      "flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground",
-      className
-    )}
-    {...props}
-  />
-))
-Command.displayName = CommandPrimitive.displayName
-
-const CommandDialog = ({ children, ...props }: DialogProps) => {
-  return (
-    <Dialog {...props}>
-      <DialogContent className="overflow-hidden p-0">
-        <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
-          {children}
-        </Command>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-const CommandInput = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Input>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
->(({ className, ...props }, ref) => (
-  <div className="flex items-center border-b px-3" cmdk-input-wrapper="">
-    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-    <CommandPrimitive.Input
-      ref={ref}
-      className={cn(
-        "flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
-        className
-      )}
-      {...props}
-    />
-  </div>
-))
-
-CommandInput.displayName = CommandPrimitive.Input.displayName
-
-const CommandList = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.List>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive.List
-    ref={ref}
-    className={cn("max-h-[300px] overflow-y-auto overflow-x-hidden", className)}
-    {...props}
-  />
-))
-
-CommandList.displayName = CommandPrimitive.List.displayName
-
-const CommandEmpty = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Empty>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>
->((props, ref) => (
-  <CommandPrimitive.Empty
-    ref={ref}
-    className="py-6 text-center text-sm"
-    {...props}
-  />
-))
-
-CommandEmpty.displayName = CommandPrimitive.Empty.displayName
-
-const CommandGroup = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Group>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Group>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive.Group
-    ref={ref}
-    className={cn(
-      "overflow-hidden p-1 text-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground",
-      className
-    )}
-    {...props}
-  />
-))
-
-CommandGroup.displayName = CommandPrimitive.Group.displayName
-
-const CommandSeparator = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Separator>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Separator>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive.Separator
-    ref={ref}
-    className={cn("-mx-1 h-px bg-border", className)}
-    {...props}
-  />
-))
-CommandSeparator.displayName = CommandPrimitive.Separator.displayName
-
-const CommandItem = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive.Item
-    ref={ref}
-    className={cn(
-      "relative flex cursor-default gap-2 select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[disabled=true]:pointer-events-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
-      className
-    )}
-    {...props}
-  />
-))
-
-CommandItem.displayName = CommandPrimitive.Item.displayName
-
-const CommandShortcut = ({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLSpanElement>) => {
-  return (
-    <span
-      className={cn(
-        "ml-auto text-xs tracking-widest text-muted-foreground",
-        className
-      )}
-      {...props}
-    />
-  )
-}
-CommandShortcut.displayName = "CommandShortcut"
-
-export {
-  Command,
-  CommandDialog,
-  CommandInput,
-  CommandList,
-  CommandEmpty,
-  CommandGroup,
-  CommandItem,
-  CommandShortcut,
-  CommandSeparator,
-}
 
 ```
 
@@ -7293,45 +3322,46 @@ export {
 ### src/components/ui/dropdown-menu.tsx
 
 ```typescript
-import * as React from "react"
-import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
-import { Check, ChevronRight, Circle } from "lucide-react"
+"use client";
 
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
+import { Check, ChevronRight, Circle } from "lucide-react";
 
-const DropdownMenu = DropdownMenuPrimitive.Root
+import { cn } from "@/lib/utils";
 
-const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
+const DropdownMenu = DropdownMenuPrimitive.Root;
 
-const DropdownMenuGroup = DropdownMenuPrimitive.Group
+const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 
-const DropdownMenuPortal = DropdownMenuPrimitive.Portal
+const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 
-const DropdownMenuSub = DropdownMenuPrimitive.Sub
+const DropdownMenuPortal = DropdownMenuPrimitive.Portal;
 
-const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup
+const DropdownMenuSub = DropdownMenuPrimitive.Sub;
+
+const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
 
 const DropdownMenuSubTrigger = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.SubTrigger>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> & {
-    inset?: boolean
+    inset?: boolean;
   }
 >(({ className, inset, children, ...props }, ref) => (
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      "flex cursor-default gap-2 select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent data-[state=open]:bg-accent [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+      "flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent data-[state=open]:bg-accent",
       inset && "pl-8",
       className
     )}
     {...props}
   >
     {children}
-    <ChevronRight className="ml-auto" />
+    <ChevronRight className="ml-auto h-4 w-4" />
   </DropdownMenuPrimitive.SubTrigger>
-))
-DropdownMenuSubTrigger.displayName =
-  DropdownMenuPrimitive.SubTrigger.displayName
+));
+DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName;
 
 const DropdownMenuSubContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
@@ -7345,9 +3375,8 @@ const DropdownMenuSubContent = React.forwardRef<
     )}
     {...props}
   />
-))
-DropdownMenuSubContent.displayName =
-  DropdownMenuPrimitive.SubContent.displayName
+));
+DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayName;
 
 const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
@@ -7358,33 +3387,32 @@ const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md",
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
         className
       )}
       {...props}
     />
   </DropdownMenuPrimitive.Portal>
-))
-DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName
+));
+DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName;
 
 const DropdownMenuItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
-    inset?: boolean
+    inset?: boolean;
   }
 >(({ className, inset, ...props }, ref) => (
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
+      "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       inset && "pl-8",
       className
     )}
     {...props}
   />
-))
-DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName
+));
+DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName;
 
 const DropdownMenuCheckboxItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.CheckboxItem>,
@@ -7406,9 +3434,8 @@ const DropdownMenuCheckboxItem = React.forwardRef<
     </span>
     {children}
   </DropdownMenuPrimitive.CheckboxItem>
-))
-DropdownMenuCheckboxItem.displayName =
-  DropdownMenuPrimitive.CheckboxItem.displayName
+));
+DropdownMenuCheckboxItem.displayName = DropdownMenuPrimitive.CheckboxItem.displayName;
 
 const DropdownMenuRadioItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.RadioItem>,
@@ -7429,13 +3456,13 @@ const DropdownMenuRadioItem = React.forwardRef<
     </span>
     {children}
   </DropdownMenuPrimitive.RadioItem>
-))
-DropdownMenuRadioItem.displayName = DropdownMenuPrimitive.RadioItem.displayName
+));
+DropdownMenuRadioItem.displayName = DropdownMenuPrimitive.RadioItem.displayName;
 
 const DropdownMenuLabel = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Label>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label> & {
-    inset?: boolean
+    inset?: boolean;
   }
 >(({ className, inset, ...props }, ref) => (
   <DropdownMenuPrimitive.Label
@@ -7447,8 +3474,8 @@ const DropdownMenuLabel = React.forwardRef<
     )}
     {...props}
   />
-))
-DropdownMenuLabel.displayName = DropdownMenuPrimitive.Label.displayName
+));
+DropdownMenuLabel.displayName = DropdownMenuPrimitive.Label.displayName;
 
 const DropdownMenuSeparator = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Separator>,
@@ -7459,8 +3486,8 @@ const DropdownMenuSeparator = React.forwardRef<
     className={cn("-mx-1 my-1 h-px bg-muted", className)}
     {...props}
   />
-))
-DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName
+));
+DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName;
 
 const DropdownMenuShortcut = ({
   className,
@@ -7471,9 +3498,9 @@ const DropdownMenuShortcut = ({
       className={cn("ml-auto text-xs tracking-widest opacity-60", className)}
       {...props}
     />
-  )
-}
-DropdownMenuShortcut.displayName = "DropdownMenuShortcut"
+  );
+};
+DropdownMenuShortcut.displayName = "DropdownMenuShortcut";
 
 export {
   DropdownMenu,
@@ -7491,8 +3518,7 @@ export {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuRadioGroup,
-}
-
+};
 ```
 
 ### src/components/ui/form.tsx
@@ -7633,7 +3659,7 @@ const FormDescription = React.forwardRef<
     <p
       ref={ref}
       id={formDescriptionId}
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-[0.8rem] text-muted-foreground", className)}
       {...props}
     />
   )
@@ -7655,7 +3681,7 @@ const FormMessage = React.forwardRef<
     <p
       ref={ref}
       id={formMessageId}
-      className={cn("text-sm font-medium text-destructive", className)}
+      className={cn("text-[0.8rem] font-medium text-destructive", className)}
       {...props}
     >
       {body}
@@ -7674,17 +3700,17 @@ export {
   FormMessage,
   FormField,
 }
+
 ```
 
 ### src/components/ui/input.tsx
 
 ```typescript
 import * as React from "react"
+
 import { cn } from "@/lib/utils"
 
-type InputProps = React.InputHTMLAttributes<HTMLInputElement>
-
-const Input = React.forwardRef<HTMLInputElement, InputProps>(
+const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
   ({ className, type, ...props }, ref) => {
     return (
       <input
@@ -7699,18 +3725,15 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     )
   }
 )
-
 Input.displayName = "Input"
 
 export { Input }
-export type { InputProps }
+
 ```
 
 ### src/components/ui/label.tsx
 
 ```typescript
-"use client"
-
 import * as React from "react"
 import * as LabelPrimitive from "@radix-ui/react-label"
 import { cva, type VariantProps } from "class-variance-authority"
@@ -7735,172 +3758,156 @@ const Label = React.forwardRef<
 Label.displayName = LabelPrimitive.Root.displayName
 
 export { Label }
-```
-
-### src/components/ui/popover.tsx
-
-```typescript
-"use client"
-
-import * as React from "react"
-import * as PopoverPrimitive from "@radix-ui/react-popover"
-
-import { cn } from "@/lib/utils"
-
-const Popover = PopoverPrimitive.Root
-
-const PopoverTrigger = PopoverPrimitive.Trigger
-
-const PopoverAnchor = PopoverPrimitive.Anchor
-
-const PopoverContent = React.forwardRef<
-  React.ElementRef<typeof PopoverPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
->(({ className, align = "center", sideOffset = 4, ...props }, ref) => (
-  <PopoverPrimitive.Portal>
-    <PopoverPrimitive.Content
-      ref={ref}
-      align={align}
-      sideOffset={sideOffset}
-      className={cn(
-        "z-50 w-72 rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-        className
-      )}
-      {...props}
-    />
-  </PopoverPrimitive.Portal>
-))
-PopoverContent.displayName = PopoverPrimitive.Content.displayName
-
-export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor }
 
 ```
 
 ### src/components/ui/select.tsx
 
 ```typescript
-"use client";
+import * as React from "react"
+import * as SelectPrimitive from "@radix-ui/react-select"
+import { Check, ChevronDown, ChevronUp } from "lucide-react"
 
-import * as React from "react";
-import * as SelectPrimitive from "@radix-ui/react-select";
-import { Check, ChevronDown } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils"
 
-const Select = SelectPrimitive.Root;
-const SelectGroup = SelectPrimitive.Group;
-const SelectValue = SelectPrimitive.Value;
+const Select = SelectPrimitive.Root
 
-interface SelectTriggerProps extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> {
-  className?: string;
-}
+const SelectGroup = SelectPrimitive.Group
 
-const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
-  ({ className, children, ...props }, ref) => (
-    <SelectPrimitive.Trigger
+const SelectValue = SelectPrimitive.Value
+
+const SelectTrigger = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
+>(({ className, children, ...props }, ref) => (
+  <SelectPrimitive.Trigger
+    ref={ref}
+    className={cn(
+      "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      className
+    )}
+    {...props}
+  >
+    {children}
+    <SelectPrimitive.Icon asChild>
+      <ChevronDown className="h-4 w-4 opacity-50" />
+    </SelectPrimitive.Icon>
+  </SelectPrimitive.Trigger>
+))
+SelectTrigger.displayName = SelectPrimitive.Trigger.displayName
+
+const SelectScrollUpButton = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.ScrollUpButton>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollUpButton>
+>(({ className, ...props }, ref) => (
+  <SelectPrimitive.ScrollUpButton
+    ref={ref}
+    className={cn(
+      "flex cursor-default items-center justify-center py-1",
+      className
+    )}
+    {...props}
+  >
+    <ChevronUp className="h-4 w-4" />
+  </SelectPrimitive.ScrollUpButton>
+))
+SelectScrollUpButton.displayName = SelectPrimitive.ScrollUpButton.displayName
+
+const SelectScrollDownButton = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.ScrollDownButton>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownButton>
+>(({ className, ...props }, ref) => (
+  <SelectPrimitive.ScrollDownButton
+    ref={ref}
+    className={cn(
+      "flex cursor-default items-center justify-center py-1",
+      className
+    )}
+    {...props}
+  >
+    <ChevronDown className="h-4 w-4" />
+  </SelectPrimitive.ScrollDownButton>
+))
+SelectScrollDownButton.displayName =
+  SelectPrimitive.ScrollDownButton.displayName
+
+const SelectContent = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
+>(({ className, children, position = "popper", ...props }, ref) => (
+  <SelectPrimitive.Portal>
+    <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 gap-2",
+        "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        position === "popper" &&
+          "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
         className
       )}
+      position={position}
       {...props}
     >
-      {children}
-      <SelectPrimitive.Icon asChild>
-        <ChevronDown className="h-4 w-4 opacity-50" />
-      </SelectPrimitive.Icon>
-    </SelectPrimitive.Trigger>
-  )
-);
-SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
-
-interface SelectContentProps extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> {
-  className?: string;
-  position?: "popper" | "item-aligned";
-}
-
-const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
-  ({ className, children, position = "popper", ...props }, ref) => (
-    <SelectPrimitive.Portal>
-      <SelectPrimitive.Content
-        ref={ref}
+      <SelectScrollUpButton />
+      <SelectPrimitive.Viewport
         className={cn(
-          "relative z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          "p-1",
           position === "popper" &&
-            "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
-          className
+            "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
         )}
-        position={position}
-        {...props}
       >
-        <SelectPrimitive.Viewport
-          className={cn(
-            "p-1",
-            position === "popper" &&
-              "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
-          )}
-        >
-          {children}
-        </SelectPrimitive.Viewport>
-      </SelectPrimitive.Content>
-    </SelectPrimitive.Portal>
-  )
-);
-SelectContent.displayName = SelectPrimitive.Content.displayName;
+        {children}
+      </SelectPrimitive.Viewport>
+      <SelectScrollDownButton />
+    </SelectPrimitive.Content>
+  </SelectPrimitive.Portal>
+))
+SelectContent.displayName = SelectPrimitive.Content.displayName
 
-interface SelectLabelProps extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label> {
-  className?: string;
-}
+const SelectLabel = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Label>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label>
+>(({ className, ...props }, ref) => (
+  <SelectPrimitive.Label
+    ref={ref}
+    className={cn("px-2 py-1.5 text-sm font-semibold", className)}
+    {...props}
+  />
+))
+SelectLabel.displayName = SelectPrimitive.Label.displayName
 
-const SelectLabel = React.forwardRef<HTMLDivElement, SelectLabelProps>(
-  ({ className, ...props }, ref) => (
-    <SelectPrimitive.Label
-      ref={ref}
-      className={cn("py-1.5 pl-8 pr-2 text-sm font-semibold", className)}
-      {...props}
-    />
-  )
-);
-SelectLabel.displayName = SelectPrimitive.Label.displayName;
+const SelectItem = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
+>(({ className, children, ...props }, ref) => (
+  <SelectPrimitive.Item
+    ref={ref}
+    className={cn(
+      "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      className
+    )}
+    {...props}
+  >
+    <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
+      <SelectPrimitive.ItemIndicator>
+        <Check className="h-4 w-4" />
+      </SelectPrimitive.ItemIndicator>
+    </span>
+    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+  </SelectPrimitive.Item>
+))
+SelectItem.displayName = SelectPrimitive.Item.displayName
 
-interface SelectItemProps extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> {
-  className?: string;
-}
-
-const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(
-  ({ className, children, ...props }, ref) => (
-    <SelectPrimitive.Item
-      ref={ref}
-      className={cn(
-        "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-        className
-      )}
-      {...props}
-    >
-      <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-        <SelectPrimitive.ItemIndicator>
-          <Check className="h-4 w-4" />
-        </SelectPrimitive.ItemIndicator>
-      </span>
-      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
-    </SelectPrimitive.Item>
-  )
-);
-SelectItem.displayName = SelectPrimitive.Item.displayName;
-
-interface SelectSeparatorProps extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Separator> {
-  className?: string;
-}
-
-const SelectSeparator = React.forwardRef<HTMLDivElement, SelectSeparatorProps>(
-  ({ className, ...props }, ref) => (
-    <SelectPrimitive.Separator
-      ref={ref}
-      className={cn("-mx-1 my-1 h-px bg-muted", className)}
-      {...props}
-    />
-  )
-);
-SelectSeparator.displayName = SelectPrimitive.Separator.displayName;
+const SelectSeparator = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Separator>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Separator>
+>(({ className, ...props }, ref) => (
+  <SelectPrimitive.Separator
+    ref={ref}
+    className={cn("-mx-1 my-1 h-px bg-muted", className)}
+    {...props}
+  />
+))
+SelectSeparator.displayName = SelectPrimitive.Separator.displayName
 
 export {
   Select,
@@ -7911,39 +3918,9 @@ export {
   SelectLabel,
   SelectItem,
   SelectSeparator,
-};
-```
-
-### src/components/ui/switch.tsx
-
-```typescript
-import * as React from "react"
-import * as SwitchPrimitives from "@radix-ui/react-switch"
-
-import { cn } from "@/lib/utils"
-
-const Switch = React.forwardRef<
-  React.ElementRef<typeof SwitchPrimitives.Root>,
-  React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>
->(({ className, ...props }, ref) => (
-  <SwitchPrimitives.Root
-    className={cn(
-      "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input",
-      className
-    )}
-    {...props}
-    ref={ref}
-  >
-    <SwitchPrimitives.Thumb
-      className={cn(
-        "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0"
-      )}
-    />
-  </SwitchPrimitives.Root>
-))
-Switch.displayName = SwitchPrimitives.Root.displayName
-
-export { Switch }
+  SelectScrollUpButton,
+  SelectScrollDownButton,
+}
 
 ```
 
@@ -8070,93 +4047,6 @@ export {
   TableCell,
   TableCaption,
 }
-
-```
-
-### src/components/ui/tabs.tsx
-
-```typescript
-import * as React from "react"
-import * as TabsPrimitive from "@radix-ui/react-tabs"
-
-import { cn } from "@/lib/utils"
-
-const Tabs = TabsPrimitive.Root
-
-const TabsList = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.List>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.List
-    ref={ref}
-    className={cn(
-      "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
-      className
-    )}
-    {...props}
-  />
-))
-TabsList.displayName = TabsPrimitive.List.displayName
-
-const TabsTrigger = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Trigger
-    ref={ref}
-    className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow",
-      className
-    )}
-    {...props}
-  />
-))
-TabsTrigger.displayName = TabsPrimitive.Trigger.displayName
-
-const TabsContent = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Content
-    ref={ref}
-    className={cn(
-      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-      className
-    )}
-    {...props}
-  />
-))
-TabsContent.displayName = TabsPrimitive.Content.displayName
-
-export { Tabs, TabsList, TabsTrigger, TabsContent }
-
-```
-
-### src/components/ui/textarea.tsx
-
-```typescript
-import * as React from "react"
-
-import { cn } from "@/lib/utils"
-
-const Textarea = React.forwardRef<
-  HTMLTextAreaElement,
-  React.ComponentProps<"textarea">
->(({ className, ...props }, ref) => {
-  return (
-    <textarea
-      className={cn(
-        "flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-        className
-      )}
-      ref={ref}
-      {...props}
-    />
-  )
-})
-Textarea.displayName = "Textarea"
-
-export { Textarea }
 
 ```
 
@@ -8296,6 +4186,9 @@ export {
 ### src/components/ui/toaster.tsx
 
 ```typescript
+"use client"
+
+import { useToast } from "@/hooks/use-toast"
 import {
   Toast,
   ToastClose,
@@ -8304,7 +4197,6 @@ import {
   ToastTitle,
   ToastViewport,
 } from "@/components/ui/toast"
-import { useToast } from "@/components/ui/use-toast"  // Changed this import
 
 export function Toaster() {
   const { toasts } = useToast()
@@ -8329,52 +4221,14 @@ export function Toaster() {
     </ToastProvider>
   )
 }
-```
-
-### src/components/ui/tooltip.tsx
-
-```typescript
-import * as React from "react"
-import * as TooltipPrimitive from "@radix-ui/react-tooltip"
-
-import { cn } from "@/lib/utils"
-
-const TooltipProvider = TooltipPrimitive.Provider
-
-const Tooltip = TooltipPrimitive.Root
-
-const TooltipTrigger = TooltipPrimitive.Trigger
-
-const TooltipContent = React.forwardRef<
-  React.ElementRef<typeof TooltipPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
->(({ className, sideOffset = 4, ...props }, ref) => (
-  <TooltipPrimitive.Portal>
-    <TooltipPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      className={cn(
-        "z-50 overflow-hidden rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-        className
-      )}
-      {...props}
-    />
-  </TooltipPrimitive.Portal>
-))
-TooltipContent.displayName = TooltipPrimitive.Content.displayName
-
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
 
 ```
 
-### src/components/ui/use-toast.tsx
+### src/hooks/use-toast.ts
 
 ```typescript
 import * as React from "react"
-import type {
-  ToastActionElement,
-  ToastProps,
-} from "@/components/ui/toast"
+import type { ToastActionElement, ToastProps } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
@@ -8386,1707 +4240,13 @@ type ToasterToast = ToastProps & {
   action?: ToastActionElement
 }
 
-// Changed from const to type
-type ActionTypes = {
+// Define action type literals directly in a type
+type ActionType = {
   ADD_TOAST: "ADD_TOAST"
   UPDATE_TOAST: "UPDATE_TOAST"
   DISMISS_TOAST: "DISMISS_TOAST"
   REMOVE_TOAST: "REMOVE_TOAST"
 }
-
-const ACTION_TYPES: ActionTypes = {
-  ADD_TOAST: "ADD_TOAST",
-  UPDATE_TOAST: "UPDATE_TOAST",
-  DISMISS_TOAST: "DISMISS_TOAST",
-  REMOVE_TOAST: "REMOVE_TOAST",
-} as const
-
-let count = 0
-
-function genId() {
-  count = (count + 1) % Number.MAX_VALUE
-  return count.toString()
-}
-
-type Action =
-  | {
-      type: ActionTypes["ADD_TOAST"]
-      toast: ToasterToast
-    }
-  | {
-      type: ActionTypes["UPDATE_TOAST"]
-      toast: Partial<ToasterToast>
-    }
-  | {
-      type: ActionTypes["DISMISS_TOAST"]
-      toastId?: ToasterToast["id"]
-    }
-  | {
-      type: ActionTypes["REMOVE_TOAST"]
-      toastId?: ToasterToast["id"]
-    }
-
-interface State {
-  toasts: ToasterToast[]
-}
-
-const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
-
-const addToRemoveQueue = (toastId: string) => {
-  if (toastTimeouts.has(toastId)) {
-    return
-  }
-  const timeout = setTimeout(() => {
-    toastTimeouts.delete(toastId)
-    dispatch({
-      type: ACTION_TYPES.REMOVE_TOAST,
-      toastId: toastId,
-    })
-  }, TOAST_REMOVE_DELAY)
-  toastTimeouts.set(toastId, timeout)
-}
-
-export const reducer = (state: State, action: Action): State => {
-  switch (action.type) {
-    case ACTION_TYPES.ADD_TOAST:
-      return {
-        ...state,
-        toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
-      }
-    case ACTION_TYPES.UPDATE_TOAST:
-      return {
-        ...state,
-        toasts: state.toasts.map((t) =>
-          t.id === action.toast.id ? { ...t, ...action.toast } : t
-        ),
-      }
-    case ACTION_TYPES.DISMISS_TOAST: {
-      const { toastId } = action
-      if (toastId) {
-        addToRemoveQueue(toastId)
-      } else {
-        state.toasts.forEach((toast) => {
-          addToRemoveQueue(toast.id)
-        })
-      }
-      return {
-        ...state,
-        toasts: state.toasts.map((t) =>
-          t.id === toastId || toastId === undefined
-            ? {
-                ...t,
-                open: false,
-              }
-            : t
-        ),
-      }
-    }
-    case ACTION_TYPES.REMOVE_TOAST:
-      if (action.toastId === undefined) {
-        return {
-          ...state,
-          toasts: [],
-        }
-      }
-      return {
-        ...state,
-        toasts: state.toasts.filter((t) => t.id !== action.toastId),
-      }
-  }
-}
-
-const listeners: Array<(state: State) => void> = []
-let memoryState: State = { toasts: [] }
-
-function dispatch(action: Action) {
-  memoryState = reducer(memoryState, action)
-  listeners.forEach((listener) => {
-    listener(memoryState)
-  })
-}
-
-type Toast = Omit<ToasterToast, "id">
-
-function toast({ ...props }: Toast) {
-  const id = genId()
-
-  const update = (props: ToasterToast) =>
-    dispatch({
-      type: ACTION_TYPES.UPDATE_TOAST,
-      toast: { ...props, id },
-    })
-  const dismiss = () => dispatch({ type: ACTION_TYPES.DISMISS_TOAST, toastId: id })
-
-  dispatch({
-    type: ACTION_TYPES.ADD_TOAST,
-    toast: {
-      ...props,
-      id,
-      open: true,
-      onOpenChange: (open) => {
-        if (!open) dismiss()
-      },
-    },
-  })
-
-  return {
-    id: id,
-    dismiss,
-    update,
-  }
-}
-
-function useToast() {
-  const [state, setState] = React.useState<State>(memoryState)
-
-  React.useEffect(() => {
-    listeners.push(setState)
-    return () => {
-      const index = listeners.indexOf(setState)
-      if (index > -1) {
-        listeners.splice(index, 1)
-      }
-    }
-  }, [state])
-
-  return {
-    ...state,
-    toast,
-    dismiss: (toastId?: string) => dispatch({ type: ACTION_TYPES.DISMISS_TOAST, toastId }),
-  }
-}
-
-export { useToast, toast }
-```
-
-### src/components/users/invite-user.tsx
-
-```typescript
-"use client";
-
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/ui/use-toast";
-import { getSupabaseClient } from "@/lib/supabase/client";
-import { Loader2, UserPlus } from "lucide-react";
-
-const formSchema = z.object({
-  email: z.string().email("Please enter a valid email address"),
-  role: z.enum(["user", "admin"]).default("user"),
-});
-
-type FormData = z.infer<typeof formSchema>;
-
-export default function InviteUser() {
-  const [isOpen, setIsOpen] = useState(false);
-  const { toast } = useToast();
-  const supabase = getSupabaseClient();
-
-  const form = useForm<FormData>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      email: "",
-      role: "user",
-    },
-  });
-
-  const onSubmit = async (values: FormData) => {
-    try {
-      setIsOpen(false);
-      
-      // First, check if the user already exists
-      const { data: existingUser, error: checkError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', values.email)
-        .single();
-
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
-        throw checkError;
-      }
-
-      if (existingUser) {
-        toast({
-          title: "Error",
-          description: "This email is already registered.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Send the invitation
-      const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(values.email, {
-        data: {
-          role: values.role,
-        },
-      });
-
-      if (inviteError) throw inviteError;
-
-      // Create user record
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert({
-          email: values.email,
-          role: values.role,
-          name: values.email.split('@')[0], // Temporary name from email
-          active: false, // Will be activated when user accepts invitation
-        });
-
-      if (insertError) throw insertError;
-
-      toast({
-        title: "Success",
-        description: "Invitation sent successfully.",
-      });
-      
-      form.reset();
-    } catch (error: unknown) {
-      console.error("Error:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to send invitation.",
-        variant: "destructive",
-      });
-      
-      // Reopen the dialog if there was an error
-      setIsOpen(true);
-    }
-  };
-
-  return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <UserPlus className="mr-2 h-4 w-4" />
-          Invite User
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Invite New User</DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input 
-                      placeholder="Enter email address" 
-                      type="email"
-                      {...field} 
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="role"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Role</FormLabel>
-                  <FormControl>
-                    <select
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      {...field}
-                    >
-                      <option value="user">User</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={form.formState.isSubmitting}
-              >
-                {form.formState.isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  "Send Invitation"
-                )}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-```
-
-### src/components/users/users-table.tsx
-
-```typescript
-"use client";
-
-import { useEffect, useState } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Loader2 } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import type { Database, DbUser } from "@/lib/supabase/client";
-
-interface UsersTableProps {
-  initialData: DbUser[];
-}
-
-export function UsersTable({ initialData }: UsersTableProps) {
-  const [users, setUsers] = useState<DbUser[]>(initialData);
-  const [isLoading, setIsLoading] = useState<string | null>(null);
-  const { toast } = useToast();
-  const supabase = createClientComponentClient<Database>();
-
-  useEffect(() => {
-    const channel = supabase.channel('users_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'users'
-      }, (payload) => {
-        console.log('Change received:', payload);
-        
-        if (payload.eventType === 'UPDATE') {
-          const updatedUser = payload.new as DbUser;
-          setUsers(currentUsers => 
-            currentUsers.map(user => 
-              user.id === updatedUser.id ? updatedUser : user
-            )
-          );
-        }
-      })
-      .subscribe((status) => {
-        console.log('Subscription status:', status);
-      });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [supabase]);
-
-  const handleStatusChange = async (userId: string, active: boolean) => {
-    try {
-      setIsLoading(userId);
-
-      const { error } = await supabase
-        .from('users')
-        .update({ 
-          active,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', userId);
-
-      if (error) throw error;
-
-      // Optimistic update
-      setUsers(currentUsers => 
-        currentUsers.map(user => 
-          user.id === userId ? { ...user, active } : user
-        )
-      );
-
-      toast({
-        title: "Success",
-        description: `User ${active ? 'activated' : 'deactivated'} successfully.`,
-      });
-
-    } catch (error) {
-      console.error("Error:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update user status.",
-        variant: "destructive",
-      });
-      
-      // Revert optimistic update on error
-      setUsers(currentUsers => [...currentUsers]);
-    } finally {
-      setIsLoading(null);
-    }
-  };
-
-  // Rest of your component remains the same...
-
-  return (
-    <div className="rounded-md border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead>Role</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {users.map((user) => (
-            <TableRow key={user.id}>
-              <TableCell>{user.name}</TableCell>
-              <TableCell>{user.email}</TableCell>
-              <TableCell className="capitalize">{user.role}</TableCell>
-              <TableCell>
-                <span
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    user.active
-                      ? "bg-green-100 text-green-800"
-                      : "bg-red-100 text-red-800"
-                  }`}
-                >
-                  {user.active ? "Active" : "Inactive"}
-                </span>
-              </TableCell>
-              <TableCell className="text-right">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0">
-                      {isLoading === user.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <MoreHorizontal className="h-4 w-4" />
-                      )}
-                      <span className="sr-only">Open menu</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                    <DropdownMenuItem
-                      onClick={() => handleStatusChange(user.id, !user.active)}
-                      disabled={isLoading === user.id}
-                    >
-                      Mark as {user.active ? "Inactive" : "Active"}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-```
-
-### src/lib/supabase/client.ts
-
-```typescript
-
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-
-export type Database = {
-  public: {
-    Tables: {
-      users: {
-        Row: {
-          id: string;
-          name: string;
-          email: string;
-          role: string;
-          active: boolean;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          name: string;
-          email: string;
-          role?: string;
-          active?: boolean;
-        };
-        Update: {
-          name?: string;
-          email?: string;
-          role?: string;
-          active?: boolean;
-          updated_at?: string;
-        };
-      };
-      profiles: {
-        Row: {
-          id: string;
-          user_id: string;
-          full_name: string | null;
-          avatar_url: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          user_id: string;
-          full_name?: string | null;
-          avatar_url?: string | null;
-        };
-        Update: {
-          user_id?: string;
-          full_name?: string | null;
-          avatar_url?: string | null;
-          updated_at?: string;
-        };
-      };
-      data_entries: {
-        Row: {
-          id: string;
-          title: string;
-          content: string;
-          user_id: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          title: string;
-          content: string;
-          user_id: string;
-        };
-        Update: {
-          title?: string;
-          content?: string;
-          user_id?: string;
-          updated_at?: string;
-        };
-      };
-      menu_items: {
-        Row: {
-          id: string;
-          name: string;
-          description: string;
-          price: number;
-          image_path: string;
-          category_id: string;
-          is_daily_menu: boolean;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          name: string;
-          description: string;
-          price: number;
-          category_id: string;
-          image_path?: string;
-          is_daily_menu?: boolean;
-        };
-        Update: {
-          name?: string;
-          description?: string;
-          price?: number;
-          category_id?: string;
-          image_path?: string;
-          is_daily_menu?: boolean;
-          updated_at?: string;
-        };
-      };
-      categories: {
-        Row: {
-          id: string;
-          name: string;
-          description: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          name: string;
-          description?: string;
-        };
-        Update: {
-          name?: string;
-          description?: string;
-          updated_at?: string;
-        };
-      };
-      allergens: {
-        Row: {
-          id: string;
-          name: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          name: string;
-        };
-        Update: {
-          name?: string;
-          updated_at?: string;
-        };
-      };
-      menu_item_allergens: {
-        Row: {
-          id: string;
-          menu_item_id: string;
-          allergen_id: string;
-          created_at: string;
-        };
-        Insert: {
-          menu_item_id: string;
-          allergen_id: string;
-        };
-        Update: {
-          menu_item_id?: string;
-          allergen_id?: string;
-        };
-      };
-      daily_menus: {
-        Row: {
-          id: number;
-          date: string;
-          price: number;
-          active: boolean;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          date: string;
-          price: number;
-          active?: boolean;
-        };
-        Update: {
-          date?: string;
-          price?: number;
-          active?: boolean;
-          updated_at?: string;
-        };
-      };
-      daily_menu_first_courses: {
-        Row: {
-          id: number;
-          daily_menu_id: number;
-          name: string;
-          display_order: number;
-          created_at: string;
-        };
-        Insert: {
-          daily_menu_id: number;
-          name: string;
-          display_order: number;
-        };
-        Update: {
-          name?: string;
-          display_order?: number;
-        };
-      };
-      daily_menu_second_courses: {
-        Row: {
-          id: number;
-          daily_menu_id: number;
-          name: string;
-          display_order: number;
-          created_at: string;
-        };
-        Insert: {
-          daily_menu_id: number;
-          name: string;
-          display_order: number;
-        };
-        Update: {
-          name?: string;
-          display_order?: number;
-        };
-      };
-      wines: {
-        Row: {
-          id: string;
-          name: string;
-          description: string;
-          price: number;
-          category_id: string;
-          grape_varieties: string;
-          aging_info: string;
-          denomination: string;
-          image_path: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          name: string;
-          description: string;
-          price: number;
-          category_id: string;
-          grape_varieties?: string;
-          aging_info?: string;
-          denomination?: string;
-          image_path?: string;
-        };
-        Update: {
-          name?: string;
-          description?: string;
-          price?: number;
-          category_id?: string;
-          grape_varieties?: string;
-          aging_info?: string;
-          denomination?: string;
-          image_path?: string;
-          updated_at?: string;
-        };
-      };
-      wine_categories: {
-        Row: {
-          id: string;
-          name: string;
-          description: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          name: string;
-          description?: string;
-        };
-        Update: {
-          name?: string;
-          description?: string;
-          updated_at?: string;
-        };
-      };
-    };
-    Views: {
-      [_ in never]: never;
-    };
-    Functions: {
-      [_ in never]: never;
-    };
-    Enums: {
-      [_ in never]: never;
-    };
-  };
-};
-
-// Helper Types
-export type Tables = Database['public']['Tables'];
-export type TableRow<T extends keyof Tables> = Tables[T]['Row'];
-
-// Entity Types
-export type DbUser = TableRow<'users'>;
-export type DbProfile = TableRow<'profiles'>;
-export type DbDataEntry = TableRow<'data_entries'>;
-export type DbMenuItem = TableRow<'menu_items'>;
-export type DbCategory = TableRow<'categories'>;
-export type DbAllergen = TableRow<'allergens'>;
-export type DbMenuItemAllergen = TableRow<'menu_item_allergens'>;
-export type DbDailyMenu = TableRow<'daily_menus'>;
-export type DbDailyMenuFirstCourse = TableRow<'daily_menu_first_courses'>;
-export type DbDailyMenuSecondCourse = TableRow<'daily_menu_second_courses'>;
-export type DbWine = TableRow<'wines'>;
-export type DbWineCategory = TableRow<'wine_categories'>;
-
-// Extended Types
-export interface DbDataEntryWithUser extends DbDataEntry {
-  user: DbUser;
-}
-
-export interface DbMenuItemWithRelations extends DbMenuItem {
-  category: DbCategory;
-  allergens: DbAllergen[];
-}
-
-export interface DbWineWithRelations extends DbWine {
-  category: DbWineCategory;
-}
-
-// Create a singleton instance
-let client: ReturnType<typeof createClientComponentClient<Database>>;
-
-export const getSupabaseClient = () => {
-  if (!client) {
-    client = createClientComponentClient<Database>();
-  }
-  return client;
-};
-```
-
-### src/lib/supabase/menu.ts
-
-```typescript
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { PostgrestError} from "@supabase/supabase-js";
-import type { 
-  MenuItem, 
-  Wine, 
-  Category, 
-  Allergen, 
-  MenuItemFormData, 
-  WineFormData,
-  RealtimePayload
-} from "@/types/menu";
-import type { Database } from "@/lib/supabase/types";
-
-// Define more specific types for the database responses
-interface MenuItemWithRelations {
-  id: number;
-  name: string;
-  description: string;
-  price: number;
-  category_id: number;
-  image_url: string | null;
-  image_path: string | null;
-  image_alt: string | null;
-  image_thumbnail_path: string | null;
-  active: boolean;
-  created_at: string;
-  updated_at: string;
-  menu_item_allergens: {
-    allergen: {
-      id: number;
-      name: string;
-    };
-  }[];
-}
-
-interface WineWithRelations {
-  id: number;
-  name: string;
-  description: string;
-  bottle_price: number;
-  glass_price: number;
-  category_id: number;
-  active: boolean;
-  created_at: string;
-  wine_categories: {
-    id: number;
-    name: string;
-    display_order: number;
-  } | null;
-}
-
-const supabase = createClientComponentClient<Database>();
-
-// Helper function to check auth
-const checkAuth = async () => {
-  const { data: { session }, error } = await supabase.auth.getSession();
-  if (error) throw new Error(`Authentication error: ${error.message}`);
-  if (!session) throw new Error('No authenticated session');
-  return session;
-};
-
-// Helper to handle Supabase errors
-const handleSupabaseError = (error: PostgrestError, operation: string): never => {
-  console.error(`Error in ${operation}:`, {
-    code: error.code,
-    message: error.message,
-    details: error.details,
-    hint: error.hint
-  });
-  throw new Error(`${operation} failed: ${error.message}`);
-};
-
-// Menu Items Operations
-export const getMenuItems = async (): Promise<MenuItem[]> => {
-  try {
-    await checkAuth();
-    console.log('Fetching menu items...');
-
-    const { data, error } = await supabase
-      .from('menu_items')
-      .select(`
-        *,
-        menu_item_allergens!inner(
-          allergen:allergens(*)
-        )
-      `)
-      .order('name');
-
-    if (error) handleSupabaseError(error, 'getMenuItems');
-    if (!data) return [];
-
-    const transformedData = data.map((item: MenuItemWithRelations) => ({
-      ...item,
-      allergens: item.menu_item_allergens.map(relation => relation.allergen.id)
-    }));
-
-    console.log(`Successfully fetched ${transformedData.length} menu items`);
-    return transformedData;
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error in getMenuItems:', error.message);
-      throw new Error(`Failed to get menu items: ${error.message}`);
-    }
-    throw new Error('An unknown error occurred while getting menu items');
-  }
-};
-
-export const createMenuItem = async (data: MenuItemFormData): Promise<MenuItem> => {
-  try {
-    await checkAuth();
-    console.log('Creating menu item:', data);
-
-    const { data: item, error: itemError } = await supabase
-      .from('menu_items')
-      .insert([{
-        name: data.name,
-        description: data.description,
-        price: data.price,
-        category_id: data.category_id,
-        image_url: data.image_url || null,
-        image_path: data.image_path || null,
-        image_alt: data.image_alt || null,
-        image_thumbnail_path: data.image_thumbnail_path || null,
-        active: data.active ?? true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }])
-      .select()
-      .single();
-
-    if (itemError) handleSupabaseError(itemError, 'createMenuItem');
-    if (!item) throw new Error('Failed to create menu item');
-
-    if (data.allergens?.length) {
-      const allergenRelations = data.allergens.map(allergenId => ({
-        menu_item_id: item.id,
-        allergen_id: allergenId
-      }));
-
-      const { error: allergenError } = await supabase
-        .from('menu_item_allergens')
-        .insert(allergenRelations);
-
-      if (allergenError) {
-        await supabase.from('menu_items').delete().eq('id', item.id);
-        handleSupabaseError(allergenError, 'createMenuItem allergens');
-      }
-    }
-
-    return {
-      ...item,
-      allergens: data.allergens || []
-    };
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error in createMenuItem:', error.message);
-      throw new Error(`Failed to create menu item: ${error.message}`);
-    }
-    throw new Error('An unknown error occurred while creating menu item');
-  }
-};
-
-export const updateMenuItem = async (id: number, data: Partial<MenuItemFormData>): Promise<MenuItem> => {
-  try {
-    await checkAuth();
-    
-    const updateData = {
-      ...(data.name && { name: data.name }),
-      ...(data.description && { description: data.description }),
-      ...(data.price && { price: data.price }),
-      ...(data.category_id && { category_id: data.category_id }),
-      ...(data.image_path && { image_path: data.image_path }),
-      ...(typeof data.active !== 'undefined' && { active: data.active }),
-      updated_at: new Date().toISOString()
-    };
-
-    const { data: item, error: itemError } = await supabase
-      .from('menu_items')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (itemError) handleSupabaseError(itemError, 'updateMenuItem');
-    if (!item) throw new Error('Menu item not found');
-
-    if (data.allergens) {
-      const { error: deleteError } = await supabase
-        .from('menu_item_allergens')
-        .delete()
-        .eq('menu_item_id', id);
-
-      if (deleteError) handleSupabaseError(deleteError, 'updateMenuItem delete allergens');
-
-      if (data.allergens.length > 0) {
-        const allergenRelations = data.allergens.map(allergenId => ({
-          menu_item_id: id,
-          allergen_id: allergenId
-        }));
-
-        const { error: insertError } = await supabase
-          .from('menu_item_allergens')
-          .insert(allergenRelations);
-
-        if (insertError) handleSupabaseError(insertError, 'updateMenuItem insert allergens');
-      }
-    }
-
-    return {
-      ...item,
-      allergens: data.allergens || []
-    };
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error in updateMenuItem:', error.message);
-      throw new Error(`Failed to update menu item: ${error.message}`);
-    }
-    throw new Error('An unknown error occurred while updating menu item');
-  }
-};
-
-export const deleteMenuItem = async (id: number): Promise<void> => {
-  try {
-    await checkAuth();
-    
-    const { error } = await supabase
-      .from('menu_items')
-      .delete()
-      .eq('id', id);
-
-    if (error) handleSupabaseError(error, 'deleteMenuItem');
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error in deleteMenuItem:', error.message);
-      throw new Error(`Failed to delete menu item: ${error.message}`);
-    }
-    throw new Error('An unknown error occurred while deleting menu item');
-  }
-};
-
-// Wine Operations
-export const getWines = async (): Promise<Wine[]> => {
-  try {
-    await checkAuth();
-
-    const { data, error } = await supabase
-      .from('wines')
-      .select(`
-        *,
-        wine_categories(*)
-      `)
-      .order('name');
-
-    if (error) handleSupabaseError(error, 'getWines');
-    if (!data) return [];
-
-    const transformedData = data.map((wine: WineWithRelations) => ({
-      ...wine,
-      category: wine.wine_categories
-    }));
-
-    return transformedData;
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error in getWines:', error.message);
-      throw new Error(`Failed to get wines: ${error.message}`);
-    }
-    throw new Error('An unknown error occurred while getting wines');
-  }
-};
-
-export const createWine = async (data: WineFormData): Promise<Wine> => {
-  try {
-    await checkAuth();
-
-    const { data: wine, error } = await supabase
-      .from('wines')
-      .insert([{
-        name: data.name,
-        description: data.description,
-        bottle_price: data.bottle_price,
-        glass_price: data.glass_price,
-        category_id: data.category_id,
-        active: data.active ?? true,
-        created_at: new Date().toISOString()
-      }])
-      .select()
-      .single();
-
-    if (error) handleSupabaseError(error, 'createWine');
-    if (!wine) throw new Error('Failed to create wine');
-
-    return wine;
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error in createWine:', error.message);
-      throw new Error(`Failed to create wine: ${error.message}`);
-    }
-    throw new Error('An unknown error occurred while creating wine');
-  }
-};
-
-export const updateWine = async (id: number, data: Partial<WineFormData>): Promise<Wine> => {
-  try {
-    await checkAuth();
-
-    const { data: wine, error } = await supabase
-      .from('wines')
-      .update({
-        ...(data.name && { name: data.name }),
-        ...(data.description && { description: data.description }),
-        ...(data.bottle_price && { bottle_price: data.bottle_price }),
-        ...(data.glass_price && { glass_price: data.glass_price }),
-        ...(data.category_id && { category_id: data.category_id }),
-        ...(typeof data.active !== 'undefined' && { active: data.active })
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) handleSupabaseError(error, 'updateWine');
-    if (!wine) throw new Error('Wine not found');
-
-    return wine;
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error in updateWine:', error.message);
-      throw new Error(`Failed to update wine: ${error.message}`);
-    }
-    throw new Error('An unknown error occurred while updating wine');
-  }
-};
-
-export const deleteWine = async (id: number): Promise<void> => {
-  try {
-    await checkAuth();
-
-    const { error } = await supabase
-      .from('wines')
-      .delete()
-      .eq('id', id);
-
-    if (error) handleSupabaseError(error, 'deleteWine');
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error in deleteWine:', error.message);
-      throw new Error(`Failed to delete wine: ${error.message}`);
-    }
-    throw new Error('An unknown error occurred while deleting wine');
-  }
-};
-
-// Category Operations
-export const getCategories = async (): Promise<Category[]> => {
-  try {
-    await checkAuth();
-
-    const { data, error } = await supabase
-      .from('menu_categories')
-      .select('*')
-      .order('display_order', { ascending: true });
-
-    if (error) handleSupabaseError(error, 'getCategories');
-    if (!data) return [];
-
-    return data;
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error in getCategories:', error.message);
-      throw new Error(`Failed to get categories: ${error.message}`);
-    }
-    throw new Error('An unknown error occurred while getting categories');
-  }
-};
-
-// Allergen Operations
-export const getAllergens = async (): Promise<Allergen[]> => {
-  try {
-    await checkAuth();
-
-    const { data, error } = await supabase
-      .from('allergens')
-      .select('*')
-      .order('name');
-
-    if (error) handleSupabaseError(error, 'getAllergens');
-    if (!data) return [];
-
-    return data;
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error in getAllergens:', error.message);
-      throw new Error(`Failed to get allergens: ${error.message}`);
-    }
-    throw new Error('An unknown error occurred while getting allergens');
-  }
-};
-
-// Real-time subscriptions
-export const subscribeToMenuChanges = (
-  callback: (payload: RealtimePayload<MenuItem>) => void
-): (() => void) => {
-  try {
-    const channel = supabase.channel('menu_changes')
-      .on<MenuItem>(
-        'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'menu_items' 
-        },
-        (payload) => callback(payload as RealtimePayload<MenuItem>)
-      )
-      .subscribe((status: 'SUBSCRIBED' | 'CLOSED' | 'TIMED_OUT' | 'CHANNEL_ERROR', err?: Error) => {
-        if (err) {
-          console.error('Menu subscription error:', err);
-        } else {
-          console.log('Menu subscription status:', status);
-        }
-      });
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error in subscribeToMenuChanges:', error.message);
-      throw new Error(`Failed to subscribe to menu changes: ${error.message}`);
-    }
-    throw new Error('An unknown error occurred in menu subscription');
-  }
-};
-
-export const subscribeToWineChanges = (
-  callback: (payload: RealtimePayload<Wine>) => void
-): (() => void) => {
-  try {
-    const channel = supabase.channel('wine_changes')
-      .on<Wine>(
-        'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'wines' 
-        },
-        (payload) => callback(payload as RealtimePayload<Wine>)
-      )
-      .subscribe((status: 'SUBSCRIBED' | 'CLOSED' | 'TIMED_OUT' | 'CHANNEL_ERROR', err?: Error) => {
-        if (err) {
-          console.error('Wine subscription error:', err);
-        } else {
-          console.log('Wine subscription status:', status);
-        }
-      });
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error in subscribeToWineChanges:', error.message);
-      throw new Error(`Failed to subscribe to wine changes: ${error.message}`);
-    }
-    throw new Error('An unknown error occurred in wine subscription');
-  }
-};
-```
-
-### src/lib/supabase/server.ts
-
-```typescript
-import { createServerComponentClient, createServerActionClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import { cache } from "react";
-import type { Database, DbDataEntryWithUser } from "./client";
-
-// Cached server component client
-export const createServerClient = cache(() => {
-  const cookieStore = cookies();
-  return createServerComponentClient<Database>({ cookies: () => cookieStore });
-});
-
-// Server action client (for use in Server Actions)
-export const createActionClient = () => {
-  const cookieStore = cookies();
-  return createServerActionClient<Database>({ cookies: () => cookieStore });
-};
-
-// Cached session getter
-export const getSession = cache(async () => {
-  const supabase = createServerClient();
-  try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    return session;
-  } catch (error) {
-    console.error("Error:", error);
-    return null;
-  }
-});
-
-// User profile getter with error handling
-export const getUserProfile = cache(async () => {
-  const session = await getSession();
-  if (!session?.user.id) return null;
-
-  const supabase = createServerClient();
-  const { data, error } = await supabase
-    .from('profiles')
-    .select()
-    .eq('user_id', session.user.id)
-    .single();
-
-  if (error) {
-    console.error("Error:", error);
-    return null;
-  }
-
-  return data;
-});
-
-// Data entries getter with pagination and error handling
-export async function getDataEntries(page = 1, limit = 10) {
-  const supabase = createServerClient();
-  const start = (page - 1) * limit;
-  const end = start + limit - 1;
-
-  try {
-    const { data, error, count } = await supabase
-      .from('data_entries')
-      .select(`
-        *,
-        user:users!inner(*)
-      `)
-      .order('created_at', { ascending: false })
-      .range(start, end);
-
-    if (error) throw error;
-
-    return {
-      data: data as unknown as DbDataEntryWithUser[],
-      count: count || 0
-    };
-  } catch (error) {
-    console.error("Error:", error);
-    return { data: [], count: 0 };
-  }
-}
-
-// Protected route session checker
-export async function checkSession() {
-  const session = await getSession();
-  return !!session;
-}
-```
-
-### src/lib/supabase/types.ts
-
-```typescript
-export type Database = {
-  public: {
-    Tables: {
-      users: {
-        Row: {
-          id: string;
-          name: string;
-          email: string;
-          role: string;
-          active: boolean;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          name: string;
-          email: string;
-          role?: string;
-          active?: boolean;
-        };
-        Update: {
-          name?: string;
-          email?: string;
-          role?: string;
-          active?: boolean;
-          updated_at?: string;
-        };
-      };
-    };
-  };
-};
-
-export type Tables<T extends keyof Database['public']['Tables']> = 
-  Database['public']['Tables'][T]['Row'];
-
-export type User = Tables<'users'>;
-```
-
-### src/lib/utils.ts
-
-```typescript
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
- 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
-```
-
-### src/types/menu.ts
-
-```typescript
-// src/types/menu.ts
-
-// Utility Types
-export type ImagePath = string | null;
-export type ValidImageSource = `/images/${string}` | `http${string}` | null;
-
-// Basic Types
-export interface MenuItem {
-  id: number;              
-  name: string;
-  description: string;
-  price: number;
-  image_url: ValidImageSource;     
-  image_path: ValidImageSource;    
-  image_alt: string | null;     
-  image_thumbnail_path: ValidImageSource;  
-  category_id: number;    
-  active: boolean;       
-  allergens: number[];   
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Wine {
-  id: number;
-  name: string;
-  description: string;
-  bottle_price: number;
-  glass_price: number;
-  category_id: number;
-  active: boolean;
-  created_at: string;
-}
-
-export interface Category {
-  id: number;          
-  name: string;
-  display_order: number; 
-}
-
-export interface Allergen {
-  id: number;         
-  name: string;
-}
-
-// Image Related Types
-export interface ImageDimensions {
-  width: number;
-  height: number;
-}
-
-export interface ImageMetadata {
-  dimensions: ImageDimensions;
-  format: string;
-  size: number;
-}
-
-// Form Types
-export interface MenuItemFormData {
-  name: string;
-  description: string;
-  price: number;
-  category_id: number;    
-  image_url?: ValidImageSource;     
-  image_path?: ValidImageSource;    
-  image_alt?: string;     
-  image_thumbnail_path?: ValidImageSource;  
-  active?: boolean;       
-  allergens: number[];    
-}
-
-export interface WineFormData {
-  name: string;
-  description: string;
-  bottle_price: number;   
-  glass_price: number;    
-  category_id: number;    
-  active?: boolean;       
-}
-
-// Response Types
-export interface MenuItemResponse {
-  data: MenuItem | null;
-  error: Error | null;
-}
-
-export interface WineResponse {
-  data: Wine | null;
-  error: Error | null;
-}
-
-// Image Response Types
-export interface ImageUploadResponse {
-  path: ValidImageSource;
-  error: Error | null;
-}
-
-export interface ImageValidationError {
-  code: string;
-  message: string;
-  field?: string;
-}
-
-// Props Types
-export interface MenuCardProps {
-  item: MenuItem | Wine;
-  type: 'menu' | 'wine';
-  onEdit: (id: number, data: MenuItemFormData | WineFormData) => Promise<void>;
-  onDelete: (id: number) => Promise<void>;
-  categories: Category[];
-  allergens?: Allergen[];
-  isEditing: boolean;
-  onEditToggle: (id: number | null) => void;
-}
-
-export interface MenuNavProps {
-  categories: Category[];
-  activeCategory: number | null;  
-  onCategoryChange: (id: number | null) => void;  
-  type: 'menu' | 'wine';
-}
-
-export interface MenuSearchProps {
-  onSearch: (query: string) => void;
-  onCategoryFilter: (categoryId: number | null) => void;  
-  categories: Category[];
-}
-
-export interface MenuEditorProps {
-  item: MenuItem | Wine;
-  type: 'menu' | 'wine';
-  onSave: (data: MenuItemFormData | WineFormData) => Promise<void>;
-  onCancel: () => void;
-  categories: Category[];
-  allergens?: Allergen[];
-}
-
-// Image Related Props
-export interface ImageDisplayProps {
-  src: ValidImageSource;
-  alt: string;
-  fallback?: string;
-  onError?: (error: ImageValidationError) => void;
-}
-
-// Supabase Realtime Types
-export interface RealtimePayload<T> {
-  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  new: T;
-  old: {
-    id: number;
-  };
-}
-
-// Utility Type Guards
-export const isMenuItem = (item: MenuItem | Wine): item is MenuItem => {
-  return 'image_path' in item;
-};
-
-export const isValidImagePath = (path: unknown): path is ValidImageSource => {
-  if (path === null) return true;
-  if (typeof path !== 'string') return false;
-  
-  return (
-    path.startsWith('/images/') ||
-    path.startsWith('http://') ||
-    path.startsWith('https://')
-  );
-};
-
-// Constants
-export const DEFAULT_IMAGE_PLACEHOLDER = '/images/placeholder-menu-item.jpg';
-export const ACCEPTED_IMAGE_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp'
-] as const;
-
-export const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB
-```
-
-### lib/utils.ts
-
-```typescript
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
-
-```
-
-### hooks/use-toast.ts
-
-```typescript
-"use client"
-
-// Inspired by react-hot-toast library
-import * as React from "react"
-
-import type {
-  ToastActionElement,
-  ToastProps,
-} from "@/src/components/ui/toast"
-
-const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
-
-type ToasterToast = ToastProps & {
-  id: string
-  title?: React.ReactNode
-  description?: React.ReactNode
-  action?: ToastActionElement
-}
-
-const actionTypes = {
-  ADD_TOAST: "ADD_TOAST",
-  UPDATE_TOAST: "UPDATE_TOAST",
-  DISMISS_TOAST: "DISMISS_TOAST",
-  REMOVE_TOAST: "REMOVE_TOAST",
-} as const
-
-let count = 0
-
-function genId() {
-  count = (count + 1) % Number.MAX_SAFE_INTEGER
-  return count.toString()
-}
-
-type ActionType = typeof actionTypes
 
 type Action =
   | {
@@ -10108,6 +4268,13 @@ type Action =
 
 interface State {
   toasts: ToasterToast[]
+}
+
+let count = 0
+
+function genId() {
+  count = (count + 1) % Number.MAX_SAFE_INTEGER
+  return count.toString()
 }
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
@@ -10135,7 +4302,6 @@ export const reducer = (state: State, action: Action): State => {
         ...state,
         toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
       }
-
     case "UPDATE_TOAST":
       return {
         ...state,
@@ -10143,12 +4309,9 @@ export const reducer = (state: State, action: Action): State => {
           t.id === action.toast.id ? { ...t, ...action.toast } : t
         ),
       }
-
     case "DISMISS_TOAST": {
       const { toastId } = action
 
-      // ! Side effects ! - This could be extracted into a dismissToast() action,
-      // but I'll keep it here for simplicity
       if (toastId) {
         addToRemoveQueue(toastId)
       } else {
@@ -10204,6 +4367,7 @@ function toast({ ...props }: Toast) {
       type: "UPDATE_TOAST",
       toast: { ...props, id },
     })
+
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
 
   dispatch({
@@ -10246,6 +4410,926 @@ function useToast() {
 }
 
 export { useToast, toast }
+```
 
+### src/lib/auth.ts
+
+```typescript
+import { createMiddlewareClient, createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import type { Database } from "@/types";
+
+// Middleware handler
+export async function handleMiddleware(request: NextRequest) {
+  const response = NextResponse.next();
+  const supabase = createMiddlewareClient<Database>({ req: request, res: response });
+  const path = request.nextUrl.pathname;
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  // Auth routes handling
+  if (path.startsWith('/auth') || path === '/login' || path === '/signup') {
+    if (session) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    return response;
+  }
+
+  // Protected routes handling
+  if (path.startsWith('/dashboard') || path.startsWith('/api') || path === '/') {
+    if (!session) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    // Check for admin-only routes
+    if (path.startsWith('/dashboard/users') || path.startsWith('/dashboard/settings')) {
+      const { data: user } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (user?.role !== 'admin') {
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+      }
+    }
+
+    // Check user status
+    const { data: userStatus } = await supabase
+      .from('users')
+      .select('active')
+      .eq('id', session.user.id)
+      .single();
+
+    if (!userStatus?.active) {
+      await supabase.auth.signOut();
+      return NextResponse.redirect(
+        new URL('/login?error=Account%20is%20inactive', request.url)
+      );
+    }
+  }
+
+  // Handle session expiry
+  const hasExpired = session?.expires_at ? session.expires_at * 1000 < Date.now() : false;
+  if (session && hasExpired) {
+    const { data: { session: newSession } } = await supabase.auth.refreshSession();
+    if (!newSession) {
+      await supabase.auth.signOut();
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  }
+
+  return response;
+}
+
+// Auth callback handler
+export async function handleAuthCallback(request: NextRequest) {
+  try {
+    const requestUrl = new URL(request.url);
+    const code = requestUrl.searchParams.get('code');
+    const next = requestUrl.searchParams.get('next') || '/dashboard';
+
+    if (!code) {
+      throw new Error('No code provided');
+    }
+
+    const cookieStore = cookies();
+    const supabase = createRouteHandlerClient<Database>({ cookies: () => cookieStore });
+
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw userError || new Error('User not found');
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile && !profileError && user.email) {
+      await supabase
+        .from('users')
+        .insert({
+          email: user.email,
+          name: user.email.split('@')[0] || 'New User',
+          role: 'user' as const,
+          active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+    }
+
+    return NextResponse.redirect(new URL(next, request.url));
+  } catch (error) {
+    console.error('Auth error:', error);
+    return NextResponse.redirect(
+      new URL(`/login?error=${encodeURIComponent('Authentication failed')}`, request.url)
+    );
+  }
+}
+
+// Auth actions handler
+export async function handleAuthAction(request: NextRequest) {
+  try {
+    const cookieStore = cookies();
+    const supabase = createRouteHandlerClient<Database>({ cookies: () => cookieStore });
+    const { action } = await request.json();
+
+    if (action === 'signout') {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      return NextResponse.json({ success: true }, { status: 200 });
+    }
+
+    return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+  } catch (error) {
+    console.error('Auth action error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+// Middleware config
+export const middlewareConfig = {
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
+    '/',
+    '/dashboard/:path*',
+    '/auth/:path*',
+    '/api/:path*',
+  ],
+};
+```
+
+### src/lib/supabase.ts
+
+```typescript
+import { createClientComponentClient, createServerComponentClient, createServerActionClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
+import { cache } from "react";
+import type { Database } from "@/types";
+import type {  RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+
+// Client Component Client (for client-side)
+export const createClient = () => {
+  return createClientComponentClient<Database>();
+};
+
+// Cached Server Component Client (for server components)
+export const createServerClient = cache(() => {
+  const cookieStore = cookies();
+  return createServerComponentClient<Database>({ cookies: () => cookieStore });
+});
+
+// Server Action Client (for use in Server Actions)
+export const createActionClient = () => {
+  const cookieStore = cookies();
+  return createServerActionClient<Database>({ cookies: () => cookieStore });
+};
+
+// Authentication Helper Functions
+export const getSession = async () => {
+  const supabase = createServerClient();
+  try {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+    if (error) throw error;
+    return session;
+  } catch (error) {
+    console.error("Error:", error);
+    return null;
+  }
+};
+
+export const getUserProfile = async () => {
+  const session = await getSession();
+  if (!session?.user?.id) return null;
+
+  const supabase = createServerClient();
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", session.user.id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("Error:", error);
+    return null;
+  }
+};
+
+// Database Helper Functions
+export const getMenuItems = async () => {
+  const supabase = createServerClient();
+  try {
+    const { data, error } = await supabase
+      .from("menu_items")
+      .select(`
+        *,
+        category:categories(id, name),
+        menu_item_allergens!inner(
+          allergen:allergens(*)
+        )
+      `)
+      .order("name");
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("Error:", error);
+    return [];
+  }
+};
+
+export const getCategories = async () => {
+  const supabase = createServerClient();
+  try {
+    const { data, error } = await supabase
+      .from("categories")
+      .select("*")
+      .order("name");
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("Error:", error);
+    return [];
+  }
+};
+
+// Storage Helper Functions
+export const uploadFile = async (
+  bucket: string,
+  path: string,
+  file: File
+) => {
+  const supabase = createClient();
+  try {
+    const { error } = await supabase.storage
+      .from(bucket)
+      .upload(path, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (error) throw error;
+
+    const { data } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(path);
+
+    return data.publicUrl;
+  } catch (error) {
+    console.error("Error:", error);
+    throw error;
+  }
+};
+
+export const deleteFile = async (
+  bucket: string,
+  path: string
+) => {
+  const supabase = createClient();
+  try {
+    const { error } = await supabase.storage
+      .from(bucket)
+      .remove([path]);
+
+    if (error) throw error;
+  } catch (error) {
+    console.error("Error:", error);
+    throw error;
+  }
+};
+
+// Types for Realtime Subscriptions
+type TableName = Database['public']['Tables'][keyof Database['public']['Tables']];
+type RealtimePayload<T extends TableName> = RealtimePostgresChangesPayload<T['Row']>;
+
+// Realtime Subscription Helper Functions
+export const subscribeToChanges = <T extends TableName>(
+  table: string,
+  callback: (payload: RealtimePayload<T>) => void
+): (() => void) => {
+  const supabase = createClient();
+  
+  const subscription = supabase
+    .channel('db_changes')
+    .on<T['Row']>(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: table
+      },
+      (payload) => callback(payload as RealtimePayload<T>)
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(subscription);
+  };
+};
+
+// Error Types
+export interface SupabaseErrorDetails {
+  message: string;
+  code: string;
+  details?: string;
+}
+
+// Error Handling Helper
+export class SupabaseError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public details: string
+  ) {
+    super(message);
+    this.name = "SupabaseError";
+  }
+}
+
+export const handleError = (error: unknown) => {
+  console.error("Supabase Error:", error);
+  
+  if (
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    'message' in error &&
+    typeof error.message === 'string' &&
+    typeof error.code === 'string'
+  ) {
+    throw new SupabaseError(
+      error.message,
+      error.code,
+      'details' in error && typeof error.details === 'string' ? error.details : ""
+    );
+  }
+  
+  throw new Error("An unexpected error occurred");
+};
+```
+
+### src/lib/utils.ts
+
+```typescript
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+
+// Classname utility
+export function cn(...inputs: ClassValue[]): string {
+  return twMerge(clsx(inputs));
+}
+
+// Format currency
+export function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+  }).format(amount);
+}
+
+// Format date
+export function formatDate(date: string | Date, formatString: string = "PP"): string {
+  return format(new Date(date), formatString, { locale: es });
+}
+
+// Format relative time
+export function formatRelativeTime(date: string | Date): string {
+  const now = Date.now();
+  const timestamp = new Date(date).getTime();
+  const seconds = Math.floor((now - timestamp) / 1000);
+
+  // Less than a minute
+  if (seconds < 60) {
+    return "just now";
+  }
+
+  // Less than an hour
+  if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
+  }
+
+  // Less than a day
+  if (seconds < 86400) {
+    const hours = Math.floor(seconds / 3600);
+    return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+  }
+
+  // For older dates, use date-fns format
+  return format(new Date(date), "PP", { locale: es });
+}
+
+// Debounce function with proper typing
+type AnyFunction = (...args: unknown[]) => unknown;
+
+export function debounce<T extends AnyFunction>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout;
+
+  return function executedFunction(...args: Parameters<T>) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// File size formatter
+export function formatFileSize(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB"];
+  let size = bytes;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+
+  return `${size.toFixed(1)} ${units[unitIndex]}`;
+}
+
+// Slug generator
+export function generateSlug(str: string): string {
+  return str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
+}
+
+// URL validator
+export function isValidUrl(url: string): boolean {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Email validator
+export function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+// Random ID generator
+export function generateId(length = 8): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  return Array.from({ length }, () => 
+    chars.charAt(Math.floor(Math.random() * chars.length))
+  ).join('');
+}
+
+// Deep clone utility
+export function deepClone<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj)) as T;
+}
+
+// Object comparison with proper typing
+export function isEqual<T extends Record<string, unknown>>(obj1: T, obj2: T): boolean {
+  return JSON.stringify(obj1) === JSON.stringify(obj2);
+}
+
+// Array shuffle utility
+export function shuffleArray<T>(array: T[]): T[] {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+}
+
+// Truncate text
+export function truncateText(text: string, length: number): string {
+  if (text.length <= length) return text;
+  return text.slice(0, length) + "...";
+}
+
+// Parse boolean with proper typing
+export function parseBoolean(value: string | number | boolean | null | undefined): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    return value.toLowerCase() === 'true';
+  }
+  return Boolean(value);
+}
+
+// Check if object is empty
+export function isEmpty(obj: Record<string, unknown>): boolean {
+  return Object.keys(obj).length === 0;
+}
+
+// Remove undefined values from object
+export function removeUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    Object.entries(obj).filter(([_, value]) => value !== undefined)
+  ) as Partial<T>;
+}
+
+// Type guard for checking if value is Record type
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// Type guard for checking if value is array
+export function isArray<T>(value: unknown): value is T[] {
+  return Array.isArray(value);
+}
+```
+
+### src/types/index.ts
+
+```typescript
+import type { ReactNode } from 'react';
+
+// Supabase Database Types
+export type Database = {
+  public: {
+    Tables: {
+      users: {
+        Row: {
+          id: string;
+          email: string;
+          name: string;
+          role: 'admin' | 'user';
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          email: string;
+          name?: string;
+          role?: 'admin' | 'user';
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          email?: string;
+          name?: string;
+          role?: 'admin' | 'user';
+          active?: boolean;
+          updated_at?: string;
+        };
+      };
+      menu_items: {
+        Row: {
+          id: string;
+          name: string;
+          description: string;
+          price: number;
+          category_id: number;
+          image_url: string | null;
+          image_path: string | null;
+          allergens: string[];
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          name: string;
+          description: string;
+          price: number;
+          category_id: number;
+          image_url?: string | null;
+          image_path?: string | null;
+          allergens?: string[];
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          description?: string;
+          price?: number;
+          category_id?: number;
+          image_url?: string | null;
+          image_path?: string | null;
+          allergens?: string[];
+          active?: boolean;
+          updated_at?: string;
+        };
+      };
+      categories: {
+        Row: {
+          id: number;
+          name: string;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          name: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          description?: string | null;
+          updated_at?: string;
+        };
+      };
+      daily_menus: {
+        Row: {
+          id: number;
+          date: string;
+          price: number;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          date: string;
+          price: number;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          date?: string;
+          price?: number;
+          active?: boolean;
+          updated_at?: string;
+        };
+      };
+    };
+    Views: {
+      [_ in never]: never;
+    };
+    Functions: {
+      [_ in never]: never;
+    };
+    Enums: {
+      [_ in never]: never;
+    };
+  };
+};
+
+// Component Props Types
+export type CommonProps = {
+  className?: string;
+  children?: ReactNode;
+};
+
+// User Types
+export type User = {
+  id: string;
+  email: string;
+  name: string;
+  role: 'admin' | 'user';
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserFormData = {
+  email: string;
+  name: string;
+  role: 'admin' | 'user';
+  active: boolean;
+};
+
+// Auth Types
+export type AuthUser = {
+  id: string;
+  email: string;
+  role: 'admin' | 'user';
+};
+
+export type Session = {
+  user: AuthUser;
+  accessToken: string;
+};
+
+// Menu Types
+export type MenuItem = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category_id: number;
+  image_url: string | null;
+  image_path: string | null;
+  allergens: string[];
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+  category?: Category;
+};
+
+export type Category = {
+  id: number;
+  name: string;
+  description: string | null;
+};
+
+export type DailyMenu = {
+  id: number;
+  date: string;
+  price: number;
+  active: boolean;
+  items: MenuItem[];
+  created_at: string;
+  updated_at: string;
+};
+
+// Form Types
+export type MenuItemFormData = {
+  name: string;
+  description: string;
+  price: number;
+  category_id: number;
+  image_url?: string | null;
+  image_path?: string | null;
+  allergens?: string[];
+  active?: boolean;
+};
+
+// API Response Types
+export type ApiSuccessResponse<T> = {
+  data: T;
+  error: null;
+  status: 200 | 201 | 204;
+};
+
+export type ApiErrorResponse = {
+  data: null;
+  error: {
+    message: string;
+    code?: string;
+    details?: unknown;
+  };
+  status: 400 | 401 | 403 | 404 | 500;
+};
+
+export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
+
+// Paginated Response Types
+export type PaginatedData<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasMore: boolean;
+};
+
+export type PaginatedResponse<T> = ApiSuccessResponse<PaginatedData<T>> & {
+  meta: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+// Error Types
+export type ErrorResponse = {
+  message: string;
+  code?: string;
+  status: number;
+  details?: Record<string, unknown>;
+};
+
+// Image Types
+export type ImageUpload = {
+  file: File;
+  path: string;
+  category: string;
+};
+
+export type ImageMetadata = {
+  width: number;
+  height: number;
+  format: string;
+  size: number;
+};
+
+// Request Types
+export type PaginationParams = {
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+};
+
+export type FilterParams = {
+  search?: string;
+  category?: string;
+  status?: 'active' | 'inactive';
+  startDate?: string;
+  endDate?: string;
+};
+
+export type RequestParams = PaginationParams & FilterParams;
+
+// Utility Types
+export type Nullable<T> = T | null;
+export type Optional<T> = T | undefined;
+export type ValueOf<T> = T[keyof T];
+export type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
+};
+
+// Strongly typed object keys
+export type ObjectKeys<T> = keyof T;
+export type ObjectValues<T> = T[keyof T];
+
+// Function Types
+export type AsyncFunction<T = void> = () => Promise<T>;
+export type AsyncFunctionWithParam<P, T = void> = (param: P) => Promise<T>;
+
+// Constants
+export const ROLES = ['admin', 'user'] as const;
+export type Role = typeof ROLES[number];
+
+export const IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'webp'] as const;
+export type ImageFormat = typeof IMAGE_FORMATS[number];
+
+export const SORT_ORDERS = ['asc', 'desc'] as const;
+export type SortOrder = typeof SORT_ORDERS[number];
+
+export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE'] as const;
+export type HttpMethod = typeof HTTP_METHODS[number];
+
+export const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+
+// Validation Types
+export type ValidationError = {
+  path: string[];
+  message: string;
+};
+
+export type ValidationResult = {
+  valid: boolean;
+  errors: ValidationError[];
+};
+
+// Event Types
+export type EventHandler<T = void> = (event: Event) => T;
+
+// Realtime Types
+export type RealtimeSubscription = {
+  unsubscribe: () => void;
+};
+
+export type RealtimeMessage<T> = {
+  event: string;
+  payload: T;
+};
+
+// Type Guards
+export function isApiSuccessResponse<T>(
+  response: ApiResponse<T>
+): response is ApiSuccessResponse<T> {
+  return response.error === null;
+}
+
+export function isApiErrorResponse(
+  response: ApiResponse<unknown>
+): response is ApiErrorResponse {
+  return response.error !== null;
+}
+
+export function isUser(value: unknown): value is User {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    'email' in value &&
+    'role' in value
+  );
+}
 ```
 

@@ -1,26 +1,36 @@
+// app/(auth)/layout.tsx
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import type { Database } from "@/types";
 
 interface AuthLayoutProps {
   children: React.ReactNode;
 }
 
-export default async function AuthLayout({ children }: AuthLayoutProps) {
-  // Check if user is already authenticated
-  const supabase = createServerComponentClient({ cookies });
-  
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+async function getSession() {
+  const cookieStore = cookies();
+  const supabase = createServerComponentClient<Database>({ 
+    cookies: () => cookieStore 
+  });
 
-  // If already authenticated, redirect to dashboard
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session;
+  } catch (error) {
+    console.error('Auth error:', error);
+    return null;
+  }
+}
+
+export default async function AuthLayout({ children }: AuthLayoutProps) {
+  const session = await getSession();
+
   if (session) {
     redirect("/dashboard");
   }
 
   return (
-    // Auth pages wrapper
     <div className="min-h-screen grid grid-cols-1 overflow-hidden antialiased">
       {/* Gradient background */}
       <div 
@@ -80,9 +90,3 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
     </div>
   );
 }
-
-// Metadata for the auth pages
-export const metadata = {
-  title: "Authentication | Restaurant Manager",
-  description: "Authentication pages for Restaurant Manager application",
-};
