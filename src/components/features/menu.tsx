@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Edit2, MoreHorizontal, Trash2 } from "lucide-react";
+import { Edit2, MoreHorizontal, Trash2, Loader2 } from "lucide-react";
+import Image from "next/image";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,19 +21,27 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import Image from "next/image";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-// Rest of your code remains the same...
-interface MenuItem {
+// Types
+export type MenuItem = {
   id: string;
   name: string;
   description: string;
   price: number;
+  category_id: number;
   category: string;
   image_url: string | null;
   allergens: string[];
   active: boolean;
-}
+};
 
 interface MenuItemCardProps {
   item: MenuItem;
@@ -40,6 +49,20 @@ interface MenuItemCardProps {
   onDelete: (id: string) => void;
 }
 
+interface MenuListProps {
+  items: MenuItem[];
+  isLoading: boolean;
+  onEdit: (item: MenuItem) => void;
+  onDelete: (id: string) => void;
+}
+
+interface MenuSearchProps {
+  onSearch: (query: string) => void;
+  onFilter: (category: string) => void;
+  categories: string[];
+}
+
+// Components
 export function MenuItemCard({ item, onEdit, onDelete }: MenuItemCardProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
@@ -132,42 +155,60 @@ export function MenuItemCard({ item, onEdit, onDelete }: MenuItemCardProps) {
   );
 }
 
-interface MenuSearchProps {
-  onSearch: (query: string) => void;
-  onFilter: (category: string) => void;
-  categories: string[];
+export function MenuList({ items, isLoading, onEdit, onDelete }: MenuListProps) {
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!items.length) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        No items found
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {items.map((item) => (
+        <MenuItemCard
+          key={item.id}
+          item={item}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  );
 }
 
 export function MenuSearch({ onSearch, onFilter, categories }: MenuSearchProps) {
   return (
     <div className="flex items-center gap-4">
       <div className="flex-1">
-        <input
+        <Input
           type="text"
           placeholder="Search menu items..."
-          className="w-full px-4 py-2 rounded-md border bg-background"
           onChange={(e) => onSearch(e.target.value)}
         />
       </div>
-      <select
-        className="px-4 py-2 rounded-md border bg-background"
-        onChange={(e) => onFilter(e.target.value)}
-      >
-        <option value="">All Categories</option>
-        {categories.map((category) => (
-          <option key={category} value={category}>
-            {category}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-export function MenuGrid({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {children}
+      <Select onValueChange={onFilter}>
+        <SelectTrigger className="w-[180px]">
+          <SelectValue placeholder="All Categories" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="">All Categories</SelectItem>
+          {categories.map((category) => (
+            <SelectItem key={category} value={category}>
+              {category}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

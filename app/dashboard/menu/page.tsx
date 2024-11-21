@@ -4,17 +4,37 @@ import { useState, useEffect } from "react";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
-import MenuList from "@/components/features/menu/MenuList";
-import MenuSearch from "@/components/features/menu/MenuSearch";
-import type { MenuItem, Category } from "@/types/menu";
+import { useToast } from "@/hooks/use-toast";
+import { MenuList, MenuSearch, MenuItem } from "@/components/features/menu";
+
+type MenuItemAllergen = {
+  allergens: {
+    id: number;
+    name: string;
+  };
+};
+
+type MenuItemResponse = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category_id: number;
+  image_url: string | null;
+  active: boolean;
+  categories: {
+    id: number;
+    name: string;
+  } | null;
+  menu_item_allergens: MenuItemAllergen[];
+};
 
 export default function MenuPage() {
   const [items, setItems] = useState<MenuItem[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
   
   const supabase = createClientComponentClient();
   const { toast } = useToast();
@@ -28,7 +48,7 @@ export default function MenuPage() {
         // Fetch categories
         const { data: categoriesData, error: categoriesError } = await supabase
           .from('categories')
-          .select('*')
+          .select('name')
           .order('name');
 
         if (categoriesError) throw categoriesError;
@@ -40,7 +60,6 @@ export default function MenuPage() {
             *,
             categories (id, name),
             menu_item_allergens (
-              allergen_id,
               allergens (id, name)
             )
           `)
@@ -48,8 +67,24 @@ export default function MenuPage() {
 
         if (itemsError) throw itemsError;
 
-        setCategories(categoriesData);
-        setItems(itemsData);
+        // Transform categories data to array of strings
+        const categoryNames = (categoriesData ?? []).map((cat) => cat.name);
+        setCategories(categoryNames);
+
+        // Transform menu items data
+        const transformedItems: MenuItem[] = (itemsData ?? []).map((item: MenuItemResponse) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          price: item.price,
+          category_id: item.category_id,
+          category: item.categories?.name ?? '',
+          image_url: item.image_url,
+          allergens: item.menu_item_allergens.map((allergen) => allergen.allergens.name),
+          active: item.active
+        }));
+        
+        setItems(transformedItems);
       } catch (error) {
         console.error('Error fetching data:', error);
         toast({
@@ -66,16 +101,49 @@ export default function MenuPage() {
   }, [supabase, toast]);
 
   // Filter items based on search and category
-  const filteredItems = items.filter(item => {
+  const filteredItems = items.filter((item) => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          item.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = !selectedCategory || item.category_id === selectedCategory;
+    const matchesCategory = !selectedCategory || item.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
+  // Handle edit item
+  const handleEditItem = (item: MenuItem) => {
+    toast({
+      title: "Coming Soon",
+      description: `Edit functionality for "${item.name}" is under development`,
+    });
+  };
+
+  // Handle delete item
+  const handleDeleteItem = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('menu_items')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setItems((currentItems) => currentItems.filter((item) => item.id !== id));
+      
+      toast({
+        title: "Success",
+        description: "Menu item deleted successfully",
+      });
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete menu item",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Handle new item creation
-  const handleCreateItem = async () => {
-    // Implementation will be added later
+  const handleCreateItem = () => {
     toast({
       title: "Coming Soon",
       description: "This feature is under development",
@@ -88,7 +156,7 @@ export default function MenuPage() {
         <div>
           <h1 className="text-3xl font-bold">Menu Items</h1>
           <p className="text-muted-foreground mt-2">
-            Manage your restaurant's menu items
+            Manage your restaurant&apos;s menu items
           </p>
         </div>
         <Button onClick={handleCreateItem}>
@@ -100,14 +168,14 @@ export default function MenuPage() {
       <div className="space-y-4">
         <MenuSearch
           onSearch={setSearchQuery}
-          onCategoryFilter={setSelectedCategory}
+          onFilter={setSelectedCategory}
           categories={categories}
         />
-
         <MenuList
           items={filteredItems}
           isLoading={isLoading}
-          categories={categories}
+          onEdit={handleEditItem}
+          onDelete={handleDeleteItem}
         />
       </div>
     </div>
