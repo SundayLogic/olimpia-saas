@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Plus, Calendar, Toggle } from "lucide-react";
+import { Plus, Calendar, ToggleLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -70,11 +70,11 @@ export default function DailyMenuPage() {
   const supabase = createClientComponentClient();
   const { toast } = useToast();
 
-  // Fetch daily menus and menu items
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
+        setError(null);
         
         // Fetch menu items for selection
         const { data: itemsData, error: itemsError } = await supabase
@@ -132,7 +132,6 @@ export default function DailyMenuPage() {
         return;
       }
 
-      // Create daily menu
       const { data: menuData, error: menuError } = await supabase
         .from('daily_menus')
         .insert({
@@ -145,7 +144,6 @@ export default function DailyMenuPage() {
 
       if (menuError) throw menuError;
 
-      // Create menu item associations
       const menuItemAssociations = newMenu.selectedItems.map(itemId => ({
         daily_menu_id: menuData.id,
         menu_item_id: itemId
@@ -157,12 +155,6 @@ export default function DailyMenuPage() {
 
       if (associationError) throw associationError;
 
-      toast({
-        title: "Success",
-        description: "Daily menu created successfully",
-      });
-
-      // Refresh the data
       const { data: updatedMenu, error: fetchError } = await supabase
         .from('daily_menus')
         .select(`
@@ -188,6 +180,11 @@ export default function DailyMenuPage() {
         price: '',
         active: true,
         selectedItems: []
+      });
+
+      toast({
+        title: "Success",
+        description: "Daily menu created successfully",
       });
     } catch (error) {
       console.error('Error creating daily menu:', error);
@@ -259,6 +256,10 @@ export default function DailyMenuPage() {
         <div className="flex h-[200px] items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
+      ) : dailyMenus.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No daily menus found. Create one to get started.</p>
+        </div>
       ) : (
         <div className="grid gap-6">
           {dailyMenus.map((menu) => (
@@ -283,7 +284,7 @@ export default function DailyMenuPage() {
                       size="sm"
                       onClick={() => toggleMenuStatus(menu.id, menu.active)}
                     >
-                      <Toggle className="h-4 w-4" />
+                      <ToggleLeft className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
@@ -372,6 +373,7 @@ export default function DailyMenuPage() {
                     >
                       {item.name}
                       <button
+                        type="button"
                         onClick={() => setNewMenu({
                           ...newMenu,
                           selectedItems: newMenu.selectedItems.filter(id => id !== itemId)
