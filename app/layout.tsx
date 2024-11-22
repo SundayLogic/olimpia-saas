@@ -1,18 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Lato, JetBrains_Mono } from "next/font/google";
+import { Lato } from "next/font/google";
+import { cookies } from "next/headers";
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Toaster } from "@/components/ui/toaster";
-import "./.css";
+import "./global.css";
 
 const lato = Lato({
   subsets: ['latin'],
   weight: ['100', '300', '400', '700', '900'],
   variable: '--font-lato',
-  display: 'swap',
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-mono',
   display: 'swap',
 });
 
@@ -28,9 +24,21 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.ico",
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: APP_NAME,
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "white" },
+    { media: "(prefers-color-scheme: dark)", color: "black" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -41,14 +49,25 @@ interface RootLayoutProps {
   children: React.ReactNode;
 }
 
-export default function RootLayout({ children }: RootLayoutProps) {
+export default async function RootLayout({ children }: RootLayoutProps) {
+  // Initialize the Supabase client
+  const supabase = createServerComponentClient({ cookies });
+
+  try {
+    // Check if we have a session
+    await supabase.auth.getSession();
+  } catch (error) {
+    console.error('Error fetching session:', error);
+  }
+
   return (
     <html 
       lang="en" 
-      className={`${lato.variable} ${jetbrainsMono.variable}`}
+      className={`${lato.variable} antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-screen bg-background font-sans antialiased">
+      <head />
+      <body className="min-h-screen bg-background font-sans">
         <main className="relative flex min-h-screen flex-col">
           {children}
         </main>

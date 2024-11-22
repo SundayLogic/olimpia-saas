@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Plus, Calendar, Edit2, Trash2, Toggle } from "lucide-react";
+import { Plus, Calendar, Toggle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -26,31 +26,45 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
 
-type DailyMenu = {
+interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  active: boolean;
+}
+
+interface DailyMenuItem {
+  menu_items: MenuItem;
+}
+
+interface DailyMenu {
   id: number;
   date: string;
   price: number;
   active: boolean;
   created_at: string;
-  menu_items?: {
-    id: string;
-    name: string;
-    description: string;
-    price: number;
-  }[];
-};
+  daily_menu_items: DailyMenuItem[];
+}
+
+interface NewMenu {
+  date: string;
+  price: string;
+  active: boolean;
+  selectedItems: string[];
+}
 
 export default function DailyMenuPage() {
   const [dailyMenus, setDailyMenus] = useState<DailyMenu[]>([]);
-  const [menuItems, setMenuItems] = useState<any[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newMenu, setNewMenu] = useState({
+  const [newMenu, setNewMenu] = useState<NewMenu>({
     date: new Date().toISOString().split('T')[0],
     price: '',
     active: true,
-    selectedItems: [] as string[]
+    selectedItems: []
   });
 
   const supabase = createClientComponentClient();
@@ -278,9 +292,9 @@ export default function DailyMenuPage() {
                     Price: ${menu.price.toFixed(2)}
                   </div>
                   <div className="space-y-2">
-                    {menu.daily_menu_items?.map(({ menu_items: item }) => (
-                      <div key={item.id} className="text-sm">
-                        • {item.name}
+                    {menu.daily_menu_items?.map(({ menu_items }) => (
+                      <div key={menu_items.id} className="text-sm">
+                        • {menu_items.name}
                       </div>
                     ))}
                   </div>
