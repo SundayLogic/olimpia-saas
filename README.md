@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-11-21 22:47:09
+Generated on: 2024-11-21 22:56:38
 
 ## Documented Directories:
 - app/
@@ -11,7 +11,25 @@ Generated on: 2024-11-21 22:47:09
 - src/
 
 ## Directory Structure
+```
+app/
+  └── dashboard/
+      ├── page.tsx           (Main dashboard)
+      ├── menu/
+      │   ├── page.tsx      (Menu items)
+      │   ├── daily/
+      │   │   └── page.tsx  (Daily menu)
+      │   └── wine/
+      │       └── page.tsx  (Wine list)
+      ├── images/
+      │   └── page.tsx      (Images management)
+      ├── users/
+      │   └── page.tsx      (User management)
+      ├── settings/
+      │   └── page.tsx      (Settings)
+      └── layout.tsx        (Shared dashboard layout)
 
+```
 ```
 app/
     ├── app/
@@ -33,6 +51,7 @@ app/
             │   ├── page.tsx
         │   
         │   ├── layout.tsx
+        │   ├── page.tsx
     │   
     │   ├── global.css
     │   ├── layout.tsx
@@ -1343,6 +1362,47 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {children}
         </div>
       </main>
+    </div>
+  );
+}
+```
+
+### app/dashboard/page.tsx
+
+```typescript
+// app/dashboard/page.tsx
+import { PageHeader } from "@/components/core/layout";
+
+export default function DashboardPage() {
+  return (
+    <div className="container px-4 py-6">
+      <PageHeader
+        heading="Dashboard"
+        text="Welcome to your restaurant management dashboard"
+      />
+      
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Add your dashboard content here */}
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+          <h3 className="font-semibold">Menu Items</h3>
+          <p className="text-sm text-muted-foreground">Manage your menu items</p>
+        </div>
+
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+          <h3 className="font-semibold">Users</h3>
+          <p className="text-sm text-muted-foreground">Manage user access</p>
+        </div>
+
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+          <h3 className="font-semibold">Daily Menu</h3>
+          <p className="text-sm text-muted-foreground">Manage daily specials</p>
+        </div>
+
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+          <h3 className="font-semibold">Settings</h3>
+          <p className="text-sm text-muted-foreground">Configure your restaurant</p>
+        </div>
+      </div>
     </div>
   );
 }

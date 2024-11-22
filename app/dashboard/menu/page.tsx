@@ -5,16 +5,27 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { MenuList, MenuSearch, MenuItem } from "@/components/features/menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PageHeader } from "@/components/core/layout";
 
-type MenuItemAllergen = {
-  allergens: {
-    id: number;
-    name: string;
-  };
-};
-
-type MenuItemResponse = {
+type MenuItem = {
   id: string;
   name: string;
   description: string;
@@ -22,20 +33,27 @@ type MenuItemResponse = {
   category_id: number;
   image_url: string | null;
   active: boolean;
-  categories: {
-    id: number;
-    name: string;
-  } | null;
-  menu_item_allergens: MenuItemAllergen[];
+};
+
+type Category = {
+  id: number;
+  name: string;
 };
 
 export default function MenuPage() {
   const [items, setItems] = useState<MenuItem[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  
+  const [error, setError] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newItem, setNewItem] = useState({
+    name: '',
+    description: '',
+    price: '',
+    category_id: '',
+    active: true
+  });
+
   const supabase = createClientComponentClient();
   const { toast } = useToast();
 
@@ -48,7 +66,7 @@ export default function MenuPage() {
         // Fetch categories
         const { data: categoriesData, error: categoriesError } = await supabase
           .from('categories')
-          .select('name')
+          .select('*')
           .order('name');
 
         if (categoriesError) throw categoriesError;
@@ -58,35 +76,20 @@ export default function MenuPage() {
           .from('menu_items')
           .select(`
             *,
-            categories (id, name),
-            menu_item_allergens (
-              allergens (id, name)
+            categories (
+              id,
+              name
             )
           `)
           .order('name');
 
         if (itemsError) throw itemsError;
 
-        // Transform categories data to array of strings
-        const categoryNames = (categoriesData ?? []).map((cat) => cat.name);
-        setCategories(categoryNames);
-
-        // Transform menu items data
-        const transformedItems: MenuItem[] = (itemsData ?? []).map((item: MenuItemResponse) => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          price: item.price,
-          category_id: item.category_id,
-          category: item.categories?.name ?? '',
-          image_url: item.image_url,
-          allergens: item.menu_item_allergens.map((allergen) => allergen.allergens.name),
-          active: item.active
-        }));
-        
-        setItems(transformedItems);
+        setCategories(categoriesData || []);
+        setItems(itemsData || []);
       } catch (error) {
         console.error('Error fetching data:', error);
+        setError('Failed to load menu items');
         toast({
           title: "Error",
           description: "Failed to load menu items",
@@ -100,84 +103,168 @@ export default function MenuPage() {
     fetchData();
   }, [supabase, toast]);
 
-  // Filter items based on search and category
-  const filteredItems = items.filter((item) => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         item.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = !selectedCategory || item.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  // Handle edit item
-  const handleEditItem = (item: MenuItem) => {
-    toast({
-      title: "Coming Soon",
-      description: `Edit functionality for "${item.name}" is under development`,
-    });
-  };
-
-  // Handle delete item
-  const handleDeleteItem = async (id: string) => {
+  const handleCreateItem = async () => {
     try {
-      const { error } = await supabase
+      if (!newItem.name || !newItem.category_id || !newItem.price) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase
         .from('menu_items')
-        .delete()
-        .eq('id', id);
+        .insert({
+          name: newItem.name,
+          description: newItem.description,
+          price: parseFloat(newItem.price),
+          category_id: parseInt(newItem.category_id),
+          active: newItem.active,
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
-      setItems((currentItems) => currentItems.filter((item) => item.id !== id));
-      
+      setItems(prev => [...prev, data]);
+      setIsDialogOpen(false);
+      setNewItem({
+        name: '',
+        description: '',
+        price: '',
+        category_id: '',
+        active: true
+      });
+
       toast({
         title: "Success",
-        description: "Menu item deleted successfully",
+        description: "Menu item created successfully",
       });
     } catch (error) {
-      console.error('Error deleting item:', error);
+      console.error('Error creating item:', error);
       toast({
         title: "Error",
-        description: "Failed to delete menu item",
+        description: "Failed to create menu item",
         variant: "destructive",
       });
     }
   };
 
-  // Handle new item creation
-  const handleCreateItem = () => {
-    toast({
-      title: "Coming Soon",
-      description: "This feature is under development",
-    });
-  };
-
   return (
-    <div className="container mx-auto px-4">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Menu Items</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage your restaurant&apos;s menu items
-          </p>
-        </div>
-        <Button onClick={handleCreateItem}>
+    <div className="container p-6">
+      <PageHeader
+        heading="Menu Items"
+        text="Manage your restaurant's menu items"
+      >
+        <Button onClick={() => setIsDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Add Item
         </Button>
-      </div>
+      </PageHeader>
 
-      <div className="space-y-4">
-        <MenuSearch
-          onSearch={setSearchQuery}
-          onFilter={setSelectedCategory}
-          categories={categories}
-        />
-        <MenuList
-          items={filteredItems}
-          isLoading={isLoading}
-          onEdit={handleEditItem}
-          onDelete={handleDeleteItem}
-        />
-      </div>
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {isLoading ? (
+        <div className="flex h-[200px] items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-lg border bg-card text-card-foreground shadow-sm"
+            >
+              <div className="p-6">
+                <h3 className="font-semibold">{item.name}</h3>
+                <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
+                <div className="mt-4 flex items-center justify-between">
+                  <span className="text-lg font-bold">${item.price.toFixed(2)}</span>
+                  <span className={`text-sm ${item.active ? 'text-green-600' : 'text-red-600'}`}>
+                    {item.active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Menu Item</DialogTitle>
+            <DialogDescription>
+              Add a new item to your menu. Fill in the details below.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={newItem.name}
+                onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                placeholder="Item name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Input
+                id="description"
+                value={newItem.description}
+                onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                placeholder="Item description"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="price">Price</Label>
+              <Input
+                id="price"
+                type="number"
+                step="0.01"
+                value={newItem.price}
+                onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="category">Category</Label>
+              <Select
+                value={newItem.category_id}
+                onValueChange={(value) => setNewItem({ ...newItem, category_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id.toString()}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateItem}>
+              Create Item
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,8 +1,7 @@
-// app/layout.tsx
 import type { Metadata, Viewport } from "next";
 import { Lato, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
-import "./global.css";
+import "./.css";
 
 const lato = Lato({
   subsets: ['latin'],
