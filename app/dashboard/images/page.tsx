@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Upload, Trash2, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Upload, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -29,13 +29,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Image from "next/image";
 
-type StorageImage = {
+interface StorageImage {
   name: string;
   url: string;
   created_at: string;
   size: number;
   category: string;
-};
+}
 
 export default function ImagesPage() {
   const [images, setImages] = useState<StorageImage[]>([]);
@@ -45,7 +45,6 @@ export default function ImagesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<StorageImage | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
 
   const supabase = createClientComponentClient();
   const { toast } = useToast();
@@ -122,7 +121,6 @@ export default function ImagesPage() {
       }
 
       setUploading(true);
-      setUploadProgress(0);
 
       // Generate a unique file name
       const fileExt = file.name.split('.').pop();
@@ -166,7 +164,6 @@ export default function ImagesPage() {
       });
     } finally {
       setUploading(false);
-      setUploadProgress(0);
     }
   };
 
@@ -226,7 +223,11 @@ export default function ImagesPage() {
 
       {isLoading ? (
         <div className="flex h-[200px] items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      ) : images.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No images found. Upload one to get started.</p>
         </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -240,6 +241,7 @@ export default function ImagesPage() {
                 alt={image.name}
                 fill
                 className="object-cover transition-all group-hover:scale-105"
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               />
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
                 <div className="absolute bottom-0 left-0 right-0 p-4">
@@ -283,14 +285,6 @@ export default function ImagesPage() {
                 disabled={uploading}
               />
             </div>
-            {uploading && (
-              <div className="w-full bg-secondary rounded-full h-2.5">
-                <div
-                  className="bg-primary h-2.5 rounded-full transition-all"
-                  style={{ width: `${uploadProgress}%` }}
-                ></div>
-              </div>
-            )}
           </div>
 
           <DialogFooter>
@@ -299,7 +293,11 @@ export default function ImagesPage() {
               onClick={() => setIsUploadDialogOpen(false)}
               disabled={uploading}
             >
-              Cancel
+              {uploading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
+              ) : (
+                "Cancel"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
