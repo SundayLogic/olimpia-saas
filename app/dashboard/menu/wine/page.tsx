@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Plus, Edit2, Trash2, Wine } from "lucide-react";
+import { Plus, Wine, ToggleLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -22,109 +22,139 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
 
-type WineCategory = {
+interface WineCategoryAssignment {
+  wine_categories: {
+    id: number;
+    name: string;
+    display_order: number;
+  };
+}
+
+interface WineResponse {
   id: number;
   name: string;
-  description: string | null;
-};
+  description: string;
+  bottle_price: number;
+  glass_price: number;
+  active: boolean;
+  created_at: string;
+  wine_category_assignments: WineCategoryAssignment[];
+}
 
-type WineItem = {
-  id: string;
+interface WineCategory {
+  id: number;
+  name: string;
+  display_order: number;
+}
+
+interface Wine {
+  id: number;
   name: string;
   description: string;
-  price: number;
-  category_id: number;
-  year: number | null;
-  origin: string | null;
+  bottle_price: number;
+  glass_price: number | null;
   active: boolean;
-  wine_categories?: WineCategory;
-};
+  created_at: string;
+  categories: WineCategory[];
+}
+
+interface NewWine {
+  name: string;
+  description: string;
+  bottle_price: string;
+  glass_price: string;
+  category_ids: number[];
+  active: boolean;
+}
 
 export default function WinePage() {
-  const [wines, setWines] = useState<WineItem[]>([]);
+  const [wines, setWines] = useState<Wine[]>([]);
   const [categories, setCategories] = useState<WineCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedWine, setSelectedWine] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({
+  const [newWine, setNewWine] = useState<NewWine>({
     name: '',
     description: '',
-    price: '',
-    category_id: '',
-    year: '',
-    origin: '',
+    bottle_price: '',
+    glass_price: '',
+    category_ids: [],
     active: true
   });
 
   const supabase = createClientComponentClient();
   const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        
-        // Fetch wine categories
-        const { data: categoriesData, error: categoriesError } = await supabase
-          .from('wine_categories')
-          .select('*')
-          .order('name');
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
 
-        if (categoriesError) throw categoriesError;
+      // Fetch wine categories
+      const { data: categoriesData, error: categoriesError } = await supabase
+        .from('wine_categories')
+        .select('*')
+        .order('display_order');
 
-        // Fetch wines
-        const { data: winesData, error: winesError } = await supabase
-          .from('wines')
-          .select(`
-            *,
+      if (categoriesError) throw categoriesError;
+
+      // Fetch wines with their categories
+      const { data: winesData, error: winesError } = await supabase
+        .from('wines')
+        .select(`
+          *,
+          wine_category_assignments (
             wine_categories (
               id,
               name,
-              description
+              display_order
             )
-          `)
-          .order('name');
+          )
+        `)
+        .order('name');
 
-        if (winesError) throw winesError;
+      if (winesError) throw winesError;
 
-        setCategories(categoriesData || []);
-        setWines(winesData || []);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setError('Failed to load wines');
-        toast({
-          title: "Error",
-          description: "Failed to load wine list",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      // Transform the data to match our interface
+      const transformedWines: Wine[] = (winesData as WineResponse[])?.map(wine => ({
+        id: wine.id,
+        name: wine.name,
+        description: wine.description,
+        bottle_price: wine.bottle_price,
+        glass_price: wine.glass_price,
+        active: wine.active,
+        created_at: wine.created_at,
+        categories: wine.wine_category_assignments.map(
+          assignment => assignment.wine_categories
+        )
+      }));
 
+      setCategories(categoriesData || []);
+      setWines(transformedWines || []);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setError('Failed to load wines');
+      toast({
+        title: "Error",
+        description: "Failed to load wines",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
-  }, [supabase, toast]);
+  }, []);
 
-  const handleSubmit = async () => {
+  const handleCreateWine = async () => {
     try {
-      if (!formData.name || !formData.category_id || !formData.price) {
+      if (!newWine.name || !newWine.bottle_price) {
         toast({
           title: "Error",
           description: "Please fill in all required fields",
@@ -133,133 +163,87 @@ export default function WinePage() {
         return;
       }
 
-      const wineData = {
-        name: formData.name,
-        description: formData.description,
-        price: parseFloat(formData.price),
-        category_id: parseInt(formData.category_id),
-        year: formData.year ? parseInt(formData.year) : null,
-        origin: formData.origin || null,
-        active: formData.active,
-      };
+      // First, create the wine
+      const { data: wine, error: wineError } = await supabase
+        .from('wines')
+        .insert({
+          name: newWine.name,
+          description: newWine.description,
+          bottle_price: parseFloat(newWine.bottle_price),
+          glass_price: newWine.glass_price ? parseFloat(newWine.glass_price) : null,
+          active: newWine.active
+        })
+        .select()
+        .single();
 
-      if (isEditing && selectedWine) {
-        const { data, error } = await supabase
-          .from('wines')
-          .update(wineData)
-          .eq('id', selectedWine)
-          .select(`
-            *,
-            wine_categories (
-              id,
-              name,
-              description
-            )
-          `)
-          .single();
+      if (wineError) throw wineError;
 
-        if (error) throw error;
+      // Then create category assignments if there are any
+      if (newWine.category_ids.length > 0) {
+        const categoryAssignments = newWine.category_ids.map(categoryId => ({
+          wine_id: wine.id,
+          category_id: categoryId
+        }));
 
-        setWines(prev => prev.map(wine => 
-          wine.id === selectedWine ? data : wine
-        ));
+        const { error: assignmentError } = await supabase
+          .from('wine_category_assignments')
+          .insert(categoryAssignments);
 
-        toast({
-          title: "Success",
-          description: "Wine updated successfully",
-        });
-      } else {
-        const { data, error } = await supabase
-          .from('wines')
-          .insert(wineData)
-          .select(`
-            *,
-            wine_categories (
-              id,
-              name,
-              description
-            )
-          `)
-          .single();
-
-        if (error) throw error;
-
-        setWines(prev => [...prev, data]);
-
-        toast({
-          title: "Success",
-          description: "Wine added successfully",
-        });
+        if (assignmentError) throw assignmentError;
       }
 
-      handleCloseDialog();
-    } catch (error) {
-      console.error('Error saving wine:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save wine",
-        variant: "destructive",
+      await fetchData(); // Refresh the data
+      setIsDialogOpen(false);
+      setNewWine({
+        name: '',
+        description: '',
+        bottle_price: '',
+        glass_price: '',
+        category_ids: [],
+        active: true
       });
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!selectedWine) return;
-
-    try {
-      const { error } = await supabase
-        .from('wines')
-        .delete()
-        .eq('id', selectedWine);
-
-      if (error) throw error;
-
-      setWines(prev => prev.filter(wine => wine.id !== selectedWine));
-      setIsDeleteDialogOpen(false);
-      setSelectedWine(null);
 
       toast({
         title: "Success",
-        description: "Wine deleted successfully",
+        description: "Wine added successfully",
       });
     } catch (error) {
-      console.error('Error deleting wine:', error);
+      console.error('Error creating wine:', error);
       toast({
         title: "Error",
-        description: "Failed to delete wine",
+        description: "Failed to create wine",
         variant: "destructive",
       });
     }
   };
 
-  const handleEdit = (wine: WineItem) => {
-    setFormData({
-      name: wine.name,
-      description: wine.description,
-      price: wine.price.toString(),
-      category_id: wine.category_id.toString(),
-      year: wine.year?.toString() || '',
-      origin: wine.origin || '',
-      active: wine.active
-    });
-    setSelectedWine(wine.id);
-    setIsEditing(true);
-    setIsDialogOpen(true);
-  };
+  const toggleWineStatus = async (id: number, currentStatus: boolean) => {
+    try {
+      const { error: updateError } = await supabase
+        .from('wines')
+        .update({ active: !currentStatus })
+        .eq('id', id);
 
-  const handleCloseDialog = () => {
-    setFormData({
-      name: '',
-      description: '',
-      price: '',
-      category_id: '',
-      year: '',
-      origin: '',
-      active: true
-    });
-    setSelectedWine(null);
-    setIsEditing(false);
-    setIsDialogOpen(false);
+      if (updateError) throw updateError;
+
+      setWines(prev =>
+        prev.map(wine =>
+          wine.id === id ? { ...wine, active: !currentStatus } : wine
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: `Wine ${!currentStatus ? 'activated' : 'deactivated'} successfully`,
+      });
+    } catch (error) {
+      console.error('Error toggling wine status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update wine status",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -282,7 +266,11 @@ export default function WinePage() {
 
       {isLoading ? (
         <div className="flex h-[200px] items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      ) : wines.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No wines found. Add one to get started.</p>
         </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -292,63 +280,64 @@ export default function WinePage() {
               className="rounded-lg border bg-card text-card-foreground shadow-sm"
             >
               <div className="p-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold flex items-center">
-                    <Wine className="mr-2 h-4 w-4" />
-                    {wine.name}
-                    {wine.year && <span className="ml-2 text-sm text-muted-foreground">
-                      ({wine.year})
-                    </span>}
-                  </h3>
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEdit(wine)}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedWine(wine.id);
-                        setIsDeleteDialogOpen(true);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold flex items-center">
+                      <Wine className="mr-2 h-4 w-4" />
+                      {wine.name}
+                    </h3>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {wine.categories.map((category) => (
+                        <Badge key={category.id} variant="secondary">
+                          {category.name}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => toggleWineStatus(wine.id, wine.active)}
+                  >
+                    <ToggleLeft className="h-4 w-4" />
+                  </Button>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">{wine.description}</p>
-                {wine.origin && (
-                  <Badge variant="secondary" className="mt-2">
-                    {wine.origin}
-                  </Badge>
-                )}
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="text-lg font-bold">${wine.price.toFixed(2)}</span>
-                  <Badge variant={wine.active ? "success" : "secondary"}>
-                    {wine.active ? 'Available' : 'Unavailable'}
-                  </Badge>
-                </div>
-                {wine.wine_categories && (
-                  <div className="mt-2 text-sm text-muted-foreground">
-                    Category: {wine.wine_categories.name}
+
+                <p className="text-sm text-muted-foreground mt-2">
+                  {wine.description}
+                </p>
+
+                <div className="mt-4 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span>Bottle:</span>
+                    <span className="font-medium">${wine.bottle_price.toFixed(2)}</span>
                   </div>
-                )}
+                  {wine.glass_price && (
+                    <div className="flex justify-between text-sm">
+                      <span>Glass:</span>
+                      <span className="font-medium">${wine.glass_price.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+
+                <Badge 
+                  className="mt-4" 
+                  variant={wine.active ? "success" : "secondary"}
+                >
+                  {wine.active ? 'Available' : 'Unavailable'}
+                </Badge>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{isEditing ? 'Edit Wine' : 'Add New Wine'}</DialogTitle>
+            <DialogTitle>Add New Wine</DialogTitle>
             <DialogDescription>
-              {isEditing ? 'Edit wine details below.' : 'Add a new wine to your list.'}
+              Add a new wine to your list with its details and pricing.
             </DialogDescription>
           </DialogHeader>
 
@@ -357,8 +346,8 @@ export default function WinePage() {
               <Label htmlFor="name">Name</Label>
               <Input
                 id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                value={newWine.name}
+                onChange={(e) => setNewWine({ ...newWine, name: e.target.value })}
                 placeholder="Wine name"
               />
             </div>
@@ -366,104 +355,98 @@ export default function WinePage() {
               <Label htmlFor="description">Description</Label>
               <Input
                 id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                value={newWine.description}
+                onChange={(e) => setNewWine({ ...newWine, description: e.target.value })}
                 placeholder="Wine description"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="price">Price</Label>
+                <Label htmlFor="bottle_price">Bottle Price</Label>
                 <Input
-                  id="price"
+                  id="bottle_price"
                   type="number"
                   step="0.01"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                  value={newWine.bottle_price}
+                  onChange={(e) => setNewWine({ ...newWine, bottle_price: e.target.value })}
                   placeholder="0.00"
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="year">Year</Label>
+                <Label htmlFor="glass_price">Glass Price (Optional)</Label>
                 <Input
-                  id="year"
+                  id="glass_price"
                   type="number"
-                  value={formData.year}
-                  onChange={(e) => setFormData({ ...formData, year: e.target.value })}
-                  placeholder="Year"
+                  step="0.01"
+                  value={newWine.glass_price}
+                  onChange={(e) => setNewWine({ ...newWine, glass_price: e.target.value })}
+                  placeholder="0.00"
                 />
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="origin">Origin</Label>
-              <Input
-                id="origin"
-                value={formData.origin}
-                onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
-                placeholder="Country or region of origin"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="category">Category</Label>
+              <Label>Categories</Label>
               <Select
-                value={formData.category_id}
-                onValueChange={(value) => setFormData({ ...formData, category_id: value })}
+                value={newWine.category_ids[0]?.toString() || ''}
+                onValueChange={(value) =>
+                  setNewWine({
+                    ...newWine,
+                    category_ids: [...newWine.category_ids, parseInt(value)]
+                  })
+                }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder="Select categories" />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id.toString()}>
+                    <SelectItem
+                      key={category.id}
+                      value={category.id.toString()}
+                      disabled={newWine.category_ids.includes(category.id)}
+                    >
                       {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="active"
-                checked={formData.active}
-                onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300"
-              />
-              <Label htmlFor="active">Available</Label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {newWine.category_ids.map((categoryId) => {
+                  const category = categories.find(c => c.id === categoryId);
+                  return category ? (
+                    <Badge
+                      key={category.id}
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
+                      {category.name}
+                      <button
+                        type="button"
+                        onClick={() => setNewWine({
+                          ...newWine,
+                          category_ids: newWine.category_ids.filter(id => id !== categoryId)
+                        })}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        ×
+                      </button>
+                    </Badge>
+                  ) : null;
+                })}
+              </div>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={handleCloseDialog}>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit}>
-              {isEditing ? 'Save Changes' : 'Add Wine'}
+            <Button onClick={handleCreateWine}>
+              Create Wine
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the wine
-              from your list.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
