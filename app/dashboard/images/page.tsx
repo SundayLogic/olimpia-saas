@@ -1,8 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Upload, Trash2 } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { useDropzone } from "react-dropzone";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import {
+  Upload,
+  Trash2,
+  FolderIcon,
+  AlertCircle,
+  Edit2,
+} from "lucide-react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -23,306 +31,589 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { PageHeader } from "@/components/core/layout";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Image from "next/image";
+import { PageHeader } from "@/components/core/layout";
 
-interface StorageImage {
+// Define available categories
+const CATEGORIES = [
+  "arroces",
+  "carnes",
+  "del-huerto",
+  "del-mar",
+  "para-compartir",
+  "para-peques",
+  "para-veganos",
+  "postres",
+  "wines",
+];
+
+interface ImageInfo {
   name: string;
   url: string;
-  created_at: string;
-  size: number;
   category: string;
+  usageCount: number; // Changed from optional to required, will default to 0
+}
+
+interface MoveImageDialog {
+  open: boolean;
+  image: ImageInfo | null;
+}
+
+interface RenameImageDialog {
+  open: boolean;
+  image: ImageInfo | null;
 }
 
 export default function ImagesPage() {
-  const [images, setImages] = useState<StorageImage[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<StorageImage | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [images, setImages] = useState<ImageInfo[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>(
+    CATEGORIES[0]
+  );
+  const [isUploading, setIsUploading] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    image: ImageInfo | null;
+  }>({
+    open: false,
+    image: null,
+  });
+  const [moveDialog, setMoveDialog] = useState<MoveImageDialog>({
+    open: false,
+    image: null,
+  });
+  const [renameDialog, setRenameDialog] = useState<RenameImageDialog>({
+    open: false,
+    image: null,
+  });
+  const [newImageName, setNewImageName] = useState("");
+  const [targetCategory, setTargetCategory] = useState<string>(CATEGORIES[0]);
 
   const supabase = createClientComponentClient();
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchImages();
-  }, []);
+  // Setup dropzone
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: {
+      "image/jpeg": [],
+      "image/png": [],
+      "image/webp": [],
+    },
+    onDrop: handleFileDrop,
+  });
 
-  const fetchImages = async () => {
+  // Memoize fetchImages to avoid dependency cycle
+  const fetchImages = React.useCallback(async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-
-      const { data: storageData, error: storageError } = await supabase
-        .storage
-        .from('images')
-        .list();
+      const { data: storageData, error: storageError } = await supabase.storage
+        .from("menu-images")
+        .list(selectedCategory);
 
       if (storageError) throw storageError;
 
-      const images = await Promise.all(
-        storageData.map(async (file) => {
-          const { data } = supabase.storage
-            .from('images')
-            .getPublicUrl(file.name);
+      const imageList = await Promise.all(
+        (storageData || []).map(async (file) => {
+          const { data: urlData } = supabase.storage
+            .from("menu-images")
+            .getPublicUrl(`${selectedCategory}/${file.name}`);
+
+          // Get usage count (this is a placeholder - implement actual count)
+          const usageCount = await getImageUsageCount(
+            `${selectedCategory}/${file.name}`
+          );
 
           return {
             name: file.name,
-            url: data.publicUrl,
-            created_at: file.created_at,
-            size: file.metadata?.size || 0,
-            category: file.metadata?.category || 'other'
+            url: urlData.publicUrl,
+            category: selectedCategory,
+            usageCount: usageCount, // Will always have a value now
           };
         })
       );
 
-      setImages(images);
+      setImages(imageList);
     } catch (error) {
-      console.error('Error fetching images:', error);
-      setError('Failed to load images');
+      console.error("Error fetching images:", error);
       toast({
         title: "Error",
         description: "Failed to load images",
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
     }
-  };
+  }, [selectedCategory, supabase, toast]);
 
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Fetch images for selected category
+  useEffect(() => {
+    void fetchImages();
+  }, [selectedCategory, fetchImages]);
+
+  async function handleFileDrop(acceptedFiles: File[]) {
     try {
-      const file = event.target.files?.[0];
-      if (!file) return;
+      setIsUploading(true);
 
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
+      for (const file of acceptedFiles) {
+        // Validate file size (2MB limit)
+        if (file.size > 2 * 1024 * 1024) {
+          toast({
+            title: "Error",
+            description: `File ${file.name} exceeds 2MB limit`,
+            variant: "destructive",
+          });
+          continue;
+        }
+
+        const filePath = `${selectedCategory}/${file.name}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("menu-images")
+          .upload(filePath, file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+
+        if (uploadError) {
+          if (uploadError.message.includes("duplicate")) {
+            toast({
+              title: "Error",
+              description: `File ${file.name} already exists`,
+              variant: "destructive",
+            });
+          } else {
+            throw uploadError;
+          }
+          continue;
+        }
+
         toast({
-          title: "Error",
-          description: "Please upload an image file",
-          variant: "destructive",
+          title: "Success",
+          description: `Uploaded ${file.name}`,
         });
-        return;
       }
 
-      // Validate file size (2MB limit)
-      if (file.size > 2 * 1024 * 1024) {
-        toast({
-          title: "Error",
-          description: "Image must be less than 2MB",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setUploading(true);
-
-      // Generate a unique file name
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
-
-      // Upload the file
-      const { error: uploadError } = await supabase.storage
-        .from('images')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (uploadError) throw uploadError;
-
-      // Get the public URL
-      const { data } = supabase.storage
-        .from('images')
-        .getPublicUrl(fileName);
-
-      // Add the new image to the list
-      setImages(prev => [...prev, {
-        name: fileName,
-        url: data.publicUrl,
-        created_at: new Date().toISOString(),
-        size: file.size,
-        category: 'other'
-      }]);
-
-      setIsUploadDialogOpen(false);
-      toast({
-        title: "Success",
-        description: "Image uploaded successfully",
-      });
+      fetchImages();
     } catch (error) {
-      console.error('Error uploading image:', error);
+      console.error("Upload error:", error);
       toast({
         title: "Error",
-        description: "Failed to upload image",
+        description: "Failed to upload images",
         variant: "destructive",
       });
     } finally {
-      setUploading(false);
+      setIsUploading(false);
     }
-  };
+  }
 
-  const handleDelete = async () => {
-    if (!selectedImage) return;
+  async function getImageUsageCount(imagePath: string): Promise<number> {
+    try {
+      // Check wines table
+      const { count } = await supabase
+        .from("wines")
+        .select("*", { count: "exact", head: true })
+        .eq("image_path", imagePath);
 
+      return count || 0;
+    } catch (error) {
+      console.error("Error checking image usage:", error);
+      return 0;
+    }
+  }
+
+  async function handleDeleteImage(image: ImageInfo) {
     try {
       const { error } = await supabase.storage
-        .from('images')
-        .remove([selectedImage.name]);
+        .from("menu-images")
+        .remove([`${image.category}/${image.name}`]);
 
       if (error) throw error;
-
-      setImages(prev => prev.filter(img => img.name !== selectedImage.name));
-      setIsDeleteDialogOpen(false);
-      setSelectedImage(null);
 
       toast({
         title: "Success",
         description: "Image deleted successfully",
       });
+
+      setDeleteDialog({ open: false, image: null });
+      fetchImages();
     } catch (error) {
-      console.error('Error deleting image:', error);
+      console.error("Error deleting image:", error);
       toast({
         title: "Error",
         description: "Failed to delete image",
         variant: "destructive",
       });
     }
-  };
+  }
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-  };
+  async function handleMoveImage() {
+    if (!moveDialog.image || targetCategory === moveDialog.image.category)
+      return;
+
+    try {
+      // Copy to new location
+      const { data: fileData } = await supabase.storage
+        .from("menu-images")
+        .download(`${moveDialog.image.category}/${moveDialog.image.name}`);
+
+      if (!fileData) throw new Error("Failed to download file");
+
+      const newFile = new File([fileData], moveDialog.image.name, {
+        type: fileData.type,
+      });
+
+      const { error: uploadError } = await supabase.storage
+        .from("menu-images")
+        .upload(`${targetCategory}/${moveDialog.image.name}`, newFile, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Delete from old location
+      const { error: deleteError } = await supabase.storage
+        .from("menu-images")
+        .remove([`${moveDialog.image.category}/${moveDialog.image.name}`]);
+
+      if (deleteError) throw deleteError;
+
+      toast({
+        title: "Success",
+        description: "Image moved successfully",
+      });
+
+      setMoveDialog({ open: false, image: null });
+      fetchImages();
+    } catch (error) {
+      console.error("Error moving image:", error);
+      toast({
+        title: "Error",
+        description: "Failed to move image",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleRenameImage() {
+    if (!renameDialog.image || !newImageName) return;
+
+    try {
+      // Copy with new name
+      const { data: fileData } = await supabase.storage
+        .from("menu-images")
+        .download(`${renameDialog.image.category}/${renameDialog.image.name}`);
+
+      if (!fileData) throw new Error("Failed to download file");
+
+      const newFile = new File([fileData], newImageName, {
+        type: fileData.type,
+      });
+
+      const { error: uploadError } = await supabase.storage
+        .from("menu-images")
+        .upload(`${renameDialog.image.category}/${newImageName}`, newFile, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Delete old file
+      const { error: deleteError } = await supabase.storage
+        .from("menu-images")
+        .remove([`${renameDialog.image.category}/${renameDialog.image.name}`]);
+
+      if (deleteError) throw deleteError;
+
+      toast({
+        title: "Success",
+        description: "Image renamed successfully",
+      });
+
+      setRenameDialog({ open: false, image: null });
+      setNewImageName("");
+      fetchImages();
+    } catch (error) {
+      console.error("Error renaming image:", error);
+      toast({
+        title: "Error",
+        description: "Failed to rename image",
+        variant: "destructive",
+      });
+    }
+  }
 
   return (
     <div className="container p-6">
       <PageHeader
-        heading="Image Gallery"
-        text="Manage your restaurant's images"
+        heading="Image Management"
+        text="Upload and manage images for menu items"
       >
-        <Button onClick={() => setIsUploadDialogOpen(true)}>
-          <Upload className="mr-2 h-4 w-4" />
-          Upload Image
-        </Button>
+        <Select
+          value={selectedCategory}
+          onValueChange={setSelectedCategory}
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Select category" />
+          </SelectTrigger>
+          <SelectContent>
+            {CATEGORIES.map((category) => (
+              <SelectItem key={category} value={category}>
+                {category}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </PageHeader>
 
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      {/* Upload Section */}
+      <div
+        {...getRootProps()}
+        className={`
+          mt-6 border-2 border-dashed rounded-lg p-8 transition-colors text-center
+          ${isDragActive ? "border-primary" : "border-muted-foreground/25"}
+          ${isUploading ? "pointer-events-none opacity-50" : "cursor-pointer hover:border-primary/50"}
+        `}
+      >
+        <input {...getInputProps()} />
+        <div className="flex flex-col items-center justify-center">
+          <Upload className="h-8 w-8 mb-4 text-muted-foreground" />
+          <p className="text-lg font-medium mb-2">
+            {isDragActive ? "Drop files here" : "Drag & drop files here"}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            or click to select files
+          </p>
+        </div>
+      </div>
 
-      {isLoading ? (
-        <div className="flex h-[200px] items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-        </div>
-      ) : images.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">No images found. Upload one to get started.</p>
-        </div>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {images.map((image) => (
-            <div
-              key={image.name}
-              className="group relative aspect-square rounded-lg overflow-hidden border bg-card"
-            >
-              <Image
-                src={image.url}
-                alt={image.name}
-                fill
-                className="object-cover transition-all group-hover:scale-105"
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              />
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="absolute bottom-0 left-0 right-0 p-4">
-                  <div className="flex items-center justify-between text-white">
-                    <span className="text-sm">{formatFileSize(image.size)}</span>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedImage(image);
-                        setIsDeleteDialogOpen(true);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+      {/* Images Grid */}
+      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {images.map((image) => (
+          <div
+            key={image.name}
+            className="group relative aspect-square rounded-lg overflow-hidden border bg-card"
+          >
+            <Image
+              src={image.url}
+              alt={image.name}
+              fill
+              className="object-cover transition-all group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute bottom-0 left-0 right-0 p-4">
+                <p className="text-white text-sm mb-2 truncate">{image.name}</p>
+                {image.usageCount > 0 && (
+                  <p className="text-yellow-400 text-xs mb-4">
+                    Used in {image.usageCount}{" "}
+                    {image.usageCount === 1 ? "item" : "items"}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setRenameDialog({ open: true, image })}
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setMoveDialog({ open: true, image })}
+                  >
+                    <FolderIcon className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setDeleteDialog({ open: true, image })}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Upload Image</DialogTitle>
-            <DialogDescription>
-              Upload a new image to your gallery. Maximum file size is 2MB.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="image">Select Image</Label>
-              <Input
-                id="image"
-                type="file"
-                accept="image/*"
-                onChange={handleUpload}
-                disabled={uploading}
-              />
-            </div>
           </div>
+        ))}
+      </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsUploadDialogOpen(false)}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-              ) : (
-                "Cancel"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      {/* Delete Dialog */}
+      <AlertDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog({ open, image: null })}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>Delete Image</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the image
-              from your gallery.
+              {deleteDialog.image && deleteDialog.image.usageCount > 0 ? (
+                <div className="flex items-center gap-2 text-yellow-600">
+                  <AlertCircle className="h-4 w-4" />
+                  This image is used in {deleteDialog.image.usageCount}{" "}
+                  {deleteDialog.image.usageCount === 1 ? "item" : "items"}.
+                  Deleting it will remove the image from those items.
+                </div>
+              ) : (
+                "Are you sure you want to delete this image? This action cannot be undone."
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-red-600 hover:bg-red-700"
+              onClick={() =>
+                deleteDialog.image && handleDeleteImage(deleteDialog.image)
+              }
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Move Dialog */}
+      <Dialog
+        open={moveDialog.open}
+        onOpenChange={(open) => setMoveDialog({ open, image: null })}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move Image</DialogTitle>
+            <DialogDescription>
+              Select a new category for this image
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Current Category</Label>
+              <Input disabled value={moveDialog.image?.category || ""} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Destination Category</Label>
+              <Select
+                value={targetCategory}
+                onValueChange={setTargetCategory}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.filter(
+                    (cat) => cat !== moveDialog.image?.category
+                  ).map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {moveDialog.image && moveDialog.image.usageCount > 0 && (
+                <p className="text-sm text-yellow-600 flex items-center gap-2 mt-2">
+                  <AlertCircle className="h-4 w-4" />
+                  This image is used in {moveDialog.image.usageCount}{" "}
+                  {moveDialog.image.usageCount === 1 ? "item" : "items"}. Moving
+                  it will update all references.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setMoveDialog({ open: false, image: null })}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleMoveImage}
+              disabled={
+                !targetCategory ||
+                targetCategory === moveDialog.image?.category
+              }
+            >
+              Move Image
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Dialog */}
+      <Dialog
+        open={renameDialog.open}
+        onOpenChange={(open) => {
+          setRenameDialog({ open, image: null });
+          setNewImageName("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Image</DialogTitle>
+            <DialogDescription>
+              Enter a new name for the image
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Current Name</Label>
+              <Input disabled value={renameDialog.image?.name || ""} />
+            </div>
+            <div className="grid gap-2">
+              <Label>New Name</Label>
+              <Input
+                value={newImageName}
+                onChange={(e) => setNewImageName(e.target.value)}
+                placeholder="Enter new name with extension (e.g., image.jpg)"
+              />
+              {!newImageName.includes(".") && newImageName && (
+                <p className="text-sm text-red-500 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  Please include file extension (e.g., .jpg, .png, .webp)
+                </p>
+              )}
+              {renameDialog.image && renameDialog.image.usageCount > 0 && (
+                <p className="text-sm text-yellow-600 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  This image is used in {renameDialog.image.usageCount}{" "}
+                  {renameDialog.image.usageCount === 1 ? "item" : "items"}.
+                  Renaming it will update all references.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRenameDialog({ open: false, image: null });
+                setNewImageName("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRenameImage}
+              disabled={
+                !newImageName ||
+                newImageName === renameDialog.image?.name ||
+                !newImageName.includes(".")
+              }
+            >
+              Rename Image
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

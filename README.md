@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-11-21 22:56:38
+Generated on: 2024-11-23 11:51:59
 
 ## Documented Directories:
 - app/
@@ -11,25 +11,7 @@ Generated on: 2024-11-21 22:56:38
 - src/
 
 ## Directory Structure
-```
-app/
-  └── dashboard/
-      ├── page.tsx           (Main dashboard)
-      ├── menu/
-      │   ├── page.tsx      (Menu items)
-      │   ├── daily/
-      │   │   └── page.tsx  (Daily menu)
-      │   └── wine/
-      │       └── page.tsx  (Wine list)
-      ├── images/
-      │   └── page.tsx      (Images management)
-      ├── users/
-      │   └── page.tsx      (User management)
-      ├── settings/
-      │   └── page.tsx      (Settings)
-      └── layout.tsx        (Shared dashboard layout)
 
-```
 ```
 app/
     ├── app/
@@ -45,8 +27,17 @@ app/
                 ├── [...supabase]/
                 │   ├── route.ts
         ├── dashboard/
-            ├── menu/
+            ├── images/
             │   ├── page.tsx
+            ├── menu/
+                ├── daily/
+                │   ├── page.tsx
+                ├── wine/
+                │   ├── page.tsx
+            │   
+            │   ├── page.tsx
+            ├── settings/
+            │   ├── pages.tsx
             ├── users/
             │   ├── page.tsx
         │   
@@ -756,6 +747,1205 @@ export async function POST(request: NextRequest) {
 export const dynamic = 'force-dynamic';
 ```
 
+### app/dashboard/images/page.tsx
+
+```typescript
+"use client";
+
+import { useState, useEffect } from "react";
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Upload, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PageHeader } from "@/components/core/layout";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import Image from "next/image";
+
+interface StorageImage {
+  name: string;
+  url: string;
+  created_at: string;
+  size: number;
+  category: string;
+}
+
+export default function ImagesPage() {
+  const [images, setImages] = useState<StorageImage[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<StorageImage | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const supabase = createClientComponentClient();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchImages();
+  }, []);
+
+  const fetchImages = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const { data: storageData, error: storageError } = await supabase
+        .storage
+        .from('images')
+        .list();
+
+      if (storageError) throw storageError;
+
+      const images = await Promise.all(
+        storageData.map(async (file) => {
+          const { data } = supabase.storage
+            .from('images')
+            .getPublicUrl(file.name);
+
+          return {
+            name: file.name,
+            url: data.publicUrl,
+            created_at: file.created_at,
+            size: file.metadata?.size || 0,
+            category: file.metadata?.category || 'other'
+          };
+        })
+      );
+
+      setImages(images);
+    } catch (error) {
+      console.error('Error fetching images:', error);
+      setError('Failed to load images');
+      toast({
+        title: "Error",
+        description: "Failed to load images",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: "Error",
+          description: "Please upload an image file",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Validate file size (2MB limit)
+      if (file.size > 2 * 1024 * 1024) {
+        toast({
+          title: "Error",
+          description: "Image must be less than 2MB",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setUploading(true);
+
+      // Generate a unique file name
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+
+      // Upload the file
+      const { error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get the public URL
+      const { data } = supabase.storage
+        .from('images')
+        .getPublicUrl(fileName);
+
+      // Add the new image to the list
+      setImages(prev => [...prev, {
+        name: fileName,
+        url: data.publicUrl,
+        created_at: new Date().toISOString(),
+        size: file.size,
+        category: 'other'
+      }]);
+
+      setIsUploadDialogOpen(false);
+      toast({
+        title: "Success",
+        description: "Image uploaded successfully",
+      });
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      toast({
+        title: "Error",
+        description: "Failed to upload image",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedImage) return;
+
+    try {
+      const { error } = await supabase.storage
+        .from('images')
+        .remove([selectedImage.name]);
+
+      if (error) throw error;
+
+      setImages(prev => prev.filter(img => img.name !== selectedImage.name));
+      setIsDeleteDialogOpen(false);
+      setSelectedImage(null);
+
+      toast({
+        title: "Success",
+        description: "Image deleted successfully",
+      });
+    } catch (error) {
+      console.error('Error deleting image:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete image",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  };
+
+  return (
+    <div className="container p-6">
+      <PageHeader
+        heading="Image Gallery"
+        text="Manage your restaurant's images"
+      >
+        <Button onClick={() => setIsUploadDialogOpen(true)}>
+          <Upload className="mr-2 h-4 w-4" />
+          Upload Image
+        </Button>
+      </PageHeader>
+
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {isLoading ? (
+        <div className="flex h-[200px] items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      ) : images.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No images found. Upload one to get started.</p>
+        </div>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {images.map((image) => (
+            <div
+              key={image.name}
+              className="group relative aspect-square rounded-lg overflow-hidden border bg-card"
+            >
+              <Image
+                src={image.url}
+                alt={image.name}
+                fill
+                className="object-cover transition-all group-hover:scale-105"
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              />
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute bottom-0 left-0 right-0 p-4">
+                  <div className="flex items-center justify-between text-white">
+                    <span className="text-sm">{formatFileSize(image.size)}</span>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedImage(image);
+                        setIsDeleteDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload Image</DialogTitle>
+            <DialogDescription>
+              Upload a new image to your gallery. Maximum file size is 2MB.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="image">Select Image</Label>
+              <Input
+                id="image"
+                type="file"
+                accept="image/*"
+                onChange={handleUpload}
+                disabled={uploading}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsUploadDialogOpen(false)}
+              disabled={uploading}
+            >
+              {uploading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
+              ) : (
+                "Cancel"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the image
+              from your gallery.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+```
+
+### app/dashboard/menu/daily/page.tsx
+
+```typescript
+"use client";
+
+import { useState, useEffect } from "react";
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Plus, Calendar, ToggleLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PageHeader } from "@/components/core/layout";
+import { Badge } from "@/components/ui/badge";
+
+interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  active: boolean;
+}
+
+interface DailyMenuItem {
+  menu_items: MenuItem;
+}
+
+interface DailyMenu {
+  id: number;
+  date: string;
+  price: number;
+  active: boolean;
+  created_at: string;
+  daily_menu_items: DailyMenuItem[];
+}
+
+interface NewMenu {
+  date: string;
+  price: string;
+  active: boolean;
+  selectedItems: string[];
+}
+
+export default function DailyMenuPage() {
+  const [dailyMenus, setDailyMenus] = useState<DailyMenu[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newMenu, setNewMenu] = useState<NewMenu>({
+    date: new Date().toISOString().split('T')[0],
+    price: '',
+    active: true,
+    selectedItems: []
+  });
+
+  const supabase = createClientComponentClient();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        // Fetch menu items for selection
+        const { data: itemsData, error: itemsError } = await supabase
+          .from('menu_items')
+          .select('*')
+          .eq('active', true)
+          .order('name');
+
+        if (itemsError) throw itemsError;
+
+        // Fetch daily menus
+        const { data: menusData, error: menusError } = await supabase
+          .from('daily_menus')
+          .select(`
+            *,
+            daily_menu_items (
+              menu_items (
+                id,
+                name,
+                description,
+                price
+              )
+            )
+          `)
+          .order('date', { ascending: false });
+
+        if (menusError) throw menusError;
+
+        setMenuItems(itemsData || []);
+        setDailyMenus(menusData || []);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setError('Failed to load daily menus');
+        toast({
+          title: "Error",
+          description: "Failed to load daily menus",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [supabase, toast]);
+
+  const handleCreateMenu = async () => {
+    try {
+      if (!newMenu.date || !newMenu.price || newMenu.selectedItems.length === 0) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields and select at least one item",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data: menuData, error: menuError } = await supabase
+        .from('daily_menus')
+        .insert({
+          date: newMenu.date,
+          price: parseFloat(newMenu.price),
+          active: newMenu.active,
+        })
+        .select()
+        .single();
+
+      if (menuError) throw menuError;
+
+      const menuItemAssociations = newMenu.selectedItems.map(itemId => ({
+        daily_menu_id: menuData.id,
+        menu_item_id: itemId
+      }));
+
+      const { error: associationError } = await supabase
+        .from('daily_menu_items')
+        .insert(menuItemAssociations);
+
+      if (associationError) throw associationError;
+
+      const { data: updatedMenu, error: fetchError } = await supabase
+        .from('daily_menus')
+        .select(`
+          *,
+          daily_menu_items (
+            menu_items (
+              id,
+              name,
+              description,
+              price
+            )
+          )
+        `)
+        .eq('id', menuData.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      setDailyMenus(prev => [updatedMenu, ...prev]);
+      setIsDialogOpen(false);
+      setNewMenu({
+        date: new Date().toISOString().split('T')[0],
+        price: '',
+        active: true,
+        selectedItems: []
+      });
+
+      toast({
+        title: "Success",
+        description: "Daily menu created successfully",
+      });
+    } catch (error) {
+      console.error('Error creating daily menu:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create daily menu",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const toggleMenuStatus = async (menuId: number, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('daily_menus')
+        .update({ active: !currentStatus })
+        .eq('id', menuId);
+
+      if (error) throw error;
+
+      setDailyMenus(prev =>
+        prev.map(menu =>
+          menu.id === menuId ? { ...menu, active: !currentStatus } : menu
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: `Menu ${!currentStatus ? 'activated' : 'deactivated'} successfully`,
+      });
+    } catch (error) {
+      console.error('Error toggling menu status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update menu status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <div className="container p-6">
+      <PageHeader
+        heading="Daily Menus"
+        text="Manage your restaurant's daily menus"
+      >
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Create Daily Menu
+        </Button>
+      </PageHeader>
+
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {isLoading ? (
+        <div className="flex h-[200px] items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : dailyMenus.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No daily menus found. Create one to get started.</p>
+        </div>
+      ) : (
+        <div className="grid gap-6">
+          {dailyMenus.map((menu) => (
+            <div
+              key={menu.id}
+              className="rounded-lg border bg-card text-card-foreground shadow-sm"
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold flex items-center">
+                      <Calendar className="mr-2 h-4 w-4" />
+                      {formatDate(menu.date)}
+                    </h3>
+                    <Badge className="mt-2" variant={menu.active ? "success" : "secondary"}>
+                      {menu.active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggleMenuStatus(menu.id, menu.active)}
+                    >
+                      <ToggleLeft className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <div className="text-lg font-bold mb-2">
+                    Price: ${menu.price.toFixed(2)}
+                  </div>
+                  <div className="space-y-2">
+                    {menu.daily_menu_items?.map(({ menu_items }) => (
+                      <div key={menu_items.id} className="text-sm">
+                        • {menu_items.name}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Daily Menu</DialogTitle>
+            <DialogDescription>
+              Create a new daily menu by selecting the date, price, and menu items.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="date">Date</Label>
+              <Input
+                id="date"
+                type="date"
+                value={newMenu.date}
+                onChange={(e) => setNewMenu({ ...newMenu, date: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="price">Price</Label>
+              <Input
+                id="price"
+                type="number"
+                step="0.01"
+                value={newMenu.price}
+                onChange={(e) => setNewMenu({ ...newMenu, price: e.target.value })}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Menu Items</Label>
+              <Select
+                value={newMenu.selectedItems[0] || ''}
+                onValueChange={(value) => 
+                  setNewMenu({ 
+                    ...newMenu, 
+                    selectedItems: [...newMenu.selectedItems, value] 
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select items" />
+                </SelectTrigger>
+                <SelectContent>
+                  {menuItems.map((item) => (
+                    <SelectItem 
+                      key={item.id} 
+                      value={item.id}
+                      disabled={newMenu.selectedItems.includes(item.id)}
+                    >
+                      {item.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {newMenu.selectedItems.map((itemId) => {
+                  const item = menuItems.find(i => i.id === itemId);
+                  return item ? (
+                    <Badge 
+                      key={item.id}
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
+                      {item.name}
+                      <button
+                        type="button"
+                        onClick={() => setNewMenu({
+                          ...newMenu,
+                          selectedItems: newMenu.selectedItems.filter(id => id !== itemId)
+                        })}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        ×
+                      </button>
+                    </Badge>
+                  ) : null;
+                })}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateMenu}>
+              Create Menu
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+```
+
+### app/dashboard/menu/wine/page.tsx
+
+```typescript
+"use client";
+
+import { useState, useEffect } from "react";
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Plus, Wine, ToggleLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PageHeader } from "@/components/core/layout";
+import { Badge } from "@/components/ui/badge";
+
+interface WineCategoryAssignment {
+  wine_categories: {
+    id: number;
+    name: string;
+    display_order: number;
+  };
+}
+
+interface WineResponse {
+  id: number;
+  name: string;
+  description: string;
+  bottle_price: number;
+  glass_price: number;
+  active: boolean;
+  created_at: string;
+  wine_category_assignments: WineCategoryAssignment[];
+}
+
+interface WineCategory {
+  id: number;
+  name: string;
+  display_order: number;
+}
+
+interface Wine {
+  id: number;
+  name: string;
+  description: string;
+  bottle_price: number;
+  glass_price: number | null;
+  active: boolean;
+  created_at: string;
+  categories: WineCategory[];
+}
+
+interface NewWine {
+  name: string;
+  description: string;
+  bottle_price: string;
+  glass_price: string;
+  category_ids: number[];
+  active: boolean;
+}
+
+export default function WinePage() {
+  const [wines, setWines] = useState<Wine[]>([]);
+  const [categories, setCategories] = useState<WineCategory[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newWine, setNewWine] = useState<NewWine>({
+    name: '',
+    description: '',
+    bottle_price: '',
+    glass_price: '',
+    category_ids: [],
+    active: true
+  });
+
+  const supabase = createClientComponentClient();
+  const { toast } = useToast();
+
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Fetch wine categories
+      const { data: categoriesData, error: categoriesError } = await supabase
+        .from('wine_categories')
+        .select('*')
+        .order('display_order');
+
+      if (categoriesError) throw categoriesError;
+
+      // Fetch wines with their categories
+      const { data: winesData, error: winesError } = await supabase
+        .from('wines')
+        .select(`
+          *,
+          wine_category_assignments (
+            wine_categories (
+              id,
+              name,
+              display_order
+            )
+          )
+        `)
+        .order('name');
+
+      if (winesError) throw winesError;
+
+      // Transform the data to match our interface
+      const transformedWines: Wine[] = (winesData as WineResponse[])?.map(wine => ({
+        id: wine.id,
+        name: wine.name,
+        description: wine.description,
+        bottle_price: wine.bottle_price,
+        glass_price: wine.glass_price,
+        active: wine.active,
+        created_at: wine.created_at,
+        categories: wine.wine_category_assignments.map(
+          assignment => assignment.wine_categories
+        )
+      }));
+
+      setCategories(categoriesData || []);
+      setWines(transformedWines || []);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setError('Failed to load wines');
+      toast({
+        title: "Error",
+        description: "Failed to load wines",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleCreateWine = async () => {
+    try {
+      if (!newWine.name || !newWine.bottle_price) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // First, create the wine
+      const { data: wine, error: wineError } = await supabase
+        .from('wines')
+        .insert({
+          name: newWine.name,
+          description: newWine.description,
+          bottle_price: parseFloat(newWine.bottle_price),
+          glass_price: newWine.glass_price ? parseFloat(newWine.glass_price) : null,
+          active: newWine.active
+        })
+        .select()
+        .single();
+
+      if (wineError) throw wineError;
+
+      // Then create category assignments if there are any
+      if (newWine.category_ids.length > 0) {
+        const categoryAssignments = newWine.category_ids.map(categoryId => ({
+          wine_id: wine.id,
+          category_id: categoryId
+        }));
+
+        const { error: assignmentError } = await supabase
+          .from('wine_category_assignments')
+          .insert(categoryAssignments);
+
+        if (assignmentError) throw assignmentError;
+      }
+
+      await fetchData(); // Refresh the data
+      setIsDialogOpen(false);
+      setNewWine({
+        name: '',
+        description: '',
+        bottle_price: '',
+        glass_price: '',
+        category_ids: [],
+        active: true
+      });
+
+      toast({
+        title: "Success",
+        description: "Wine added successfully",
+      });
+    } catch (error) {
+      console.error('Error creating wine:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create wine",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleWineStatus = async (id: number, currentStatus: boolean) => {
+    try {
+      const { error: updateError } = await supabase
+        .from('wines')
+        .update({ active: !currentStatus })
+        .eq('id', id);
+
+      if (updateError) throw updateError;
+
+      setWines(prev =>
+        prev.map(wine =>
+          wine.id === id ? { ...wine, active: !currentStatus } : wine
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: `Wine ${!currentStatus ? 'activated' : 'deactivated'} successfully`,
+      });
+    } catch (error) {
+      console.error('Error toggling wine status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update wine status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <div className="container p-6">
+      <PageHeader
+        heading="Wine List"
+        text="Manage your restaurant's wine selection"
+      >
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Wine
+        </Button>
+      </PageHeader>
+
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {isLoading ? (
+        <div className="flex h-[200px] items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      ) : wines.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No wines found. Add one to get started.</p>
+        </div>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {wines.map((wine) => (
+            <div
+              key={wine.id}
+              className="rounded-lg border bg-card text-card-foreground shadow-sm"
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold flex items-center">
+                      <Wine className="mr-2 h-4 w-4" />
+                      {wine.name}
+                    </h3>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {wine.categories.map((category) => (
+                        <Badge key={category.id} variant="secondary">
+                          {category.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => toggleWineStatus(wine.id, wine.active)}
+                  >
+                    <ToggleLeft className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <p className="text-sm text-muted-foreground mt-2">
+                  {wine.description}
+                </p>
+
+                <div className="mt-4 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span>Bottle:</span>
+                    <span className="font-medium">${wine.bottle_price.toFixed(2)}</span>
+                  </div>
+                  {wine.glass_price && (
+                    <div className="flex justify-between text-sm">
+                      <span>Glass:</span>
+                      <span className="font-medium">${wine.glass_price.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+
+                <Badge 
+                  className="mt-4" 
+                  variant={wine.active ? "success" : "secondary"}
+                >
+                  {wine.active ? 'Available' : 'Unavailable'}
+                </Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Wine</DialogTitle>
+            <DialogDescription>
+              Add a new wine to your list with its details and pricing.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={newWine.name}
+                onChange={(e) => setNewWine({ ...newWine, name: e.target.value })}
+                placeholder="Wine name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Input
+                id="description"
+                value={newWine.description}
+                onChange={(e) => setNewWine({ ...newWine, description: e.target.value })}
+                placeholder="Wine description"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="bottle_price">Bottle Price</Label>
+                <Input
+                  id="bottle_price"
+                  type="number"
+                  step="0.01"
+                  value={newWine.bottle_price}
+                  onChange={(e) => setNewWine({ ...newWine, bottle_price: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="glass_price">Glass Price (Optional)</Label>
+                <Input
+                  id="glass_price"
+                  type="number"
+                  step="0.01"
+                  value={newWine.glass_price}
+                  onChange={(e) => setNewWine({ ...newWine, glass_price: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Categories</Label>
+              <Select
+                value={newWine.category_ids[0]?.toString() || ''}
+                onValueChange={(value) =>
+                  setNewWine({
+                    ...newWine,
+                    category_ids: [...newWine.category_ids, parseInt(value)]
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem
+                      key={category.id}
+                      value={category.id.toString()}
+                      disabled={newWine.category_ids.includes(category.id)}
+                    >
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {newWine.category_ids.map((categoryId) => {
+                  const category = categories.find(c => c.id === categoryId);
+                  return category ? (
+                    <Badge
+                      key={category.id}
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
+                      {category.name}
+                      <button
+                        type="button"
+                        onClick={() => setNewWine({
+                          ...newWine,
+                          category_ids: newWine.category_ids.filter(id => id !== categoryId)
+                        })}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        ×
+                      </button>
+                    </Badge>
+                  ) : null;
+                })}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateWine}>
+              Create Wine
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+```
+
 ### app/dashboard/menu/page.tsx
 
 ```typescript
@@ -766,16 +1956,27 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { MenuList, MenuSearch, MenuItem } from "@/components/features/menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PageHeader } from "@/components/core/layout";
 
-type MenuItemAllergen = {
-  allergens: {
-    id: number;
-    name: string;
-  };
-};
-
-type MenuItemResponse = {
+type MenuItem = {
   id: string;
   name: string;
   description: string;
@@ -783,20 +1984,27 @@ type MenuItemResponse = {
   category_id: number;
   image_url: string | null;
   active: boolean;
-  categories: {
-    id: number;
-    name: string;
-  } | null;
-  menu_item_allergens: MenuItemAllergen[];
+};
+
+type Category = {
+  id: number;
+  name: string;
 };
 
 export default function MenuPage() {
   const [items, setItems] = useState<MenuItem[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  
+  const [error, setError] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newItem, setNewItem] = useState({
+    name: '',
+    description: '',
+    price: '',
+    category_id: '',
+    active: true
+  });
+
   const supabase = createClientComponentClient();
   const { toast } = useToast();
 
@@ -809,7 +2017,7 @@ export default function MenuPage() {
         // Fetch categories
         const { data: categoriesData, error: categoriesError } = await supabase
           .from('categories')
-          .select('name')
+          .select('*')
           .order('name');
 
         if (categoriesError) throw categoriesError;
@@ -819,35 +2027,20 @@ export default function MenuPage() {
           .from('menu_items')
           .select(`
             *,
-            categories (id, name),
-            menu_item_allergens (
-              allergens (id, name)
+            categories (
+              id,
+              name
             )
           `)
           .order('name');
 
         if (itemsError) throw itemsError;
 
-        // Transform categories data to array of strings
-        const categoryNames = (categoriesData ?? []).map((cat) => cat.name);
-        setCategories(categoryNames);
-
-        // Transform menu items data
-        const transformedItems: MenuItem[] = (itemsData ?? []).map((item: MenuItemResponse) => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          price: item.price,
-          category_id: item.category_id,
-          category: item.categories?.name ?? '',
-          image_url: item.image_url,
-          allergens: item.menu_item_allergens.map((allergen) => allergen.allergens.name),
-          active: item.active
-        }));
-        
-        setItems(transformedItems);
+        setCategories(categoriesData || []);
+        setItems(itemsData || []);
       } catch (error) {
         console.error('Error fetching data:', error);
+        setError('Failed to load menu items');
         toast({
           title: "Error",
           description: "Failed to load menu items",
@@ -861,87 +2054,177 @@ export default function MenuPage() {
     fetchData();
   }, [supabase, toast]);
 
-  // Filter items based on search and category
-  const filteredItems = items.filter((item) => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         item.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = !selectedCategory || item.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  // Handle edit item
-  const handleEditItem = (item: MenuItem) => {
-    toast({
-      title: "Coming Soon",
-      description: `Edit functionality for "${item.name}" is under development`,
-    });
-  };
-
-  // Handle delete item
-  const handleDeleteItem = async (id: string) => {
+  const handleCreateItem = async () => {
     try {
-      const { error } = await supabase
+      if (!newItem.name || !newItem.category_id || !newItem.price) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase
         .from('menu_items')
-        .delete()
-        .eq('id', id);
+        .insert({
+          name: newItem.name,
+          description: newItem.description,
+          price: parseFloat(newItem.price),
+          category_id: parseInt(newItem.category_id),
+          active: newItem.active,
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
-      setItems((currentItems) => currentItems.filter((item) => item.id !== id));
-      
+      setItems(prev => [...prev, data]);
+      setIsDialogOpen(false);
+      setNewItem({
+        name: '',
+        description: '',
+        price: '',
+        category_id: '',
+        active: true
+      });
+
       toast({
         title: "Success",
-        description: "Menu item deleted successfully",
+        description: "Menu item created successfully",
       });
     } catch (error) {
-      console.error('Error deleting item:', error);
+      console.error('Error creating item:', error);
       toast({
         title: "Error",
-        description: "Failed to delete menu item",
+        description: "Failed to create menu item",
         variant: "destructive",
       });
     }
   };
 
-  // Handle new item creation
-  const handleCreateItem = () => {
-    toast({
-      title: "Coming Soon",
-      description: "This feature is under development",
-    });
-  };
-
   return (
-    <div className="container mx-auto px-4">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Menu Items</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage your restaurant&apos;s menu items
-          </p>
-        </div>
-        <Button onClick={handleCreateItem}>
+    <div className="container p-6">
+      <PageHeader
+        heading="Menu Items"
+        text="Manage your restaurant's menu items"
+      >
+        <Button onClick={() => setIsDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Add Item
         </Button>
-      </div>
+      </PageHeader>
 
-      <div className="space-y-4">
-        <MenuSearch
-          onSearch={setSearchQuery}
-          onFilter={setSelectedCategory}
-          categories={categories}
-        />
-        <MenuList
-          items={filteredItems}
-          isLoading={isLoading}
-          onEdit={handleEditItem}
-          onDelete={handleDeleteItem}
-        />
-      </div>
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {isLoading ? (
+        <div className="flex h-[200px] items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-lg border bg-card text-card-foreground shadow-sm"
+            >
+              <div className="p-6">
+                <h3 className="font-semibold">{item.name}</h3>
+                <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
+                <div className="mt-4 flex items-center justify-between">
+                  <span className="text-lg font-bold">${item.price.toFixed(2)}</span>
+                  <span className={`text-sm ${item.active ? 'text-green-600' : 'text-red-600'}`}>
+                    {item.active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Menu Item</DialogTitle>
+            <DialogDescription>
+              Add a new item to your menu. Fill in the details below.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={newItem.name}
+                onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                placeholder="Item name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Input
+                id="description"
+                value={newItem.description}
+                onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                placeholder="Item description"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="price">Price</Label>
+              <Input
+                id="price"
+                type="number"
+                step="0.01"
+                value={newItem.price}
+                onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="category">Category</Label>
+              <Select
+                value={newItem.category_id}
+                onValueChange={(value) => setNewItem({ ...newItem, category_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id.toString()}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateItem}>
+              Create Item
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+```
+
+### app/dashboard/settings/pages.tsx
+
+```typescript
+
 ```
 
 ### app/dashboard/users/page.tsx
@@ -1150,215 +2433,160 @@ export default function UsersPage() {
 ### app/dashboard/layout.tsx
 
 ```typescript
-"use client";
-
-import { useRouter } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { Metadata } from "next";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
+import { redirect } from "next/navigation";
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
 import {
   LayoutDashboard,
   Users,
   Settings,
   LogOut,
-  Loader2,
   ImageIcon,
   MenuSquare,
   ClipboardList,
   Wine,
 } from "lucide-react";
-import { useState, useEffect } from "react";
-import type { Database } from "@/types/index";
+import type { Database } from "@/types";
+
+export const metadata: Metadata = {
+  title: "Dashboard",
+  description: "Restaurant management dashboard",
+};
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-export default function DashboardLayout({ children }: DashboardLayoutProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const router = useRouter();
-  const { toast } = useToast();
-  const supabase = createClientComponentClient<Database>();
+export default async function DashboardLayout({ children }: DashboardLayoutProps) {
+  const supabase = createServerComponentClient<Database>({ cookies });
 
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push("/login");
-      } else if (session.user?.email) {
-        setUserEmail(session.user.email);
-      }
-    };
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
 
-    checkSession();
-  }, [supabase, router]);
+  if (!session) {
+    redirect("/login");
+  }
 
-  const handleSignOut = async () => {
-    try {
-      setIsLoading(true);
-      const { error } = await supabase.auth.signOut();
-      
-      if (error) {
-        throw error;
-      }
+  // Fetch user profile data
+  const { data: userProfile, error: profileError } = await supabase
+    .from("users")
+    .select("role, name")
+    .eq("id", session.user.id)
+    .single();
 
-      toast({
-        title: "Signed out successfully",
-        description: "You have been logged out of your account.",
-      });
-
-      router.push("/login");
-    } catch (error) {
-      console.error("Error signing out:", error);
-      toast({
-        title: "Error",
-        description: "There was a problem signing out. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  if (!userEmail) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin" />
-      </div>
-    );
+  if (profileError) {
+    console.error('Error fetching user profile:', profileError);
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-screen">
       {/* Sidebar */}
       <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-background">
         <div className="flex h-full flex-col">
           {/* Sidebar Header */}
           <div className="border-b px-6 py-4">
-            <h1 className="text-lg font-semibold">Restaurant Dashboard</h1>
+            <Link href="/dashboard" className="flex items-center text-lg font-semibold">
+              Restaurant Dashboard
+            </Link>
           </div>
 
           {/* Navigation */}
           <nav className="flex-1 space-y-1 px-3 py-4">
             {/* Dashboard Link */}
             <Link href="/dashboard">
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
-              >
+              <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
                 <LayoutDashboard className="mr-2 h-4 w-4" />
                 Dashboard
-              </Button>
+              </div>
             </Link>
 
             {/* Menu Management Section */}
             <div className="pt-4">
-              <h2 className="mb-2 px-4 text-xs font-semibold text-muted-foreground">
-                MENU MANAGEMENT
+              <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Menu Management
               </h2>
               <Link href="/dashboard/menu">
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start"
-                >
+                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
                   <ClipboardList className="mr-2 h-4 w-4" />
                   Menu Items
-                </Button>
+                </div>
               </Link>
-              <Link href="/dashboard/daily-menu">
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start"
-                >
+              <Link href="/dashboard/menu/daily">
+                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
                   <MenuSquare className="mr-2 h-4 w-4" />
                   Daily Menu
-                </Button>
+                </div>
               </Link>
-              <Link href="/dashboard/wine">
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start"
-                >
+              <Link href="/dashboard/menu/wine">
+                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
                   <Wine className="mr-2 h-4 w-4" />
                   Wine List
-                </Button>
+                </div>
               </Link>
             </div>
 
-            {/* Assets Management Section */}
+            {/* Assets Section */}
             <div className="pt-4">
-              <h2 className="mb-2 px-4 text-xs font-semibold text-muted-foreground">
-                ASSETS
+              <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Assets
               </h2>
               <Link href="/dashboard/images">
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start"
-                >
+                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
                   <ImageIcon className="mr-2 h-4 w-4" />
                   Images
-                </Button>
+                </div>
               </Link>
             </div>
 
-            {/* Admin Section */}
-            <div className="pt-4">
-              <h2 className="mb-2 px-4 text-xs font-semibold text-muted-foreground">
-                ADMIN
-              </h2>
-              <Link href="/dashboard/users">
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start"
-                >
-                  <Users className="mr-2 h-4 w-4" />
-                  Users
-                </Button>
-              </Link>
-              <Link href="/dashboard/settings">
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start"
-                >
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </Button>
-              </Link>
-            </div>
+            {/* Admin Section - Only visible for admin users */}
+            {userProfile?.role === 'admin' && (
+              <div className="pt-4">
+                <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Admin
+                </h2>
+                <Link href="/dashboard/users">
+                  <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                    <Users className="mr-2 h-4 w-4" />
+                    Users
+                  </div>
+                </Link>
+                <Link href="/dashboard/settings">
+                  <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
+                  </div>
+                </Link>
+              </div>
+            )}
           </nav>
 
           {/* User Section */}
           <div className="border-t p-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="ml-3">
-                  <p className="text-sm font-medium">
-                    {userEmail}
-                  </p>
-                </div>
+              <div>
+                <p className="text-sm font-medium">{userProfile?.name || session.user.email}</p>
+                <p className="text-xs text-muted-foreground capitalize">{userProfile?.role || 'user'}</p>
               </div>
-              <Button
-                onClick={handleSignOut}
-                variant="ghost"
-                size="icon"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
+              <form action="/auth/signout" method="post">
+                <button
+                  type="submit"
+                  className="rounded-full p-2 hover:bg-accent hover:text-accent-foreground"
+                  aria-label="Sign out"
+                >
                   <LogOut className="h-4 w-4" />
-                )}
-              </Button>
+                </button>
+              </form>
             </div>
           </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="pl-64">
-        <div className="h-full py-12">
+      <main className="pl-64 w-full">
+        <div className="h-full min-h-screen bg-background">
           {children}
         </div>
       </main>
@@ -1370,38 +2598,146 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 ### app/dashboard/page.tsx
 
 ```typescript
-// app/dashboard/page.tsx
+"use client";
+
+import { useState, useEffect } from "react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { Card } from "@/components/core/layout";
 import { PageHeader } from "@/components/core/layout";
+import {
+  ClipboardList,
+  Users,
+  TrendingUp,
+  Calendar,
+} from "lucide-react";
+
+type DashboardStats = {
+  total_menu_items: number;
+  total_users: number;
+  daily_menus_active: number;
+  total_wine_items: number;
+};
 
 export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats>({
+    total_menu_items: 0,
+    total_users: 0,
+    daily_menus_active: 0,
+    total_wine_items: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  const supabase = createClientComponentClient();
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setIsLoading(true);
+
+        // Fetch menu items count
+        const { count: menuCount } = await supabase
+          .from('menu_items')
+          .select('*', { count: 'exact', head: true });
+
+        // Fetch users count
+        const { count: usersCount } = await supabase
+          .from('users')
+          .select('*', { count: 'exact', head: true });
+
+        // Fetch active daily menus
+        const { count: activeMenusCount } = await supabase
+          .from('daily_menus')
+          .select('*', { count: 'exact', head: true })
+          .eq('active', true);
+
+        // Fetch wine items count
+        const { count: wineCount } = await supabase
+          .from('wines')
+          .select('*', { count: 'exact', head: true });
+
+        setStats({
+          total_menu_items: menuCount || 0,
+          total_users: usersCount || 0,
+          daily_menus_active: activeMenusCount || 0,
+          total_wine_items: wineCount || 0,
+        });
+      } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, [supabase]);
+
   return (
-    <div className="container px-4 py-6">
+    <div className="p-6">
       <PageHeader
-        heading="Dashboard"
+        heading="Dashboard Overview"
         text="Welcome to your restaurant management dashboard"
       />
-      
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Add your dashboard content here */}
-        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
-          <h3 className="font-semibold">Menu Items</h3>
-          <p className="text-sm text-muted-foreground">Manage your menu items</p>
-        </div>
 
-        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
-          <h3 className="font-semibold">Users</h3>
-          <p className="text-sm text-muted-foreground">Manage user access</p>
-        </div>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="rounded-full bg-blue-100 p-3">
+              <ClipboardList className="h-6 w-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Menu Items</p>
+              <h3 className="text-2xl font-bold">
+                {isLoading ? "..." : stats.total_menu_items}
+              </h3>
+            </div>
+          </div>
+        </Card>
 
-        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
-          <h3 className="font-semibold">Daily Menu</h3>
-          <p className="text-sm text-muted-foreground">Manage daily specials</p>
-        </div>
+        <Card className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="rounded-full bg-green-100 p-3">
+              <Calendar className="h-6 w-6 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Active Menus</p>
+              <h3 className="text-2xl font-bold">
+                {isLoading ? "..." : stats.daily_menus_active}
+              </h3>
+            </div>
+          </div>
+        </Card>
 
-        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
-          <h3 className="font-semibold">Settings</h3>
-          <p className="text-sm text-muted-foreground">Configure your restaurant</p>
-        </div>
+        <Card className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="rounded-full bg-purple-100 p-3">
+              <TrendingUp className="h-6 w-6 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Wine Selection</p>
+              <h3 className="text-2xl font-bold">
+                {isLoading ? "..." : stats.total_wine_items}
+              </h3>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="rounded-full bg-yellow-100 p-3">
+              <Users className="h-6 w-6 text-yellow-600" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Total Users</p>
+              <h3 className="text-2xl font-bold">
+                {isLoading ? "..." : stats.total_users}
+              </h3>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <div className="mt-6 grid gap-6 md:grid-cols-2">
+        {/* Additional dashboard widgets can be added here */}
       </div>
     </div>
   );
@@ -1552,9 +2888,10 @@ export default function DashboardPage() {
 ### app/layout.tsx
 
 ```typescript
-// app/layout.tsx
 import type { Metadata, Viewport } from "next";
-import { Lato, JetBrains_Mono } from "next/font/google";
+import { Lato } from "next/font/google";
+import { cookies } from "next/headers";
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Toaster } from "@/components/ui/toaster";
 import "./global.css";
 
@@ -1562,12 +2899,6 @@ const lato = Lato({
   subsets: ['latin'],
   weight: ['100', '300', '400', '700', '900'],
   variable: '--font-lato',
-  display: 'swap',
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-mono',
   display: 'swap',
 });
 
@@ -1583,9 +2914,21 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.ico",
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: APP_NAME,
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "white" },
+    { media: "(prefers-color-scheme: dark)", color: "black" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -1596,14 +2939,25 @@ interface RootLayoutProps {
   children: React.ReactNode;
 }
 
-export default function RootLayout({ children }: RootLayoutProps) {
+export default async function RootLayout({ children }: RootLayoutProps) {
+  // Initialize the Supabase client
+  const supabase = createServerComponentClient({ cookies });
+
+  try {
+    // Check if we have a session
+    await supabase.auth.getSession();
+  } catch (error) {
+    console.error('Error fetching session:', error);
+  }
+
   return (
     <html 
       lang="en" 
-      className={`${lato.variable} ${jetbrainsMono.variable}`}
+      className={`${lato.variable} antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-screen bg-background font-sans antialiased">
+      <head />
+      <body className="min-h-screen bg-background font-sans">
         <main className="relative flex min-h-screen flex-col">
           {children}
         </main>
@@ -1620,34 +2974,49 @@ export default function RootLayout({ children }: RootLayoutProps) {
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import type { Database } from "@/types";
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function HomePage() {
-  const supabase = createServerComponentClient({ cookies });
+  const supabase = createServerComponentClient<Database>({ cookies });
 
-  // Check auth status
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  try {
+    // Check auth status
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-  // Redirect based on auth status
-  if (!session) {
-    redirect("/login");
-  } else {
-    redirect("/dashboard");
+    // Redirect based on auth status
+    if (!session) {
+      redirect("/login");
+    } else {
+      // Get user profile
+      const { data: profile } = await supabase
+        .from('users')
+        .select('role, active')
+        .eq('id', session.user.id)
+        .single();
+
+      // Check if user is active
+      if (profile && !profile.active) {
+        // Sign out inactive users
+        await supabase.auth.signOut();
+        redirect("/login?error=Account%20is%20inactive");
+      }
+
+      // Redirect to dashboard for active users
+      redirect("/dashboard");
+    }
+  } catch (error) {
+    console.error('Error in root page:', error);
+    redirect("/login?error=Something%20went%20wrong");
   }
 
   // This return is technically unreachable but satisfies TypeScript
   return null;
 }
-
-// Prevent caching of this page
-export const revalidate = 0;
-
-// Force dynamic rendering
-export const dynamic = 'force-dynamic';
-
-// Disable static generation
-export const fetchCache = 'force-no-store';
 ```
 
 ### src/components/core/forms.tsx
