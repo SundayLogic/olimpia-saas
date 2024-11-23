@@ -109,41 +109,54 @@ export default function ImagesPage() {
     onDrop: handleFileDrop,
   });
 
-  // Memoize fetchImages to avoid dependency cycle
+  // Memoize fetchImages to avoid dependency cycle and include debug logs
   const fetchImages = React.useCallback(async () => {
     try {
-      const { data: storageData, error: storageError } = await supabase.storage
-        .from("menu-images")
+      const { data: storageData, error: storageError } = await supabase
+        .storage
+        .from("menu")  // Changed from "menu-images" to "menu"
         .list(selectedCategory);
 
       if (storageError) throw storageError;
 
+      console.log("Files in category:", storageData); // Debug log
+
       const imageList = await Promise.all(
         (storageData || []).map(async (file) => {
-          const { data: urlData } = supabase.storage
-            .from("menu-images")
+          // Get public URL using the correct method
+          const { data } = supabase.storage
+            .from("menu")  // Changed from "menu-images" to "menu"
             .getPublicUrl(`${selectedCategory}/${file.name}`);
 
-          // Get usage count (this is a placeholder - implement actual count)
+          // Log for debugging
+          console.log("Generated Public URL:", data.publicUrl);
+
+          // The URL should look like:
+          // https://your-supabase-url/storage/v1/object/public/menu/category/image.webp
+
           const usageCount = await getImageUsageCount(
             `${selectedCategory}/${file.name}`
           );
 
           return {
             name: file.name,
-            url: urlData.publicUrl,
+            url: data.publicUrl, // Use the publicUrl from the data object
             category: selectedCategory,
-            usageCount: usageCount, // Will always have a value now
+            usageCount,
           };
         })
       );
 
       setImages(imageList);
+
+      // Debug log the final image list
+      console.log("Final image list:", imageList);
     } catch (error) {
       console.error("Error fetching images:", error);
       toast({
         title: "Error",
-        description: "Failed to load images",
+        description:
+          error instanceof Error ? error.message : "Failed to load images",
         variant: "destructive",
       });
     }
@@ -172,7 +185,7 @@ export default function ImagesPage() {
         const filePath = `${selectedCategory}/${file.name}`;
 
         const { error: uploadError } = await supabase.storage
-          .from("menu-images")
+          .from("menu")  // Changed from "menu-images" to "menu"
           .upload(filePath, file, {
             cacheControl: "3600",
             upsert: false,
@@ -202,7 +215,8 @@ export default function ImagesPage() {
       console.error("Upload error:", error);
       toast({
         title: "Error",
-        description: "Failed to upload images",
+        description:
+          error instanceof Error ? error.message : "Failed to upload images",
         variant: "destructive",
       });
     } finally {
@@ -228,7 +242,7 @@ export default function ImagesPage() {
   async function handleDeleteImage(image: ImageInfo) {
     try {
       const { error } = await supabase.storage
-        .from("menu-images")
+        .from("menu")  // Changed from "menu-images" to "menu"
         .remove([`${image.category}/${image.name}`]);
 
       if (error) throw error;
@@ -244,7 +258,8 @@ export default function ImagesPage() {
       console.error("Error deleting image:", error);
       toast({
         title: "Error",
-        description: "Failed to delete image",
+        description:
+          error instanceof Error ? error.message : "Failed to delete image",
         variant: "destructive",
       });
     }
@@ -257,7 +272,7 @@ export default function ImagesPage() {
     try {
       // Copy to new location
       const { data: fileData } = await supabase.storage
-        .from("menu-images")
+        .from("menu")  // Changed from "menu-images" to "menu"
         .download(`${moveDialog.image.category}/${moveDialog.image.name}`);
 
       if (!fileData) throw new Error("Failed to download file");
@@ -267,7 +282,7 @@ export default function ImagesPage() {
       });
 
       const { error: uploadError } = await supabase.storage
-        .from("menu-images")
+        .from("menu")  // Changed from "menu-images" to "menu"
         .upload(`${targetCategory}/${moveDialog.image.name}`, newFile, {
           cacheControl: "3600",
           upsert: false,
@@ -277,7 +292,7 @@ export default function ImagesPage() {
 
       // Delete from old location
       const { error: deleteError } = await supabase.storage
-        .from("menu-images")
+        .from("menu")  // Changed from "menu-images" to "menu"
         .remove([`${moveDialog.image.category}/${moveDialog.image.name}`]);
 
       if (deleteError) throw deleteError;
@@ -293,7 +308,8 @@ export default function ImagesPage() {
       console.error("Error moving image:", error);
       toast({
         title: "Error",
-        description: "Failed to move image",
+        description:
+          error instanceof Error ? error.message : "Failed to move image",
         variant: "destructive",
       });
     }
@@ -305,7 +321,7 @@ export default function ImagesPage() {
     try {
       // Copy with new name
       const { data: fileData } = await supabase.storage
-        .from("menu-images")
+        .from("menu")  // Changed from "menu-images" to "menu"
         .download(`${renameDialog.image.category}/${renameDialog.image.name}`);
 
       if (!fileData) throw new Error("Failed to download file");
@@ -315,7 +331,7 @@ export default function ImagesPage() {
       });
 
       const { error: uploadError } = await supabase.storage
-        .from("menu-images")
+        .from("menu")  // Changed from "menu-images" to "menu"
         .upload(`${renameDialog.image.category}/${newImageName}`, newFile, {
           cacheControl: "3600",
           upsert: false,
@@ -325,7 +341,7 @@ export default function ImagesPage() {
 
       // Delete old file
       const { error: deleteError } = await supabase.storage
-        .from("menu-images")
+        .from("menu")  // Changed from "menu-images" to "menu"
         .remove([`${renameDialog.image.category}/${renameDialog.image.name}`]);
 
       if (deleteError) throw deleteError;
@@ -342,7 +358,8 @@ export default function ImagesPage() {
       console.error("Error renaming image:", error);
       toast({
         title: "Error",
-        description: "Failed to rename image",
+        description:
+          error instanceof Error ? error.message : "Failed to rename image",
         variant: "destructive",
       });
     }
@@ -354,10 +371,7 @@ export default function ImagesPage() {
         heading="Image Management"
         text="Upload and manage images for menu items"
       >
-        <Select
-          value={selectedCategory}
-          onValueChange={setSelectedCategory}
-        >
+        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Select category" />
           </SelectTrigger>
@@ -377,7 +391,11 @@ export default function ImagesPage() {
         className={`
           mt-6 border-2 border-dashed rounded-lg p-8 transition-colors text-center
           ${isDragActive ? "border-primary" : "border-muted-foreground/25"}
-          ${isUploading ? "pointer-events-none opacity-50" : "cursor-pointer hover:border-primary/50"}
+          ${
+            isUploading
+              ? "pointer-events-none opacity-50"
+              : "cursor-pointer hover:border-primary/50"
+          }
         `}
       >
         <input {...getInputProps()} />
@@ -386,9 +404,7 @@ export default function ImagesPage() {
           <p className="text-lg font-medium mb-2">
             {isDragActive ? "Drop files here" : "Drag & drop files here"}
           </p>
-          <p className="text-sm text-muted-foreground">
-            or click to select files
-          </p>
+          <p className="text-sm text-muted-foreground">or click to select files</p>
         </div>
       </div>
 
@@ -404,17 +420,15 @@ export default function ImagesPage() {
               alt={image.name}
               fill
               className="object-cover transition-all group-hover:scale-105"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              unoptimized // Add this line to bypass Next.js image optimization
             />
             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <p className="text-white text-sm mb-2 truncate">{image.name}</p>
-                {image.usageCount > 0 && (
-                  <p className="text-yellow-400 text-xs mb-4">
-                    Used in {image.usageCount}{" "}
-                    {image.usageCount === 1 ? "item" : "items"}
-                  </p>
-                )}
-                <div className="flex gap-2">
+                {/* Debug URL */}
+                <p className="text-xs text-gray-300 break-all">{image.url}</p>
+                <div className="flex gap-2 mt-2">
                   <Button
                     size="sm"
                     variant="secondary"
@@ -486,9 +500,7 @@ export default function ImagesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Move Image</DialogTitle>
-            <DialogDescription>
-              Select a new category for this image
-            </DialogDescription>
+            <DialogDescription>Select a new category for this image</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
@@ -498,10 +510,7 @@ export default function ImagesPage() {
             </div>
             <div className="grid gap-2">
               <Label>Destination Category</Label>
-              <Select
-                value={targetCategory}
-                onValueChange={setTargetCategory}
-              >
+              <Select value={targetCategory} onValueChange={setTargetCategory}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
@@ -557,9 +566,7 @@ export default function ImagesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Rename Image</DialogTitle>
-            <DialogDescription>
-              Enter a new name for the image
-            </DialogDescription>
+            <DialogDescription>Enter a new name for the image</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
