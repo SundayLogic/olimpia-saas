@@ -380,92 +380,88 @@ export default function WinePage() {
         </div>
       ) : (
         // ======== Updated Wine Cards Rendering Start ========
-        <div className="grid gap-8"> {/* Changed from grid grid-cols to single column with gap */}
+        <div className="space-y-12">
           {wines.map((wine) => (
             <div
               key={wine.id}
-              className="flex flex-col md:flex-row border-b border-primary pb-8 group transition-all duration-300 hover:shadow-md rounded-lg"
+              className="grid grid-cols-1 md:grid-cols-2 gap-8 border-b border-neutral-200 pb-12 mb-12"
             >
-              {/* Image section - dynamically load wine image */}
-              <div className="relative w-full md:w-1/2 aspect-square flex-shrink-0 overflow-hidden rounded-lg">
+              {/* Image Container */}
+              <div className="relative aspect-[3/4] bg-neutral-100">
                 <Image
-                  src={wine.image_url} // Use the image_url from the database
+                  src={wine.image_url}
                   alt={wine.name}
                   fill
-                  className="object-cover object-center rounded-lg transition-transform duration-300 group-hover:scale-105"
+                  className="object-cover"
                   sizes="(max-width: 768px) 100vw, 50vw"
                   priority={false}
                   loading="lazy"
-                  unoptimized // Bypasses Next.js image optimization
+                  unoptimized
                   onError={(e) => {
-                    console.error(`Failed to load image: ${wine.image_path}`);
                     const target = e.target as HTMLImageElement;
                     target.src = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`;
                   }}
                 />
               </div>
 
-              {/* Content section */}
-              <div className="flex flex-col p-4 md:p-6 w-full md:w-1/2">
-                <div className="flex-grow space-y-4"> {/* Changed from space-y-1 to space-y-4 */}
-                  <h3 className="text-xl sm:text-2xl font-light tracking-tight">
-                    {wine.name}
-                  </h3>
-
-                  <p className="text-muted-foreground text-base leading-relaxed">
-                    {wine.description}
-                  </p>
-
-                  <div className="flex flex-wrap gap-1">
+              {/* Content Container */}
+              <div className="flex flex-col justify-between space-y-8">
+                {/* Header */}
+                <div className="space-y-6">
+                  <h2 className="text-2xl font-light tracking-tight">{wine.name}</h2>
+                  
+                  {/* Categories */}
+                  <div className="flex gap-2">
                     {wine.categories.map((category) => (
-                      <Badge
+                      <span
                         key={category.id}
-                        variant="outline"
-                        className="text-muted-foreground"
+                        className="text-sm uppercase tracking-wider text-neutral-600"
                       >
                         {category.name}
-                      </Badge>
+                      </span>
                     ))}
                   </div>
 
-                  <div className="flex justify-between items-center mt-6"> {/* Changed from mt-4 to mt-6 */}
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xl font-light">
-                          ${wine.bottle_price.toFixed(2)}
-                        </span>
-                        <span className="text-sm text-muted-foreground">bottle</span>
+                  {/* Description */}
+                  <p className="text-base leading-relaxed text-neutral-600 max-w-prose">
+                    {wine.description}
+                  </p>
+                </div>
+
+                {/* Footer with Prices and Actions */}
+                <div className="flex items-end justify-between pt-6 border-t border-neutral-200">
+                  {/* Prices */}
+                  <div className="space-y-2">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-light">${wine.bottle_price.toFixed(2)}</span>
+                      <span className="text-sm uppercase tracking-wider text-neutral-600">bottle</span>
+                    </div>
+                    {wine.glass_price && (
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-light">${wine.glass_price.toFixed(2)}</span>
+                        <span className="text-sm uppercase tracking-wider text-neutral-600">glass</span>
                       </div>
-                      {wine.glass_price && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl font-light">
-                            ${wine.glass_price.toFixed(2)}
-                          </span>
-                          <span className="text-sm text-muted-foreground">glass</span>
-                        </div>
-                      )}
-                    </div>
+                    )}
+                  </div>
 
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => toggleWineStatus(wine.id, wine.active)}
-                        className="border-primary text-primary hover:bg-primary hover:text-white transition-colors duration-300"
-                      >
-                        {wine.active ? "Available" : "Unavailable"}
-                      </Button>
-
-                      {/* ======== Added Change Image Button ======== */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleSelectImage(wine.id)}
-                      >
-                        Change Image
-                      </Button>
-                      {/* ======== End Change Image Button ======== */}
-                    </div>
+                  {/* Actions */}
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 px-4 rounded-none hover:bg-neutral-100"
+                      onClick={() => toggleWineStatus(wine.id, wine.active)}
+                    >
+                      {wine.active ? "Available" : "Unavailable"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 px-4 rounded-none hover:bg-neutral-100"
+                      onClick={() => handleSelectImage(wine.id)}
+                    >
+                      Change Image
+                    </Button>
                   </div>
                 </div>
               </div>
