@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Plus, Wine, Image as ImageIcon } from "lucide-react"; // Imported ImageIcon
+import { Plus, Image as ImageIcon } from "lucide-react"; // Removed unused import 'Wine'
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -337,7 +337,6 @@ export default function WinePage() {
       const filePath = `wines/${selectedWineId}.${fileExtension}`;
 
       // ======== Updated Image Upload Section Start ========
-      // Remove data since we're not using it
       const { error: uploadError } = await supabase.storage
         .from("menu")
         .upload(filePath, file, {
@@ -347,7 +346,7 @@ export default function WinePage() {
 
       if (uploadError) throw uploadError;
 
-      // Fix the publicUrl type error
+      // Get public URL
       const { data: urlData } = supabase.storage
         .from("menu")
         .getPublicUrl(filePath);
@@ -410,12 +409,8 @@ export default function WinePage() {
       <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
         <div className="flex gap-4">
           {/* Filter by Category */}
-          <Select
-            value={selectedFilter}
-            onValueChange={setSelectedFilter}
-            className="w-[180px]"
-          >
-            <SelectTrigger>
+          <Select value={selectedFilter} onValueChange={setSelectedFilter}>
+            <SelectTrigger className="w-[180px]"> {/* Added className here */}
               <SelectValue placeholder="Filter by Category" />
             </SelectTrigger>
             <SelectContent>
@@ -429,12 +424,11 @@ export default function WinePage() {
           </Select>
 
           {/* Sort By */}
-          <Select
-            value={sortBy}
+          <Select 
+            value={sortBy} 
             onValueChange={(value: "name" | "price") => setSortBy(value)}
-            className="w-[180px]"
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-[180px]"> {/* Added className here */}
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>
@@ -457,7 +451,7 @@ export default function WinePage() {
         </div>
       </div>
 
-      {/* Wine Grid with improved breakpoints and animations */}
+      {/* Wine Grid with fixed image proportions */}
       {isLoading ? (
         <div className="flex h-[200px] items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -471,22 +465,20 @@ export default function WinePage() {
           <p className="text-muted-foreground">No wines found. Add one to get started.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
           {filteredAndSortedWines.map((wine) => (
             <div
               key={wine.id}
-              className="group relative flex flex-col bg-white border border-neutral-200 
-                         transition-all duration-300 ease-in-out
-                         hover:shadow-lg hover:-translate-y-1"
+              className="group flex flex-col bg-white border border-neutral-100 rounded-sm 
+                         transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
             >
-              {/* Image Container with hover effect */}
-              <div className="relative aspect-square w-full overflow-hidden">
+              {/* Image Container with fixed proportions */}
+              <div className="relative w-full pb-[150%] mb-4"> {/* 2:3 aspect ratio */}
                 <Image
                   src={wine.image_url}
                   alt={wine.name}
                   fill
-                  className="object-cover object-center transition-transform duration-300 
-                             group-hover:scale-105"
+                  className="object-contain" // Changed from cover to contain
                   sizes="(max-width: 640px) 100vw, 
                          (max-width: 1024px) 50vw, 
                          (max-width: 1536px) 33vw,
@@ -501,66 +493,54 @@ export default function WinePage() {
                 />
               </div>
 
-              {/* Content with hover animations */}
-              <div className="flex flex-col p-4 flex-grow">
-                {/* Category */}
-                <div className="mb-2 transition-transform duration-300 group-hover:translate-y-[-2px]">
-                  {wine.categories.map((category) => (
-                    <span
-                      key={category.id}
-                      className="text-xs uppercase tracking-wider text-neutral-600 mr-2"
-                    >
-                      {category.name}
-                    </span>
-                  ))}
+              {/* Wine Category */}
+              <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
+                {wine.categories.map((category) => category.name).join(" · ")}
+              </div>
+
+              {/* Wine Name */}
+              <h3 className="text-lg font-medium mb-2 line-clamp-2">
+                {wine.name}
+              </h3>
+
+              {/* Description */}
+              <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
+                {wine.description}
+              </p>
+
+              {/* Prices */}
+              <div className="mt-auto grid grid-cols-2 gap-x-4 text-sm">
+                <div>
+                  <div className="font-medium">${wine.bottle_price.toFixed(2)}</div>
+                  <div className="text-neutral-500 uppercase text-xs">bottle</div>
                 </div>
-
-                {/* Wine Name */}
-                <h3 className="text-lg font-medium mb-2 transition-transform duration-300 
-                              group-hover:translate-y-[-2px]">
-                  {wine.name}
-                </h3>
-
-                {/* Description - truncated */}
-                <p className="text-sm text-neutral-600 mb-4 line-clamp-2 transition-transform 
-                             duration-300 group-hover:translate-y-[-2px]">
-                  {wine.description}
-                </p>
-
-                {/* Prices */}
-                <div className="mt-auto space-y-1">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-lg font-light">${wine.bottle_price.toFixed(2)}</span>
-                    <span className="text-xs uppercase text-neutral-600">bottle</span>
+                {wine.glass_price && (
+                  <div>
+                    <div className="font-medium">${wine.glass_price.toFixed(2)}</div>
+                    <div className="text-neutral-500 uppercase text-xs">glass</div>
                   </div>
-                  {wine.glass_price && (
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-lg font-light">${wine.glass_price.toFixed(2)}</span>
-                      <span className="text-xs uppercase text-neutral-600">glass</span>
-                    </div>
-                  )}
-                </div>
+                )}
+              </div>
 
-                {/* Actions with hover effect */}
-                <div className="flex gap-2 mt-4 pt-4 border-t border-neutral-200 
-                               opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 h-8 text-xs"
-                    onClick={() => toggleWineStatus(wine.id, wine.active)}
-                  >
-                    {wine.active ? "Available" : "Unavailable"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2"
-                    onClick={() => handleSelectImage(wine.id)}
-                  >
-                    <ImageIcon className="h-4 w-4" />
-                  </Button>
-                </div>
+              {/* Actions */}
+              <div className="flex gap-2 mt-4 pt-4 border-t border-neutral-100">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-8 text-xs rounded-sm"
+                  onClick={() => toggleWineStatus(wine.id, wine.active)}
+                >
+                  {wine.active ? "Available" : "Unavailable"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0 rounded-sm"
+                  onClick={() => handleSelectImage(wine.id)}
+                  aria-label="Change Wine Image" // Added ARIA label for accessibility
+                >
+                  <ImageIcon className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           ))}
@@ -639,9 +619,8 @@ export default function WinePage() {
                     category_ids: [...newWine.category_ids, parseInt(value)],
                   })
                 }
-                className="w-full"
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full"> {/* Added className here */}
                   <SelectValue placeholder="Select categories" />
                 </SelectTrigger>
                 <SelectContent>
@@ -679,6 +658,7 @@ export default function WinePage() {
                           })
                         }
                         className="ml-1 hover:text-destructive"
+                        aria-label={`Remove category ${category.name}`} // Added ARIA label
                       >
                         ×
                       </button>
