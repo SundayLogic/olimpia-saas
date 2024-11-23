@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Plus, Wine } from "lucide-react"; // Removed ToggleLeft as it's unused
+import { Plus, Wine, Image as ImageIcon } from "lucide-react"; // Imported ImageIcon
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -25,7 +25,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
-import Image from "next/image"; // Added Image import
+import Image from "next/image"; // Next.js Image component
 
 // Updated Interfaces
 interface WineCategoryAssignment {
@@ -46,7 +46,7 @@ interface WineResponse {
   created_at: string;
   wine_category_assignments: WineCategoryAssignment[];
   image_path: string; // New field
-  image_url: string;  // New field
+  image_url: string; // New field
 }
 
 interface WineCategory {
@@ -65,7 +65,7 @@ interface Wine {
   created_at: string;
   categories: WineCategory[];
   image_path: string; // New field
-  image_url: string;  // New field
+  image_url: string; // New field
 }
 
 interface NewWine {
@@ -96,11 +96,43 @@ export default function WinePage() {
     image_path: "wines/wine.webp", // Updated initial state
   });
 
+  // New state variables for filtering and sorting
+  const [selectedFilter, setSelectedFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"name" | "price">("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
   const [isUploadingImage, setIsUploadingImage] = useState(false); // New loading state
 
   const supabase = createClientComponentClient();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null); // Ref for file input
+
+  // Filter and sort wines using useMemo for performance optimization
+  const filteredAndSortedWines = useMemo(() => {
+    let filtered = wines;
+
+    // Filter by category
+    if (selectedFilter !== "all") {
+      filtered = wines.filter((wine) =>
+        wine.categories.some((cat) => cat.id.toString() === selectedFilter)
+      );
+    }
+
+    // Sort wines
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortBy === "name") {
+        return sortOrder === "asc"
+          ? a.name.localeCompare(b.name)
+          : b.name.localeCompare(a.name);
+      } else {
+        return sortOrder === "asc"
+          ? a.bottle_price - b.bottle_price
+          : b.bottle_price - a.bottle_price;
+      }
+    });
+
+    return sorted;
+  }, [wines, selectedFilter, sortBy, sortOrder]);
 
   const fetchData = async () => {
     try {
@@ -133,22 +165,24 @@ export default function WinePage() {
       if (winesError) throw winesError;
 
       // Transform the data to match our interface
-      const transformedWines: Wine[] = (winesData as WineResponse[])?.map((wine) => ({
-        id: wine.id,
-        name: wine.name,
-        description: wine.description,
-        bottle_price: wine.bottle_price,
-        glass_price: wine.glass_price,
-        active: wine.active,
-        created_at: wine.created_at,
-        categories: wine.wine_category_assignments.map(
-          (assignment) => assignment.wine_categories
-        ),
-        image_path: wine.image_path || "wines/wine.webp", // Updated path
-        image_url:
-          wine.image_url ||
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`, // Updated URL
-      }));
+      const transformedWines: Wine[] = (winesData as WineResponse[])?.map(
+        (wine) => ({
+          id: wine.id,
+          name: wine.name,
+          description: wine.description,
+          bottle_price: wine.bottle_price,
+          glass_price: wine.glass_price,
+          active: wine.active,
+          created_at: wine.created_at,
+          categories: wine.wine_category_assignments.map(
+            (assignment) => assignment.wine_categories
+          ),
+          image_path: wine.image_path || "wines/wine.webp", // Updated path
+          image_url:
+            wine.image_url ||
+            `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`, // Updated URL
+        })
+      );
 
       setCategories(categoriesData || []);
       setWines(transformedWines || []);
@@ -188,7 +222,9 @@ export default function WinePage() {
           name: newWine.name,
           description: newWine.description,
           bottle_price: parseFloat(newWine.bottle_price),
-          glass_price: newWine.glass_price ? parseFloat(newWine.glass_price) : null,
+          glass_price: newWine.glass_price
+            ? parseFloat(newWine.glass_price)
+            : null,
           active: newWine.active,
           image_path: newWine.image_path, // Updated image_path
         })
@@ -199,10 +235,12 @@ export default function WinePage() {
 
       // Create category assignments if any
       if (newWine.category_ids.length > 0) {
-        const categoryAssignments = newWine.category_ids.map((categoryId) => ({
-          wine_id: wine.id,
-          category_id: categoryId,
-        }));
+        const categoryAssignments = newWine.category_ids.map(
+          (categoryId) => ({
+            wine_id: wine.id,
+            category_id: categoryId,
+          })
+        );
 
         const { error: assignmentError } = await supabase
           .from("wine_category_assignments")
@@ -254,7 +292,9 @@ export default function WinePage() {
 
       toast({
         title: "Success",
-        description: `Wine ${!currentStatus ? "activated" : "deactivated"} successfully`,
+        description: `Wine ${
+          !currentStatus ? "activated" : "deactivated"
+        } successfully`,
       });
     } catch (error) {
       console.error("Error toggling wine status:", error);
@@ -276,7 +316,9 @@ export default function WinePage() {
   };
 
   // Handle image upload
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     setIsUploadingImage(true); // Start uploading
     const file = e.target.files?.[0];
     if (!file || !selectedWineId) {
@@ -364,36 +406,91 @@ export default function WinePage() {
         </Button>
       </PageHeader>
 
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      {/* Filter and Sort Controls */}
+      <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
+        <div className="flex gap-4">
+          {/* Filter by Category */}
+          <Select
+            value={selectedFilter}
+            onValueChange={setSelectedFilter}
+            className="w-[180px]"
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Filter by Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={category.id.toString()}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
+          {/* Sort By */}
+          <Select
+            value={sortBy}
+            onValueChange={(value: "name" | "price") => setSortBy(value)}
+            className="w-[180px]"
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Name</SelectItem>
+              <SelectItem value="price">Price</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Sort Order Toggle */}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() =>
+              setSortOrder((current) => (current === "asc" ? "desc" : "asc"))
+            }
+            aria-label={`Sort order: ${sortOrder === "asc" ? "Ascending" : "Descending"}`}
+          >
+            {sortOrder === "asc" ? "↑" : "↓"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Wine Grid with improved breakpoints and animations */}
       {isLoading ? (
         <div className="flex h-[200px] items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
+      ) : error ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : wines.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground">No wines found. Add one to get started.</p>
         </div>
       ) : (
-        // ======== Updated Wine Cards Rendering Start ========
-        <div className="space-y-12">
-          {wines.map((wine) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 p-6">
+          {filteredAndSortedWines.map((wine) => (
             <div
               key={wine.id}
-              className="grid grid-cols-1 md:grid-cols-2 gap-8 border-b border-neutral-200 pb-12 mb-12"
+              className="group relative flex flex-col bg-white border border-neutral-200 
+                         transition-all duration-300 ease-in-out
+                         hover:shadow-lg hover:-translate-y-1"
             >
-              {/* Image Container */}
-              <div className="relative aspect-[3/4] bg-neutral-100">
+              {/* Image Container with hover effect */}
+              <div className="relative aspect-square w-full overflow-hidden">
                 <Image
                   src={wine.image_url}
                   alt={wine.name}
                   fill
-                  className="object-cover"
-                  sizes="(max-width: 768px) 100vw, 50vw"
+                  className="object-cover object-center transition-transform duration-300 
+                             group-hover:scale-105"
+                  sizes="(max-width: 640px) 100vw, 
+                         (max-width: 1024px) 50vw, 
+                         (max-width: 1536px) 33vw,
+                         25vw"
                   priority={false}
                   loading="lazy"
                   unoptimized
@@ -404,71 +501,70 @@ export default function WinePage() {
                 />
               </div>
 
-              {/* Content Container */}
-              <div className="flex flex-col justify-between space-y-8">
-                {/* Header */}
-                <div className="space-y-6">
-                  <h2 className="text-2xl font-light tracking-tight">{wine.name}</h2>
-                  
-                  {/* Categories */}
-                  <div className="flex gap-2">
-                    {wine.categories.map((category) => (
-                      <span
-                        key={category.id}
-                        className="text-sm uppercase tracking-wider text-neutral-600"
-                      >
-                        {category.name}
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* Description */}
-                  <p className="text-base leading-relaxed text-neutral-600 max-w-prose">
-                    {wine.description}
-                  </p>
+              {/* Content with hover animations */}
+              <div className="flex flex-col p-4 flex-grow">
+                {/* Category */}
+                <div className="mb-2 transition-transform duration-300 group-hover:translate-y-[-2px]">
+                  {wine.categories.map((category) => (
+                    <span
+                      key={category.id}
+                      className="text-xs uppercase tracking-wider text-neutral-600 mr-2"
+                    >
+                      {category.name}
+                    </span>
+                  ))}
                 </div>
 
-                {/* Footer with Prices and Actions */}
-                <div className="flex items-end justify-between pt-6 border-t border-neutral-200">
-                  {/* Prices */}
-                  <div className="space-y-2">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-light">${wine.bottle_price.toFixed(2)}</span>
-                      <span className="text-sm uppercase tracking-wider text-neutral-600">bottle</span>
-                    </div>
-                    {wine.glass_price && (
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-light">${wine.glass_price.toFixed(2)}</span>
-                        <span className="text-sm uppercase tracking-wider text-neutral-600">glass</span>
-                      </div>
-                    )}
-                  </div>
+                {/* Wine Name */}
+                <h3 className="text-lg font-medium mb-2 transition-transform duration-300 
+                              group-hover:translate-y-[-2px]">
+                  {wine.name}
+                </h3>
 
-                  {/* Actions */}
-                  <div className="flex gap-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-9 px-4 rounded-none hover:bg-neutral-100"
-                      onClick={() => toggleWineStatus(wine.id, wine.active)}
-                    >
-                      {wine.active ? "Available" : "Unavailable"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-9 px-4 rounded-none hover:bg-neutral-100"
-                      onClick={() => handleSelectImage(wine.id)}
-                    >
-                      Change Image
-                    </Button>
+                {/* Description - truncated */}
+                <p className="text-sm text-neutral-600 mb-4 line-clamp-2 transition-transform 
+                             duration-300 group-hover:translate-y-[-2px]">
+                  {wine.description}
+                </p>
+
+                {/* Prices */}
+                <div className="mt-auto space-y-1">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-lg font-light">${wine.bottle_price.toFixed(2)}</span>
+                    <span className="text-xs uppercase text-neutral-600">bottle</span>
                   </div>
+                  {wine.glass_price && (
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-lg font-light">${wine.glass_price.toFixed(2)}</span>
+                      <span className="text-xs uppercase text-neutral-600">glass</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Actions with hover effect */}
+                <div className="flex gap-2 mt-4 pt-4 border-t border-neutral-200 
+                               opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 h-8 text-xs"
+                    onClick={() => toggleWineStatus(wine.id, wine.active)}
+                  >
+                    {wine.active ? "Available" : "Unavailable"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => handleSelectImage(wine.id)}
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             </div>
           ))}
         </div>
-        // ======== Updated Wine Cards Rendering End ========
       )}
 
       {/* Add Wine Dialog */}
@@ -487,7 +583,9 @@ export default function WinePage() {
               <Input
                 id="name"
                 value={newWine.name}
-                onChange={(e) => setNewWine({ ...newWine, name: e.target.value })}
+                onChange={(e) =>
+                  setNewWine({ ...newWine, name: e.target.value })
+                }
                 placeholder="Wine name"
               />
             </div>
@@ -496,7 +594,9 @@ export default function WinePage() {
               <Input
                 id="description"
                 value={newWine.description}
-                onChange={(e) => setNewWine({ ...newWine, description: e.target.value })}
+                onChange={(e) =>
+                  setNewWine({ ...newWine, description: e.target.value })
+                }
                 placeholder="Wine description"
               />
             </div>
@@ -532,13 +632,14 @@ export default function WinePage() {
             <div className="grid gap-2">
               <Label>Categories</Label>
               <Select
-                value={newWine.category_ids[0]?.toString() || ""} // Only select one at a time
-                onValueChange={(value) =>
+                value={newWine.category_ids[0]?.toString() || ""}
+                onValueChange={(value: string) =>
                   setNewWine({
                     ...newWine,
                     category_ids: [...newWine.category_ids, parseInt(value)],
                   })
                 }
+                className="w-full"
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select categories" />
