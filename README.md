@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-11-23 11:51:59
+Generated on: 2024-11-24 12:19:01
 
 ## Documented Directories:
 - app/
@@ -752,9 +752,17 @@ export const dynamic = 'force-dynamic';
 ```typescript
 "use client";
 
-import { useState, useEffect } from "react";
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Upload, Trash2 } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { useDropzone } from "react-dropzone";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import {
+  Upload,
+  Trash2,
+  FolderIcon,
+  AlertCircle,
+  Edit2,
+} from "lucide-react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -775,309 +783,600 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { PageHeader } from "@/components/core/layout";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Image from "next/image";
+import { PageHeader } from "@/components/core/layout";
 
-interface StorageImage {
+// Define available categories
+const CATEGORIES = [
+  "arroces",
+  "carnes",
+  "del-huerto",
+  "del-mar",
+  "para-compartir",
+  "para-peques",
+  "para-veganos",
+  "postres",
+  "wines",
+];
+
+interface ImageInfo {
   name: string;
   url: string;
-  created_at: string;
-  size: number;
   category: string;
+  usageCount: number; // Changed from optional to required, will default to 0
+}
+
+interface MoveImageDialog {
+  open: boolean;
+  image: ImageInfo | null;
+}
+
+interface RenameImageDialog {
+  open: boolean;
+  image: ImageInfo | null;
 }
 
 export default function ImagesPage() {
-  const [images, setImages] = useState<StorageImage[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<StorageImage | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [images, setImages] = useState<ImageInfo[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>(
+    CATEGORIES[0]
+  );
+  const [isUploading, setIsUploading] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    image: ImageInfo | null;
+  }>({
+    open: false,
+    image: null,
+  });
+  const [moveDialog, setMoveDialog] = useState<MoveImageDialog>({
+    open: false,
+    image: null,
+  });
+  const [renameDialog, setRenameDialog] = useState<RenameImageDialog>({
+    open: false,
+    image: null,
+  });
+  const [newImageName, setNewImageName] = useState("");
+  const [targetCategory, setTargetCategory] = useState<string>(CATEGORIES[0]);
 
   const supabase = createClientComponentClient();
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchImages();
-  }, []);
+  // Setup dropzone
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: {
+      "image/jpeg": [],
+      "image/png": [],
+      "image/webp": [],
+    },
+    onDrop: handleFileDrop,
+  });
 
-  const fetchImages = async () => {
+  // Memoize fetchImages to avoid dependency cycle and include debug logs
+  const fetchImages = React.useCallback(async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-
       const { data: storageData, error: storageError } = await supabase
         .storage
-        .from('images')
-        .list();
+        .from("menu")  // Changed from "menu-images" to "menu"
+        .list(selectedCategory);
 
       if (storageError) throw storageError;
 
-      const images = await Promise.all(
-        storageData.map(async (file) => {
+      console.log("Files in category:", storageData); // Debug log
+
+      const imageList = await Promise.all(
+        (storageData || []).map(async (file) => {
+          // Get public URL using the correct method
           const { data } = supabase.storage
-            .from('images')
-            .getPublicUrl(file.name);
+            .from("menu")  // Changed from "menu-images" to "menu"
+            .getPublicUrl(`${selectedCategory}/${file.name}`);
+
+          // Log for debugging
+          console.log("Generated Public URL:", data.publicUrl);
+
+          // The URL should look like:
+          // https://your-supabase-url/storage/v1/object/public/menu/category/image.webp
+
+          const usageCount = await getImageUsageCount(
+            `${selectedCategory}/${file.name}`
+          );
 
           return {
             name: file.name,
-            url: data.publicUrl,
-            created_at: file.created_at,
-            size: file.metadata?.size || 0,
-            category: file.metadata?.category || 'other'
+            url: data.publicUrl, // Use the publicUrl from the data object
+            category: selectedCategory,
+            usageCount,
           };
         })
       );
 
-      setImages(images);
+      setImages(imageList);
+
+      // Debug log the final image list
+      console.log("Final image list:", imageList);
     } catch (error) {
-      console.error('Error fetching images:', error);
-      setError('Failed to load images');
+      console.error("Error fetching images:", error);
       toast({
         title: "Error",
-        description: "Failed to load images",
+        description:
+          error instanceof Error ? error.message : "Failed to load images",
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
     }
-  };
+  }, [selectedCategory, supabase, toast]);
 
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Fetch images for selected category
+  useEffect(() => {
+    void fetchImages();
+  }, [selectedCategory, fetchImages]);
+
+  async function handleFileDrop(acceptedFiles: File[]) {
     try {
-      const file = event.target.files?.[0];
-      if (!file) return;
+      setIsUploading(true);
 
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
+      for (const file of acceptedFiles) {
+        // Validate file size (2MB limit)
+        if (file.size > 2 * 1024 * 1024) {
+          toast({
+            title: "Error",
+            description: `File ${file.name} exceeds 2MB limit`,
+            variant: "destructive",
+          });
+          continue;
+        }
+
+        const filePath = `${selectedCategory}/${file.name}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("menu")  // Changed from "menu-images" to "menu"
+          .upload(filePath, file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+
+        if (uploadError) {
+          if (uploadError.message.includes("duplicate")) {
+            toast({
+              title: "Error",
+              description: `File ${file.name} already exists`,
+              variant: "destructive",
+            });
+          } else {
+            throw uploadError;
+          }
+          continue;
+        }
+
         toast({
-          title: "Error",
-          description: "Please upload an image file",
-          variant: "destructive",
+          title: "Success",
+          description: `Uploaded ${file.name}`,
         });
-        return;
       }
 
-      // Validate file size (2MB limit)
-      if (file.size > 2 * 1024 * 1024) {
-        toast({
-          title: "Error",
-          description: "Image must be less than 2MB",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setUploading(true);
-
-      // Generate a unique file name
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
-
-      // Upload the file
-      const { error: uploadError } = await supabase.storage
-        .from('images')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (uploadError) throw uploadError;
-
-      // Get the public URL
-      const { data } = supabase.storage
-        .from('images')
-        .getPublicUrl(fileName);
-
-      // Add the new image to the list
-      setImages(prev => [...prev, {
-        name: fileName,
-        url: data.publicUrl,
-        created_at: new Date().toISOString(),
-        size: file.size,
-        category: 'other'
-      }]);
-
-      setIsUploadDialogOpen(false);
-      toast({
-        title: "Success",
-        description: "Image uploaded successfully",
-      });
+      fetchImages();
     } catch (error) {
-      console.error('Error uploading image:', error);
+      console.error("Upload error:", error);
       toast({
         title: "Error",
-        description: "Failed to upload image",
+        description:
+          error instanceof Error ? error.message : "Failed to upload images",
         variant: "destructive",
       });
     } finally {
-      setUploading(false);
+      setIsUploading(false);
     }
-  };
+  }
 
-  const handleDelete = async () => {
-    if (!selectedImage) return;
+  async function getImageUsageCount(imagePath: string): Promise<number> {
+    try {
+      // Check wines table
+      const { count } = await supabase
+        .from("wines")
+        .select("*", { count: "exact", head: true })
+        .eq("image_path", imagePath);
 
+      return count || 0;
+    } catch (error) {
+      console.error("Error checking image usage:", error);
+      return 0;
+    }
+  }
+
+  async function handleDeleteImage(image: ImageInfo) {
     try {
       const { error } = await supabase.storage
-        .from('images')
-        .remove([selectedImage.name]);
+        .from("menu")  // Changed from "menu-images" to "menu"
+        .remove([`${image.category}/${image.name}`]);
 
       if (error) throw error;
-
-      setImages(prev => prev.filter(img => img.name !== selectedImage.name));
-      setIsDeleteDialogOpen(false);
-      setSelectedImage(null);
 
       toast({
         title: "Success",
         description: "Image deleted successfully",
       });
+
+      setDeleteDialog({ open: false, image: null });
+      fetchImages();
     } catch (error) {
-      console.error('Error deleting image:', error);
+      console.error("Error deleting image:", error);
       toast({
         title: "Error",
-        description: "Failed to delete image",
+        description:
+          error instanceof Error ? error.message : "Failed to delete image",
         variant: "destructive",
       });
     }
-  };
+  }
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-  };
+  async function handleMoveImage() {
+    if (!moveDialog.image || targetCategory === moveDialog.image.category)
+      return;
+
+    try {
+      // Copy to new location
+      const { data: fileData } = await supabase.storage
+        .from("menu")  // Changed from "menu-images" to "menu"
+        .download(`${moveDialog.image.category}/${moveDialog.image.name}`);
+
+      if (!fileData) throw new Error("Failed to download file");
+
+      const newFile = new File([fileData], moveDialog.image.name, {
+        type: fileData.type,
+      });
+
+      const { error: uploadError } = await supabase.storage
+        .from("menu")  // Changed from "menu-images" to "menu"
+        .upload(`${targetCategory}/${moveDialog.image.name}`, newFile, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Delete from old location
+      const { error: deleteError } = await supabase.storage
+        .from("menu")  // Changed from "menu-images" to "menu"
+        .remove([`${moveDialog.image.category}/${moveDialog.image.name}`]);
+
+      if (deleteError) throw deleteError;
+
+      toast({
+        title: "Success",
+        description: "Image moved successfully",
+      });
+
+      setMoveDialog({ open: false, image: null });
+      fetchImages();
+    } catch (error) {
+      console.error("Error moving image:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to move image",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleRenameImage() {
+    if (!renameDialog.image || !newImageName) return;
+
+    try {
+      // Copy with new name
+      const { data: fileData } = await supabase.storage
+        .from("menu")  // Changed from "menu-images" to "menu"
+        .download(`${renameDialog.image.category}/${renameDialog.image.name}`);
+
+      if (!fileData) throw new Error("Failed to download file");
+
+      const newFile = new File([fileData], newImageName, {
+        type: fileData.type,
+      });
+
+      const { error: uploadError } = await supabase.storage
+        .from("menu")  // Changed from "menu-images" to "menu"
+        .upload(`${renameDialog.image.category}/${newImageName}`, newFile, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Delete old file
+      const { error: deleteError } = await supabase.storage
+        .from("menu")  // Changed from "menu-images" to "menu"
+        .remove([`${renameDialog.image.category}/${renameDialog.image.name}`]);
+
+      if (deleteError) throw deleteError;
+
+      toast({
+        title: "Success",
+        description: "Image renamed successfully",
+      });
+
+      setRenameDialog({ open: false, image: null });
+      setNewImageName("");
+      fetchImages();
+    } catch (error) {
+      console.error("Error renaming image:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to rename image",
+        variant: "destructive",
+      });
+    }
+  }
 
   return (
     <div className="container p-6">
       <PageHeader
-        heading="Image Gallery"
-        text="Manage your restaurant's images"
+        heading="Image Management"
+        text="Upload and manage images for menu items"
       >
-        <Button onClick={() => setIsUploadDialogOpen(true)}>
-          <Upload className="mr-2 h-4 w-4" />
-          Upload Image
-        </Button>
+        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Select category" />
+          </SelectTrigger>
+          <SelectContent>
+            {CATEGORIES.map((category) => (
+              <SelectItem key={category} value={category}>
+                {category}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </PageHeader>
 
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      {/* Upload Section */}
+      <div
+        {...getRootProps()}
+        className={`
+          mt-6 border-2 border-dashed rounded-lg p-8 transition-colors text-center
+          ${isDragActive ? "border-primary" : "border-muted-foreground/25"}
+          ${
+            isUploading
+              ? "pointer-events-none opacity-50"
+              : "cursor-pointer hover:border-primary/50"
+          }
+        `}
+      >
+        <input {...getInputProps()} />
+        <div className="flex flex-col items-center justify-center">
+          <Upload className="h-8 w-8 mb-4 text-muted-foreground" />
+          <p className="text-lg font-medium mb-2">
+            {isDragActive ? "Drop files here" : "Drag & drop files here"}
+          </p>
+          <p className="text-sm text-muted-foreground">or click to select files</p>
+        </div>
+      </div>
 
-      {isLoading ? (
-        <div className="flex h-[200px] items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-        </div>
-      ) : images.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">No images found. Upload one to get started.</p>
-        </div>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {images.map((image) => (
-            <div
-              key={image.name}
-              className="group relative aspect-square rounded-lg overflow-hidden border bg-card"
-            >
-              <Image
-                src={image.url}
-                alt={image.name}
-                fill
-                className="object-cover transition-all group-hover:scale-105"
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              />
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="absolute bottom-0 left-0 right-0 p-4">
-                  <div className="flex items-center justify-between text-white">
-                    <span className="text-sm">{formatFileSize(image.size)}</span>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedImage(image);
-                        setIsDeleteDialogOpen(true);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+      {/* Images Grid */}
+      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {images.map((image) => (
+          <div
+            key={image.name}
+            className="group relative aspect-square rounded-lg overflow-hidden border bg-card"
+          >
+            <Image
+              src={image.url}
+              alt={image.name}
+              fill
+              className="object-cover transition-all group-hover:scale-105"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              unoptimized // Add this line to bypass Next.js image optimization
+            />
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute bottom-0 left-0 right-0 p-4">
+                <p className="text-white text-sm mb-2 truncate">{image.name}</p>
+                {/* Debug URL */}
+                <p className="text-xs text-gray-300 break-all">{image.url}</p>
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setRenameDialog({ open: true, image })}
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setMoveDialog({ open: true, image })}
+                  >
+                    <FolderIcon className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setDeleteDialog({ open: true, image })}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Upload Image</DialogTitle>
-            <DialogDescription>
-              Upload a new image to your gallery. Maximum file size is 2MB.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="image">Select Image</Label>
-              <Input
-                id="image"
-                type="file"
-                accept="image/*"
-                onChange={handleUpload}
-                disabled={uploading}
-              />
-            </div>
           </div>
+        ))}
+      </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsUploadDialogOpen(false)}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-              ) : (
-                "Cancel"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      {/* Delete Dialog */}
+      <AlertDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog({ open, image: null })}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>Delete Image</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the image
-              from your gallery.
+              {deleteDialog.image && deleteDialog.image.usageCount > 0 ? (
+                <div className="flex items-center gap-2 text-yellow-600">
+                  <AlertCircle className="h-4 w-4" />
+                  This image is used in {deleteDialog.image.usageCount}{" "}
+                  {deleteDialog.image.usageCount === 1 ? "item" : "items"}.
+                  Deleting it will remove the image from those items.
+                </div>
+              ) : (
+                "Are you sure you want to delete this image? This action cannot be undone."
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-red-600 hover:bg-red-700"
+              onClick={() =>
+                deleteDialog.image && handleDeleteImage(deleteDialog.image)
+              }
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Move Dialog */}
+      <Dialog
+        open={moveDialog.open}
+        onOpenChange={(open) => setMoveDialog({ open, image: null })}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move Image</DialogTitle>
+            <DialogDescription>Select a new category for this image</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Current Category</Label>
+              <Input disabled value={moveDialog.image?.category || ""} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Destination Category</Label>
+              <Select value={targetCategory} onValueChange={setTargetCategory}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.filter(
+                    (cat) => cat !== moveDialog.image?.category
+                  ).map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {moveDialog.image && moveDialog.image.usageCount > 0 && (
+                <p className="text-sm text-yellow-600 flex items-center gap-2 mt-2">
+                  <AlertCircle className="h-4 w-4" />
+                  This image is used in {moveDialog.image.usageCount}{" "}
+                  {moveDialog.image.usageCount === 1 ? "item" : "items"}. Moving
+                  it will update all references.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setMoveDialog({ open: false, image: null })}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleMoveImage}
+              disabled={
+                !targetCategory ||
+                targetCategory === moveDialog.image?.category
+              }
+            >
+              Move Image
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Dialog */}
+      <Dialog
+        open={renameDialog.open}
+        onOpenChange={(open) => {
+          setRenameDialog({ open, image: null });
+          setNewImageName("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Image</DialogTitle>
+            <DialogDescription>Enter a new name for the image</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Current Name</Label>
+              <Input disabled value={renameDialog.image?.name || ""} />
+            </div>
+            <div className="grid gap-2">
+              <Label>New Name</Label>
+              <Input
+                value={newImageName}
+                onChange={(e) => setNewImageName(e.target.value)}
+                placeholder="Enter new name with extension (e.g., image.jpg)"
+              />
+              {!newImageName.includes(".") && newImageName && (
+                <p className="text-sm text-red-500 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  Please include file extension (e.g., .jpg, .png, .webp)
+                </p>
+              )}
+              {renameDialog.image && renameDialog.image.usageCount > 0 && (
+                <p className="text-sm text-yellow-600 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  This image is used in {renameDialog.image.usageCount}{" "}
+                  {renameDialog.image.usageCount === 1 ? "item" : "items"}.
+                  Renaming it will update all references.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRenameDialog({ open: false, image: null });
+                setNewImageName("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRenameImage}
+              disabled={
+                !newImageName ||
+                newImageName === renameDialog.image?.name ||
+                !newImageName.includes(".")
+              }
+            >
+              Rename Image
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
 ```
 
 ### app/dashboard/menu/daily/page.tsx
@@ -1494,9 +1793,9 @@ export default function DailyMenuPage() {
 ```typescript
 "use client";
 
-import { useState, useEffect } from "react";
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Plus, Wine, ToggleLeft } from "lucide-react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { Plus, Image as ImageIcon } from "lucide-react"; // Removed unused import 'Wine'
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -1519,7 +1818,9 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
+import Image from "next/image"; // Next.js Image component
 
+// Updated Interfaces
 interface WineCategoryAssignment {
   wine_categories: {
     id: number;
@@ -1537,6 +1838,8 @@ interface WineResponse {
   active: boolean;
   created_at: string;
   wine_category_assignments: WineCategoryAssignment[];
+  image_path: string; // New field
+  image_url: string; // New field
 }
 
 interface WineCategory {
@@ -1554,6 +1857,8 @@ interface Wine {
   active: boolean;
   created_at: string;
   categories: WineCategory[];
+  image_path: string; // New field
+  image_url: string; // New field
 }
 
 interface NewWine {
@@ -1563,6 +1868,7 @@ interface NewWine {
   glass_price: string;
   category_ids: number[];
   active: boolean;
+  image_path: string; // New field
 }
 
 export default function WinePage() {
@@ -1571,17 +1877,55 @@ export default function WinePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isImageDialogOpen, setIsImageDialogOpen] = useState(false); // New state for image dialog
+  const [selectedWineId, setSelectedWineId] = useState<number | null>(null); // New state to track selected wine
   const [newWine, setNewWine] = useState<NewWine>({
-    name: '',
-    description: '',
-    bottle_price: '',
-    glass_price: '',
+    name: "",
+    description: "",
+    bottle_price: "",
+    glass_price: "",
     category_ids: [],
-    active: true
+    active: true,
+    image_path: "wines/wine.webp", // Updated initial state
   });
+
+  // New state variables for filtering and sorting
+  const [selectedFilter, setSelectedFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"name" | "price">("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  const [isUploadingImage, setIsUploadingImage] = useState(false); // New loading state
 
   const supabase = createClientComponentClient();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement | null>(null); // Ref for file input
+
+  // Filter and sort wines using useMemo for performance optimization
+  const filteredAndSortedWines = useMemo(() => {
+    let filtered = wines;
+
+    // Filter by category
+    if (selectedFilter !== "all") {
+      filtered = wines.filter((wine) =>
+        wine.categories.some((cat) => cat.id.toString() === selectedFilter)
+      );
+    }
+
+    // Sort wines
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortBy === "name") {
+        return sortOrder === "asc"
+          ? a.name.localeCompare(b.name)
+          : b.name.localeCompare(a.name);
+      } else {
+        return sortOrder === "asc"
+          ? a.bottle_price - b.bottle_price
+          : b.bottle_price - a.bottle_price;
+      }
+    });
+
+    return sorted;
+  }, [wines, selectedFilter, sortBy, sortOrder]);
 
   const fetchData = async () => {
     try {
@@ -1590,15 +1934,15 @@ export default function WinePage() {
 
       // Fetch wine categories
       const { data: categoriesData, error: categoriesError } = await supabase
-        .from('wine_categories')
-        .select('*')
-        .order('display_order');
+        .from("wine_categories")
+        .select("*")
+        .order("display_order");
 
       if (categoriesError) throw categoriesError;
 
       // Fetch wines with their categories
       const { data: winesData, error: winesError } = await supabase
-        .from('wines')
+        .from("wines")
         .select(`
           *,
           wine_category_assignments (
@@ -1609,29 +1953,35 @@ export default function WinePage() {
             )
           )
         `)
-        .order('name');
+        .order("name");
 
       if (winesError) throw winesError;
 
       // Transform the data to match our interface
-      const transformedWines: Wine[] = (winesData as WineResponse[])?.map(wine => ({
-        id: wine.id,
-        name: wine.name,
-        description: wine.description,
-        bottle_price: wine.bottle_price,
-        glass_price: wine.glass_price,
-        active: wine.active,
-        created_at: wine.created_at,
-        categories: wine.wine_category_assignments.map(
-          assignment => assignment.wine_categories
-        )
-      }));
+      const transformedWines: Wine[] = (winesData as WineResponse[])?.map(
+        (wine) => ({
+          id: wine.id,
+          name: wine.name,
+          description: wine.description,
+          bottle_price: wine.bottle_price,
+          glass_price: wine.glass_price,
+          active: wine.active,
+          created_at: wine.created_at,
+          categories: wine.wine_category_assignments.map(
+            (assignment) => assignment.wine_categories
+          ),
+          image_path: wine.image_path || "wines/wine.webp", // Updated path
+          image_url:
+            wine.image_url ||
+            `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`, // Updated URL
+        })
+      );
 
       setCategories(categoriesData || []);
       setWines(transformedWines || []);
     } catch (error) {
-      console.error('Error fetching data:', error);
-      setError('Failed to load wines');
+      console.error("Error fetching data:", error);
+      setError("Failed to load wines");
       toast({
         title: "Error",
         description: "Failed to load wines",
@@ -1648,6 +1998,7 @@ export default function WinePage() {
 
   const handleCreateWine = async () => {
     try {
+      // Validation
       if (!newWine.name || !newWine.bottle_price) {
         toast({
           title: "Error",
@@ -1657,44 +2008,50 @@ export default function WinePage() {
         return;
       }
 
-      // First, create the wine
+      // Create the wine with default image_path
       const { data: wine, error: wineError } = await supabase
-        .from('wines')
+        .from("wines")
         .insert({
           name: newWine.name,
           description: newWine.description,
           bottle_price: parseFloat(newWine.bottle_price),
-          glass_price: newWine.glass_price ? parseFloat(newWine.glass_price) : null,
-          active: newWine.active
+          glass_price: newWine.glass_price
+            ? parseFloat(newWine.glass_price)
+            : null,
+          active: newWine.active,
+          image_path: newWine.image_path, // Updated image_path
         })
         .select()
         .single();
 
       if (wineError) throw wineError;
 
-      // Then create category assignments if there are any
+      // Create category assignments if any
       if (newWine.category_ids.length > 0) {
-        const categoryAssignments = newWine.category_ids.map(categoryId => ({
-          wine_id: wine.id,
-          category_id: categoryId
-        }));
+        const categoryAssignments = newWine.category_ids.map(
+          (categoryId) => ({
+            wine_id: wine.id,
+            category_id: categoryId,
+          })
+        );
 
         const { error: assignmentError } = await supabase
-          .from('wine_category_assignments')
+          .from("wine_category_assignments")
           .insert(categoryAssignments);
 
         if (assignmentError) throw assignmentError;
       }
 
-      await fetchData(); // Refresh the data
+      await fetchData(); // Refresh data
       setIsDialogOpen(false);
       setNewWine({
-        name: '',
-        description: '',
-        bottle_price: '',
-        glass_price: '',
+        name: "",
+        description: "",
+        bottle_price: "",
+        glass_price: "",
         category_ids: [],
-        active: true
+        active: true,
+        image_path: "wines/wine.webp", // Reset to default
       });
 
       toast({
@@ -1702,7 +2059,7 @@ export default function WinePage() {
         description: "Wine added successfully",
       });
     } catch (error) {
-      console.error('Error creating wine:', error);
+      console.error("Error creating wine:", error);
       toast({
         title: "Error",
         description: "Failed to create wine",
@@ -1714,24 +2071,26 @@ export default function WinePage() {
   const toggleWineStatus = async (id: number, currentStatus: boolean) => {
     try {
       const { error: updateError } = await supabase
-        .from('wines')
+        .from("wines")
         .update({ active: !currentStatus })
-        .eq('id', id);
+        .eq("id", id);
 
       if (updateError) throw updateError;
 
-      setWines(prev =>
-        prev.map(wine =>
+      setWines((prev) =>
+        prev.map((wine) =>
           wine.id === id ? { ...wine, active: !currentStatus } : wine
         )
       );
 
       toast({
         title: "Success",
-        description: `Wine ${!currentStatus ? 'activated' : 'deactivated'} successfully`,
+        description: `Wine ${
+          !currentStatus ? "activated" : "deactivated"
+        } successfully`,
       });
     } catch (error) {
-      console.error('Error toggling wine status:', error);
+      console.error("Error toggling wine status:", error);
       toast({
         title: "Error",
         description: "Failed to update wine status",
@@ -1740,92 +2099,248 @@ export default function WinePage() {
     }
   };
 
+  // Handle selecting a new image for a wine
+  const handleSelectImage = (wineId: number) => {
+    setSelectedWineId(wineId);
+    setIsImageDialogOpen(true);
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  // Handle image upload
+  const handleImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setIsUploadingImage(true); // Start uploading
+    const file = e.target.files?.[0];
+    if (!file || !selectedWineId) {
+      toast({
+        title: "Error",
+        description: "No file selected",
+        variant: "destructive",
+      });
+      setIsUploadingImage(false); // End uploading
+      return;
+    }
+
+    try {
+      // Define the file path in Supabase storage
+      const fileExtension = file.name.split(".").pop();
+      const filePath = `wines/${selectedWineId}.${fileExtension}`;
+
+      // ======== Updated Image Upload Section Start ========
+      const { error: uploadError } = await supabase.storage
+        .from("menu")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from("menu")
+        .getPublicUrl(filePath);
+
+      if (!urlData.publicUrl) {
+        throw new Error("Failed to get public URL");
+      }
+
+      // Update the wine's image_path and image_url in the database
+      const { error: updateError } = await supabase
+        .from("wines")
+        .update({
+          image_path: filePath,
+          image_url: urlData.publicUrl,
+        })
+        .eq("id", selectedWineId);
+
+      if (updateError) throw updateError;
+      // ======== Updated Image Upload Section End ========
+
+      // Update the local state
+      setWines((prevWines) =>
+        prevWines.map((wine) =>
+          wine.id === selectedWineId
+            ? { ...wine, image_path: filePath, image_url: urlData.publicUrl }
+            : wine
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: "Image updated successfully",
+      });
+
+      // Close the image dialog
+      setIsImageDialogOpen(false);
+      setSelectedWineId(null);
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      toast({
+        title: "Error",
+        description: "Failed to upload image",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingImage(false); // End uploading
+    }
+  };
+
   return (
     <div className="container p-6">
-      <PageHeader
-        heading="Wine List"
-        text="Manage your restaurant's wine selection"
-      >
+      <PageHeader heading="Wine List" text="Manage your restaurant's wine selection">
         <Button onClick={() => setIsDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Add Wine
         </Button>
       </PageHeader>
 
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      {/* Filter and Sort Controls */}
+      <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
+        <div className="flex gap-4">
+          {/* Filter by Category */}
+          <Select value={selectedFilter} onValueChange={setSelectedFilter}>
+            <SelectTrigger className="w-[180px]"> {/* Added className here */}
+              <SelectValue placeholder="Filter by Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={category.id.toString()}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
+          {/* Sort By */}
+          <Select 
+            value={sortBy} 
+            onValueChange={(value: "name" | "price") => setSortBy(value)}
+          >
+            <SelectTrigger className="w-[180px]"> {/* Added className here */}
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Name</SelectItem>
+              <SelectItem value="price">Price</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Sort Order Toggle */}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() =>
+              setSortOrder((current) => (current === "asc" ? "desc" : "asc"))
+            }
+            aria-label={`Sort order: ${sortOrder === "asc" ? "Ascending" : "Descending"}`}
+          >
+            {sortOrder === "asc" ? "↑" : "↓"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Wine Grid with fixed image proportions */}
       {isLoading ? (
         <div className="flex h-[200px] items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
+      ) : error ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : wines.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground">No wines found. Add one to get started.</p>
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {wines.map((wine) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
+          {filteredAndSortedWines.map((wine) => (
             <div
               key={wine.id}
-              className="rounded-lg border bg-card text-card-foreground shadow-sm"
+              className="group flex flex-col bg-white border border-neutral-100 rounded-sm 
+                         transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
             >
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
+              {/* Image Container with fixed proportions */}
+              <div className="relative w-full pb-[150%] mb-4"> {/* 2:3 aspect ratio */}
+                <Image
+                  src={wine.image_url}
+                  alt={wine.name}
+                  fill
+                  className="object-contain" // Changed from cover to contain
+                  sizes="(max-width: 640px) 100vw, 
+                         (max-width: 1024px) 50vw, 
+                         (max-width: 1536px) 33vw,
+                         25vw"
+                  priority={false}
+                  loading="lazy"
+                  unoptimized
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`;
+                  }}
+                />
+              </div>
+
+              {/* Wine Category */}
+              <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
+                {wine.categories.map((category) => category.name).join(" · ")}
+              </div>
+
+              {/* Wine Name */}
+              <h3 className="text-lg font-medium mb-2 line-clamp-2">
+                {wine.name}
+              </h3>
+
+              {/* Description */}
+              <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
+                {wine.description}
+              </p>
+
+              {/* Prices */}
+              <div className="mt-auto grid grid-cols-2 gap-x-4 text-sm">
+                <div>
+                  <div className="font-medium">${wine.bottle_price.toFixed(2)}</div>
+                  <div className="text-neutral-500 uppercase text-xs">bottle</div>
+                </div>
+                {wine.glass_price && (
                   <div>
-                    <h3 className="font-semibold flex items-center">
-                      <Wine className="mr-2 h-4 w-4" />
-                      {wine.name}
-                    </h3>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {wine.categories.map((category) => (
-                        <Badge key={category.id} variant="secondary">
-                          {category.name}
-                        </Badge>
-                      ))}
-                    </div>
+                    <div className="font-medium">${wine.glass_price.toFixed(2)}</div>
+                    <div className="text-neutral-500 uppercase text-xs">glass</div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => toggleWineStatus(wine.id, wine.active)}
-                  >
-                    <ToggleLeft className="h-4 w-4" />
-                  </Button>
-                </div>
+                )}
+              </div>
 
-                <p className="text-sm text-muted-foreground mt-2">
-                  {wine.description}
-                </p>
-
-                <div className="mt-4 space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span>Bottle:</span>
-                    <span className="font-medium">${wine.bottle_price.toFixed(2)}</span>
-                  </div>
-                  {wine.glass_price && (
-                    <div className="flex justify-between text-sm">
-                      <span>Glass:</span>
-                      <span className="font-medium">${wine.glass_price.toFixed(2)}</span>
-                    </div>
-                  )}
-                </div>
-
-                <Badge 
-                  className="mt-4" 
-                  variant={wine.active ? "success" : "secondary"}
+              {/* Actions */}
+              <div className="flex gap-2 mt-4 pt-4 border-t border-neutral-100">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-8 text-xs rounded-sm"
+                  onClick={() => toggleWineStatus(wine.id, wine.active)}
                 >
-                  {wine.active ? 'Available' : 'Unavailable'}
-                </Badge>
+                  {wine.active ? "Available" : "Unavailable"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0 rounded-sm"
+                  onClick={() => handleSelectImage(wine.id)}
+                  aria-label="Change Wine Image" // Added ARIA label for accessibility
+                >
+                  <ImageIcon className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {/* Add Wine Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1841,7 +2356,9 @@ export default function WinePage() {
               <Input
                 id="name"
                 value={newWine.name}
-                onChange={(e) => setNewWine({ ...newWine, name: e.target.value })}
+                onChange={(e) =>
+                  setNewWine({ ...newWine, name: e.target.value })
+                }
                 placeholder="Wine name"
               />
             </div>
@@ -1850,7 +2367,9 @@ export default function WinePage() {
               <Input
                 id="description"
                 value={newWine.description}
-                onChange={(e) => setNewWine({ ...newWine, description: e.target.value })}
+                onChange={(e) =>
+                  setNewWine({ ...newWine, description: e.target.value })
+                }
                 placeholder="Wine description"
               />
             </div>
@@ -1862,7 +2381,9 @@ export default function WinePage() {
                   type="number"
                   step="0.01"
                   value={newWine.bottle_price}
-                  onChange={(e) => setNewWine({ ...newWine, bottle_price: e.target.value })}
+                  onChange={(e) =>
+                    setNewWine({ ...newWine, bottle_price: e.target.value })
+                  }
                   placeholder="0.00"
                 />
               </div>
@@ -1873,23 +2394,26 @@ export default function WinePage() {
                   type="number"
                   step="0.01"
                   value={newWine.glass_price}
-                  onChange={(e) => setNewWine({ ...newWine, glass_price: e.target.value })}
+                  onChange={(e) =>
+                    setNewWine({ ...newWine, glass_price: e.target.value })
+                  }
                   placeholder="0.00"
                 />
               </div>
             </div>
+            {/* ======== Updated Categories Select Start ======== */}
             <div className="grid gap-2">
               <Label>Categories</Label>
               <Select
-                value={newWine.category_ids[0]?.toString() || ''}
-                onValueChange={(value) =>
+                value={newWine.category_ids[0]?.toString() || ""}
+                onValueChange={(value: string) =>
                   setNewWine({
                     ...newWine,
-                    category_ids: [...newWine.category_ids, parseInt(value)]
+                    category_ids: [...newWine.category_ids, parseInt(value)],
                   })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full"> {/* Added className here */}
                   <SelectValue placeholder="Select categories" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1904,9 +2428,11 @@ export default function WinePage() {
                   ))}
                 </SelectContent>
               </Select>
+
+              {/* Display selected categories as badges */}
               <div className="flex flex-wrap gap-2 mt-2">
                 {newWine.category_ids.map((categoryId) => {
-                  const category = categories.find(c => c.id === categoryId);
+                  const category = categories.find((c) => c.id === categoryId);
                   return category ? (
                     <Badge
                       key={category.id}
@@ -1916,11 +2442,16 @@ export default function WinePage() {
                       {category.name}
                       <button
                         type="button"
-                        onClick={() => setNewWine({
-                          ...newWine,
-                          category_ids: newWine.category_ids.filter(id => id !== categoryId)
-                        })}
+                        onClick={() =>
+                          setNewWine({
+                            ...newWine,
+                            category_ids: newWine.category_ids.filter(
+                              (id) => id !== categoryId
+                            ),
+                          })
+                        }
                         className="ml-1 hover:text-destructive"
+                        aria-label={`Remove category ${category.name}`} // Added ARIA label
                       >
                         ×
                       </button>
@@ -1929,21 +2460,62 @@ export default function WinePage() {
                 })}
               </div>
             </div>
+            {/* ======== Updated Categories Select End ======== */}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateWine}>
-              Create Wine
+            <Button onClick={handleCreateWine}>Create Wine</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ======== Image Upload Dialog Start ======== */}
+      <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Wine Image</DialogTitle>
+            <DialogDescription>
+              Select a new image for the wine.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <input
+              type="file"
+              accept="image/*"
+              ref={fileInputRef}
+              style={{ display: "none" }}
+              onChange={handleImageUpload}
+            />
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (fileInputRef.current) {
+                  fileInputRef.current.click();
+                }
+              }}
+              disabled={isUploadingImage} // Disable button while uploading
+            >
+              {isUploadingImage ? "Uploading..." : "Select Image"} {/* Update button text */}
+            </Button>
+            {/* Optionally, display a preview of the selected image */}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsImageDialogOpen(false)}>
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* ======== Image Upload Dialog End ======== */}
     </div>
   );
 }
+
 ```
 
 ### app/dashboard/menu/page.tsx
@@ -1951,9 +2523,9 @@ export default function WinePage() {
 ```typescript
 "use client";
 
-import { useState, useEffect } from "react";
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Plus } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { Plus, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -1973,89 +2545,158 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
+import { Badge } from "@/components/ui/badge";
 
-type MenuItem = {
+// Updated interfaces
+interface MenuItem {
   id: string;
   name: string;
   description: string;
   price: number;
   category_id: number;
-  image_url: string | null;
   active: boolean;
-};
+  created_at: string;
+  image_path?: string;
+  image_url?: string;
+  allergens?: Allergen[];
+  categories?: Category;
+}
 
-type Category = {
+interface Category {
   id: number;
   name: string;
-};
+}
+
+interface Allergen {
+  id: number;
+  name: string;
+}
+
+interface NewMenuItem {
+  name: string;
+  description: string;
+  price: string;
+  category_id: string;
+  active: boolean;
+  allergen_ids: number[];
+}
 
 export default function MenuPage() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [allergens, setAllergens] = useState<Allergen[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newItem, setNewItem] = useState({
-    name: '',
-    description: '',
-    price: '',
-    category_id: '',
-    active: true
+  const [selectedFilter, setSelectedFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"name" | "price">("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [newItem, setNewItem] = useState<NewMenuItem>({
+    name: "",
+    description: "",
+    price: "",
+    category_id: "",
+    active: true,
+    allergen_ids: [],
   });
 
   const supabase = createClientComponentClient();
   const { toast } = useToast();
 
-  // Fetch menu items and categories
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        
-        // Fetch categories
-        const { data: categoriesData, error: categoriesError } = await supabase
-          .from('categories')
-          .select('*')
-          .order('name');
+  // Memoized fetchData function
+  const fetchData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
 
-        if (categoriesError) throw categoriesError;
+      // Fetch categories
+      const { data: categoriesData } = await supabase
+        .from("menu_categories")
+        .select("*")
+        .order("display_order");
 
-        // Fetch menu items
-        const { data: itemsData, error: itemsError } = await supabase
-          .from('menu_items')
-          .select(`
-            *,
-            categories (
-              id,
-              name
-            )
-          `)
-          .order('name');
+      // Fetch allergens
+      const { data: allergensData } = await supabase
+        .from("allergens")
+        .select("*")
+        .order("name");
 
-        if (itemsError) throw itemsError;
+      // Fetch menu items with their relationships
+      const { data: itemsData } = await supabase
+        .from("menu_items")
+        .select(
+          `
+          *,
+          categories:menu_categories(*),
+          menu_item_allergens(
+            allergens(*)
+          )
+        `
+        )
+        .order("name");
 
-        setCategories(categoriesData || []);
-        setItems(itemsData || []);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setError('Failed to load menu items');
-        toast({
-          title: "Error",
-          description: "Failed to load menu items",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
+      if (!categoriesData) {
+        throw new Error("Failed to fetch categories");
       }
-    };
+      if (!allergensData) {
+        throw new Error("Failed to fetch allergens");
+      }
+      if (!itemsData) {
+        throw new Error("Failed to fetch menu items");
+      }
 
-    fetchData();
+      setCategories(categoriesData);
+      setAllergens(allergensData);
+      setItems(
+        itemsData.map((item) => ({
+          ...item,
+          allergens: item.menu_item_allergens?.map((a) => a.allergens) || [],
+        }))
+      );
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      setError("Failed to load menu items");
+      toast({
+        title: "Error",
+        description: "Failed to load menu items",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }, [supabase, toast]);
+
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]); // Added fetchData to dependencies
+
+  // Filter and sort menu items
+  const filteredAndSortedItems = useMemo(() => {
+    let filtered = items;
+
+    // Filter by category
+    if (selectedFilter !== "all") {
+      filtered = items.filter(
+        (item) => item.category_id.toString() === selectedFilter
+      );
+    }
+
+    // Sort items
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "name") {
+        return sortOrder === "asc"
+          ? a.name.localeCompare(b.name)
+          : b.name.localeCompare(a.name);
+      } else {
+        return sortOrder === "asc" ? a.price - b.price : b.price - a.price;
+      }
+    });
+  }, [items, selectedFilter, sortBy, sortOrder]);
 
   const handleCreateItem = async () => {
     try {
+      // Validation
       if (!newItem.name || !newItem.category_id || !newItem.price) {
         toast({
           title: "Error",
@@ -2065,8 +2706,9 @@ export default function MenuPage() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('menu_items')
+      // Create menu item
+      const { data: item, error: itemError } = await supabase
+        .from("menu_items")
         .insert({
           name: newItem.name,
           description: newItem.description,
@@ -2077,16 +2719,31 @@ export default function MenuPage() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (itemError) throw itemError;
 
-      setItems(prev => [...prev, data]);
+      // Create allergen assignments if any
+      if (newItem.allergen_ids.length > 0) {
+        const allergenAssignments = newItem.allergen_ids.map((allergenId) => ({
+          menu_item_id: item.id,
+          allergen_id: allergenId,
+        }));
+
+        const { error: assignmentError } = await supabase
+          .from("menu_item_allergens")
+          .insert(allergenAssignments);
+
+        if (assignmentError) throw assignmentError;
+      }
+
+      await fetchData(); // Refresh data
       setIsDialogOpen(false);
       setNewItem({
-        name: '',
-        description: '',
-        price: '',
-        category_id: '',
-        active: true
+        name: "",
+        description: "",
+        price: "",
+        category_id: "",
+        active: true,
+        allergen_ids: [],
       });
 
       toast({
@@ -2094,7 +2751,7 @@ export default function MenuPage() {
         description: "Menu item created successfully",
       });
     } catch (error) {
-      console.error('Error creating item:', error);
+      console.error("Error creating menu item:", error);
       toast({
         title: "Error",
         description: "Failed to create menu item",
@@ -2115,44 +2772,136 @@ export default function MenuPage() {
         </Button>
       </PageHeader>
 
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      {/* Filter and Sort Controls */}
+      <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
+        <div className="flex gap-4">
+          <Select value={selectedFilter} onValueChange={setSelectedFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Filter by Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={category.id.toString()}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
+          <Select
+            value={sortBy}
+            onValueChange={(value: "name" | "price") => setSortBy(value)}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Name</SelectItem>
+              <SelectItem value="price">Price</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() =>
+              setSortOrder((current) => (current === "asc" ? "desc" : "asc"))
+            }
+          >
+            {sortOrder === "asc" ? "↑" : "↓"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Menu Items Grid */}
       {isLoading ? (
         <div className="flex h-[200px] items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      ) : filteredAndSortedItems.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">
+            No menu items found. Add one to get started.
+          </p>
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {items.map((item) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
+          {filteredAndSortedItems.map((item) => (
             <div
               key={item.id}
-              className="rounded-lg border bg-card text-card-foreground shadow-sm"
+              className="group flex flex-col bg-white border border-neutral-100 rounded-sm 
+                         transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
             >
-              <div className="p-6">
-                <h3 className="font-semibold">{item.name}</h3>
-                <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="text-lg font-bold">${item.price.toFixed(2)}</span>
-                  <span className={`text-sm ${item.active ? 'text-green-600' : 'text-red-600'}`}>
-                    {item.active ? 'Active' : 'Inactive'}
-                  </span>
+              {/* Image Container */}
+              <div className="relative w-full pb-[100%] mb-4">
+                {" "}
+                {/* Square aspect ratio */}
+                <div className="absolute inset-0 bg-neutral-100 flex items-center justify-center">
+                  <ImageIcon className="h-8 w-8 text-neutral-400" />
                 </div>
+              </div>
+
+              {/* Category */}
+              <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
+                {item.categories?.name}
+              </div>
+
+              {/* Item Name */}
+              <h3 className="text-lg font-medium mb-2 line-clamp-2">
+                {item.name}
+              </h3>
+
+              {/* Description */}
+              <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
+                {item.description}
+              </p>
+
+              {/* Allergens */}
+              {item.allergens && item.allergens.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-4">
+                  {item.allergens.map((allergen: Allergen) => (
+                    <Badge
+                      key={allergen.id}
+                      variant="secondary"
+                      className="text-xs"
+                    >
+                      {allergen.name}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {/* Price */}
+              <div className="mt-auto">
+                <div className="font-medium text-lg">
+                  ${item.price.toFixed(2)}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 mt-4 pt-4 border-t border-neutral-100">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-8 text-xs rounded-sm"
+                  onClick={() => {}} // TODO: Add toggle status handler
+                >
+                  {item.active ? "Available" : "Unavailable"}
+                </Button>
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {/* Add Item Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create New Menu Item</DialogTitle>
+            <DialogTitle>Add New Menu Item</DialogTitle>
             <DialogDescription>
-              Add a new item to your menu. Fill in the details below.
+              Add a new item to your menu with its details and allergens.
             </DialogDescription>
           </DialogHeader>
 
@@ -2162,19 +2911,25 @@ export default function MenuPage() {
               <Input
                 id="name"
                 value={newItem.name}
-                onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, name: e.target.value })
+                }
                 placeholder="Item name"
               />
             </div>
+
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
               <Input
                 id="description"
                 value={newItem.description}
-                onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, description: e.target.value })
+                }
                 placeholder="Item description"
               />
             </div>
+
             <div className="grid gap-2">
               <Label htmlFor="price">Price</Label>
               <Input
@@ -2182,27 +2937,97 @@ export default function MenuPage() {
                 type="number"
                 step="0.01"
                 value={newItem.price}
-                onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, price: e.target.value })
+                }
                 placeholder="0.00"
               />
             </div>
+
             <div className="grid gap-2">
               <Label htmlFor="category">Category</Label>
               <Select
                 value={newItem.category_id}
-                onValueChange={(value) => setNewItem({ ...newItem, category_id: value })}
+                onValueChange={(value) =>
+                  setNewItem({ ...newItem, category_id: value })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id.toString()}>
+                    <SelectItem
+                      key={category.id}
+                      value={category.id.toString()}
+                    >
                       {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Allergens</Label>
+              <Select
+                value={newItem.allergen_ids[0]?.toString() || ""}
+                onValueChange={(value) =>
+                  setNewItem({
+                    ...newItem,
+                    allergen_ids: [
+                      ...newItem.allergen_ids,
+                      parseInt(value),
+                    ],
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select allergens" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allergens.map((allergen) => (
+                    <SelectItem
+                      key={allergen.id}
+                      value={allergen.id.toString()}
+                      disabled={newItem.allergen_ids.includes(allergen.id)}
+                    >
+                      {allergen.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* Selected allergens */}
+              <div className="flex flex-wrap gap-2 mt-2">
+                {newItem.allergen_ids.map((allergenId) => {
+                  const allergen: Allergen | undefined = allergens.find(
+                    (a: Allergen) => a.id === allergenId
+                  );
+                  return allergen ? (
+                    <Badge
+                      key={allergen.id}
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
+                      {allergen.name}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewItem({
+                            ...newItem,
+                            allergen_ids: newItem.allergen_ids.filter(
+                              (id) => id !== allergenId
+                            ),
+                          })
+                        }
+                        className="ml-1 hover:text-destructive"
+                      >
+                        ×
+                      </button>
+                    </Badge>
+                  ) : null;
+                })}
+              </div>
             </div>
           </div>
 
@@ -2210,15 +3035,14 @@ export default function MenuPage() {
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateItem}>
-              Create Item
-            </Button>
+            <Button onClick={handleCreateItem}>Create Item</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
+
 ```
 
 ### app/dashboard/settings/pages.tsx
