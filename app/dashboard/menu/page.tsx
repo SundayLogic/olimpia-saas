@@ -338,7 +338,7 @@ export default function MenuPage() {
             className="group flex flex-col bg-white border border-neutral-100 rounded-sm transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
           >
             {/* **a. Image Container with Fixed Proportions** */}
-            <div className="relative w-full pb-[150%] mb-4"> {/* 2:3 aspect ratio */}
+            <div className="relative w-full pb-[100%] mb-4"> {/* Changed from pb-[150%] to pb-[100%] */}
               {item.image_url ? (
                 <Image
                   src={item.image_url}
@@ -363,13 +363,6 @@ export default function MenuPage() {
                 </div>
               )}
             </div>
-
-            {/* **b. Debug Info in Development** */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="text-xs text-gray-400 mb-2">
-                Image URL: {item.image_url || 'N/A'}
-              </div>
-            )}
 
             {/* **c. Category Label** */}
             <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
