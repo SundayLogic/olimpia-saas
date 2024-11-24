@@ -338,13 +338,13 @@ export default function MenuPage() {
             className="group flex flex-col bg-white border border-neutral-100 rounded-sm transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
           >
             {/* **a. Image Container with Fixed Proportions** */}
-            <div className="relative w-full pb-[100%] mb-4"> {/* Changed from pb-[150%] to pb-[100%] */}
+            <div className="relative w-full pb-[100%] mb-4"> {/* Square aspect ratio container */}
               {item.image_url ? (
                 <Image
                   src={item.image_url}
-                  alt={item.image_alt || item.name} // **Ensure image_alt is defined or fallback to name**
+                  alt={item.image_alt || item.name}
                   fill
-                  className="object-contain"
+                  className="object-cover rounded-sm" // Changed from object-contain to object-cover
                   sizes="(max-width: 640px) 100vw, 
                          (max-width: 1024px) 50vw, 
                          (max-width: 1536px) 33vw,
@@ -358,7 +358,7 @@ export default function MenuPage() {
                   }}
                 />
               ) : (
-                <div className="absolute inset-0 bg-neutral-100 flex items-center justify-center">
+                <div className="absolute inset-0 bg-neutral-100 flex items-center justify-center rounded-sm">
                   <span className="text-neutral-400">No image</span>
                 </div>
               )}
