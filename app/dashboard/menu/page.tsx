@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import Image from "next/image"; // **Added Image Import**
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +41,8 @@ type MenuItemWithRelations = {
   price: number;
   category_id: number;
   image_url: string | null;
+  image_alt: string | null; // **Added image_alt**
+  image_path: string | null; // **Added image_path**
   active: boolean;
   menu_categories: {
     id: number;
@@ -57,6 +60,8 @@ type MenuItem = {
   price: number;
   category_id: number;
   image_url: string | null;
+  image_alt: string | null; // **Added image_alt**
+  image_path: string | null; // **Added image_path**
   active: boolean;
   category?: {
     id: number;
@@ -139,6 +144,9 @@ export default function MenuPage() {
 
         if (itemsError) throw itemsError;
 
+        // **Debug the data**
+        console.log('Raw items data:', itemsData);
+
         // Map fetched items to include allergens and category
         setItems(
           (itemsData as MenuItemWithRelations[])?.map(item => ({
@@ -148,6 +156,8 @@ export default function MenuPage() {
             price: item.price,
             category_id: item.category_id,
             image_url: item.image_url,
+            image_alt: item.image_alt, // **Added image_alt**
+            image_path: item.image_path, // **Added image_path**
             active: item.active,
             category: item.menu_categories,
             allergens: item.menu_item_allergens?.map(relation => relation.allergens) || []
@@ -223,6 +233,8 @@ export default function MenuPage() {
         price: parseFloat(newItem.price),
         category_id: parseInt(newItem.category_id),
         image_url: null, // Assuming no image upload in this flow
+        image_alt: null, // **Set to null or handle as needed**
+        image_path: null, // **Set to null or handle as needed**
         active: newItem.active,
         category: categories.find(c => c.id === parseInt(newItem.category_id)),
         allergens: allergens.filter(a => newItem.allergen_ids.includes(a.id)),
@@ -260,9 +272,33 @@ export default function MenuPage() {
     ? items
     : items.filter(item => item.category_id === parseInt(selectedFilter));
 
+  // **6. Error Boundaries and Loading States**
+  if (isLoading) return (
+    <div className="flex items-center justify-center h-screen">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="container p-6">
+      <Alert variant="destructive" className="mb-4">
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    </div>
+  );
+
+  if (!items.length) return (
+    <div className="container p-6">
+      <Alert variant="warning" className="mb-4">
+        <AlertDescription>No menu items found.</AlertDescription>
+      </Alert>
+      <Button onClick={() => setIsDialogOpen(true)}>Add Your First Item</Button>
+    </div>
+  );
+
   return (
     <div className="container p-6">
-      {/* **6. Updated PageHeader with Filter Controls and Add Button** */}
+      {/* **7. Updated PageHeader with Filter Controls and Add Button** */}
       <PageHeader
         heading="Menu Items"
         text="Manage your restaurant's menu selection"
@@ -294,72 +330,93 @@ export default function MenuPage() {
         </div>
       </PageHeader>
 
-      {/* **7. Error Alert** */}
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* **8. Loading Indicator or Menu Items Grid** */}
-      {isLoading ? (
-        <div className="flex items-center justify-center h-[400px]">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
-          {filteredItems.map((item) => (
-            <div
-              key={item.id}
-              className="group flex flex-col bg-white border border-neutral-100 rounded-sm transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
-            >
-              {/* **a. Category Label** */}
-              <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
-                {item.category?.name}
-              </div>
-
-              {/* **b. Item Name** */}
-              <h3 className="text-lg font-medium mb-2 line-clamp-2">
-                {item.name}
-              </h3>
-
-              {/* **c. Description** */}
-              <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
-                {item.description}
-              </p>
-
-              {/* **d. Allergens with Improved Styling** */}
-              <div className="flex flex-wrap gap-1 mb-4">
-                {item.allergens?.map((allergen) => (
-                  <Badge
-                    key={allergen.id}
-                    variant="secondary"
-                    className="text-xs px-2 py-0.5 bg-neutral-100"
-                  >
-                    {allergen.name}
-                  </Badge>
-                ))}
-              </div>
-
-              {/* **e. Price** */}
-              <div className="mt-auto font-medium text-lg">
-                ${item.price.toFixed(2)}
-              </div>
-
-              {/* **f. Actions** */}
-              <div className="flex gap-2 mt-4 pt-4 border-t border-neutral-100">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 h-8 text-xs rounded-sm"
-                >
-                  {item.active ? "Available" : "Unavailable"}
-                </Button>
-              </div>
+      {/* **8. Menu Items Grid** */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
+        {filteredItems.map((item) => (
+          <div
+            key={item.id}
+            className="group flex flex-col bg-white border border-neutral-100 rounded-sm transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
+          >
+            {/* **a. Image Container with Fixed Proportions** */}
+            <div className="relative w-full pb-[150%] mb-4"> {/* 2:3 aspect ratio */}
+              {item.image_url ? (
+                <Image
+                  src={item.image_url}
+                  alt={item.image_alt || item.name} // **Ensure image_alt is defined or fallback to name**
+                  fill
+                  className="object-contain"
+                  sizes="(max-width: 640px) 100vw, 
+                         (max-width: 1024px) 50vw, 
+                         (max-width: 1536px) 33vw,
+                         25vw"
+                  priority={false}
+                  loading="lazy"
+                  onError={(e) => {
+                    console.error('Image load error for:', item.name, item.image_url);
+                    const target = e.target as HTMLImageElement;
+                    target.src = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/placeholder.webp`;
+                  }}
+                />
+              ) : (
+                <div className="absolute inset-0 bg-neutral-100 flex items-center justify-center">
+                  <span className="text-neutral-400">No image</span>
+                </div>
+              )}
             </div>
-          ))}
-        </div>
-      )}
+
+            {/* **b. Debug Info in Development** */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="text-xs text-gray-400 mb-2">
+                Image URL: {item.image_url || 'N/A'}
+              </div>
+            )}
+
+            {/* **c. Category Label** */}
+            <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
+              {item.category?.name}
+            </div>
+
+            {/* **d. Item Name** */}
+            <h3 className="text-lg font-medium mb-2 line-clamp-2">
+              {item.name}
+            </h3>
+
+            {/* **e. Description** */}
+            <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
+              {item.description}
+            </p>
+
+            {/* **f. Allergens with Improved Styling** */}
+            <div className="flex flex-wrap gap-1 mb-4">
+              {item.allergens?.map((allergen) => (
+                <Badge
+                  key={allergen.id}
+                  variant="secondary"
+                  className="text-xs px-2 py-0.5 bg-neutral-100"
+                >
+                  {allergen.name}
+                </Badge>
+              ))}
+            </div>
+
+            {/* **g. Price** */}
+            <div className="mt-auto font-medium text-lg">
+              ${item.price.toFixed(2)}
+            </div>
+
+            {/* **h. Actions** */}
+            <div className="flex gap-2 mt-4 pt-4 border-t border-neutral-100">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 h-8 text-xs rounded-sm"
+              >
+                {item.active ? "Available" : "Unavailable"}
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* **9. Add Item Dialog with Updated Form Layout** */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
