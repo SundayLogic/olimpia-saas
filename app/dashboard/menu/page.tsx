@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert"; // **Ensured Alert Import**
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge"; // Ensure Badge component exists
 
@@ -279,20 +279,24 @@ export default function MenuPage() {
     </div>
   );
 
+  // **Replaced the error return statement**
   if (error) return (
     <div className="container p-6">
-      <Alert variant="destructive" className="mb-4">
+      <Alert>
         <AlertDescription>{error}</AlertDescription>
       </Alert>
     </div>
   );
 
+  // **Replaced the no items return statement**
   if (!items.length) return (
     <div className="container p-6">
-      <Alert variant="warning" className="mb-4">
+      <Alert>
         <AlertDescription>No menu items found.</AlertDescription>
       </Alert>
-      <Button onClick={() => setIsDialogOpen(true)}>Add Your First Item</Button>
+      <div className="mt-4">
+        <Button onClick={() => setIsDialogOpen(true)}>Add Your First Item</Button>
+      </div>
     </div>
   );
 
