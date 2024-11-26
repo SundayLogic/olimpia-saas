@@ -15,56 +15,47 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
 
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  active: boolean;
-}
-
 interface DailyMenuItem {
-  menu_items: MenuItem;
+  id: string;
+  course_name: string;
+  course_type: 'first' | 'second';
+  display_order: number;
 }
 
 interface DailyMenu {
-  id: number;
+  id: string;  // Changed from number to string (UUID)
   date: string;
-  price: number;
+  repeat_pattern: 'none' | 'weekly' | 'monthly';
   active: boolean;
+  scheduled_for: string;
   created_at: string;
   daily_menu_items: DailyMenuItem[];
 }
 
 interface NewMenu {
   date: string;
-  price: string;
+  repeat_pattern: 'none' | 'weekly' | 'monthly';
   active: boolean;
-  selectedItems: string[];
+  firstCourse: string;
+  secondCourse: string;
 }
 
 export default function DailyMenuPage() {
   const [dailyMenus, setDailyMenus] = useState<DailyMenu[]>([]);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newMenu, setNewMenu] = useState<NewMenu>({
     date: new Date().toISOString().split('T')[0],
-    price: '',
+    repeat_pattern: 'none',
     active: true,
-    selectedItems: []
+    firstCourse: '',
+    secondCourse: ''
   });
 
   const supabase = createClientComponentClient();
@@ -76,34 +67,27 @@ export default function DailyMenuPage() {
         setIsLoading(true);
         setError(null);
         
-        // Fetch menu items for selection
-        const { data: itemsData, error: itemsError } = await supabase
-          .from('menu_items')
-          .select('*')
-          .eq('active', true)
-          .order('name');
-
-        if (itemsError) throw itemsError;
-
-        // Fetch daily menus
+        // Fetch daily menus with the updated schema
         const { data: menusData, error: menusError } = await supabase
           .from('daily_menus')
           .select(`
-            *,
+            id,
+            date,
+            repeat_pattern,
+            active,
+            scheduled_for,
+            created_at,
             daily_menu_items (
-              menu_items (
-                id,
-                name,
-                description,
-                price
-              )
+              id,
+              course_name,
+              course_type,
+              display_order
             )
           `)
           .order('date', { ascending: false });
 
         if (menusError) throw menusError;
 
-        setMenuItems(itemsData || []);
         setDailyMenus(menusData || []);
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -123,49 +107,66 @@ export default function DailyMenuPage() {
 
   const handleCreateMenu = async () => {
     try {
-      if (!newMenu.date || !newMenu.price || newMenu.selectedItems.length === 0) {
+      if (!newMenu.date || !newMenu.firstCourse || !newMenu.secondCourse) {
         toast({
           title: "Error",
-          description: "Please fill in all required fields and select at least one item",
+          description: "Please fill in all required fields",
           variant: "destructive",
         });
         return;
       }
 
+      // Create the daily menu
       const { data: menuData, error: menuError } = await supabase
         .from('daily_menus')
         .insert({
           date: newMenu.date,
-          price: parseFloat(newMenu.price),
+          repeat_pattern: newMenu.repeat_pattern,
           active: newMenu.active,
+          scheduled_for: new Date(newMenu.date + 'T11:00:00.000+01:00').toISOString() // Madrid time
         })
         .select()
         .single();
 
       if (menuError) throw menuError;
 
-      const menuItemAssociations = newMenu.selectedItems.map(itemId => ({
-        daily_menu_id: menuData.id,
-        menu_item_id: itemId
-      }));
+      // Create menu items (first and second courses)
+      const menuItems = [
+        {
+          daily_menu_id: menuData.id,
+          course_name: newMenu.firstCourse,
+          course_type: 'first',
+          display_order: 1
+        },
+        {
+          daily_menu_id: menuData.id,
+          course_name: newMenu.secondCourse,
+          course_type: 'second',
+          display_order: 2
+        }
+      ];
 
-      const { error: associationError } = await supabase
+      const { error: itemsError } = await supabase
         .from('daily_menu_items')
-        .insert(menuItemAssociations);
+        .insert(menuItems);
 
-      if (associationError) throw associationError;
+      if (itemsError) throw itemsError;
 
+      // Fetch the updated menu to include the newly added items
       const { data: updatedMenu, error: fetchError } = await supabase
         .from('daily_menus')
         .select(`
-          *,
+          id,
+          date,
+          repeat_pattern,
+          active,
+          scheduled_for,
+          created_at,
           daily_menu_items (
-            menu_items (
-              id,
-              name,
-              description,
-              price
-            )
+            id,
+            course_name,
+            course_type,
+            display_order
           )
         `)
         .eq('id', menuData.id)
@@ -173,13 +174,15 @@ export default function DailyMenuPage() {
 
       if (fetchError) throw fetchError;
 
+      // Update the state with the new menu
       setDailyMenus(prev => [updatedMenu, ...prev]);
       setIsDialogOpen(false);
       setNewMenu({
         date: new Date().toISOString().split('T')[0],
-        price: '',
+        repeat_pattern: 'none',
         active: true,
-        selectedItems: []
+        firstCourse: '',
+        secondCourse: ''
       });
 
       toast({
@@ -205,7 +208,7 @@ export default function DailyMenuPage() {
     });
   };
 
-  const toggleMenuStatus = async (menuId: number, currentStatus: boolean) => {
+  const toggleMenuStatus = async (menuId: string, currentStatus: boolean) => {
     try {
       const { error } = await supabase
         .from('daily_menus')
@@ -290,14 +293,23 @@ export default function DailyMenuPage() {
                 </div>
                 <div className="mt-4">
                   <div className="text-lg font-bold mb-2">
-                    Price: ${menu.price.toFixed(2)}
+                    Scheduled For: {new Date(menu.scheduled_for).toLocaleString('en-US', {
+                      timeZone: 'Europe/Madrid',
+                      dateStyle: 'full',
+                      timeStyle: 'short',
+                    })}
+                  </div>
+                  <div className="text-lg font-bold mb-2">
+                    Repeat Pattern: {menu.repeat_pattern.charAt(0).toUpperCase() + menu.repeat_pattern.slice(1)}
                   </div>
                   <div className="space-y-2">
-                    {menu.daily_menu_items?.map(({ menu_items }) => (
-                      <div key={menu_items.id} className="text-sm">
-                        • {menu_items.name}
-                      </div>
-                    ))}
+                    {menu.daily_menu_items
+                      ?.sort((a, b) => a.display_order - b.display_order)
+                      .map((item) => (
+                        <div key={item.id} className="text-sm flex items-center">
+                          {item.course_type === 'first' ? '• First Course:' : '• Second Course:'} {item.course_name}
+                        </div>
+                      ))}
                   </div>
                 </div>
               </div>
@@ -311,7 +323,7 @@ export default function DailyMenuPage() {
           <DialogHeader>
             <DialogTitle>Create Daily Menu</DialogTitle>
             <DialogDescription>
-              Create a new daily menu by selecting the date, price, and menu items.
+              Create a new daily menu by selecting the date, repeat pattern, and entering the course names.
             </DialogDescription>
           </DialogHeader>
 
@@ -326,66 +338,45 @@ export default function DailyMenuPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="price">Price</Label>
-              <Input
-                id="price"
-                type="number"
-                step="0.01"
-                value={newMenu.price}
-                onChange={(e) => setNewMenu({ ...newMenu, price: e.target.value })}
-                placeholder="0.00"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Menu Items</Label>
+              <Label htmlFor="repeat_pattern">Repeat Pattern</Label>
               <Select
-                value={newMenu.selectedItems[0] || ''}
-                onValueChange={(value) => 
+                value={newMenu.repeat_pattern}
+                onValueChange={(value: 'none' | 'weekly' | 'monthly') => 
                   setNewMenu({ 
                     ...newMenu, 
-                    selectedItems: [...newMenu.selectedItems, value] 
+                    repeat_pattern: value 
                   })
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select items" />
+                  <SelectValue placeholder="Select repeat pattern" />
                 </SelectTrigger>
                 <SelectContent>
-                  {menuItems.map((item) => (
-                    <SelectItem 
-                      key={item.id} 
-                      value={item.id}
-                      disabled={newMenu.selectedItems.includes(item.id)}
-                    >
-                      {item.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
                 </SelectContent>
               </Select>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {newMenu.selectedItems.map((itemId) => {
-                  const item = menuItems.find(i => i.id === itemId);
-                  return item ? (
-                    <Badge 
-                      key={item.id}
-                      variant="secondary"
-                      className="flex items-center gap-1"
-                    >
-                      {item.name}
-                      <button
-                        type="button"
-                        onClick={() => setNewMenu({
-                          ...newMenu,
-                          selectedItems: newMenu.selectedItems.filter(id => id !== itemId)
-                        })}
-                        className="ml-1 hover:text-destructive"
-                      >
-                        ×
-                      </button>
-                    </Badge>
-                  ) : null;
-                })}
-              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="firstCourse">First Course</Label>
+              <Input
+                id="firstCourse"
+                type="text"
+                value={newMenu.firstCourse}
+                onChange={(e) => setNewMenu({ ...newMenu, firstCourse: e.target.value })}
+                placeholder="Enter first course name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="secondCourse">Second Course</Label>
+              <Input
+                id="secondCourse"
+                type="text"
+                value={newMenu.secondCourse}
+                onChange={(e) => setNewMenu({ ...newMenu, secondCourse: e.target.value })}
+                placeholder="Enter second course name"
+              />
             </div>
           </div>
 
