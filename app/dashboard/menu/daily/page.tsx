@@ -103,12 +103,13 @@ interface FilterOptions {
 
 // QuickSelect Component: Allows quick selection of date ranges
 const QuickSelect = ({ onSelect }: { onSelect: (range: DateRange) => void }) => (
-  <div className="flex gap-2 mb-4">
+  <div className="flex gap-2 mb-6">
+    {/* Improved button styling */}
     <Button 
       variant="outline" 
       size="sm"
       onClick={() => onSelect(getThisWeekRange())}
-      className="text-xs hover:bg-black hover:text-white"
+      className="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium rounded-md transition-colors"
     >
       This Week
     </Button>
@@ -116,7 +117,7 @@ const QuickSelect = ({ onSelect }: { onSelect: (range: DateRange) => void }) => 
       variant="outline" 
       size="sm"
       onClick={() => onSelect(getNextWeekRange())}
-      className="text-xs hover:bg-black hover:text-white"
+      className="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium rounded-md transition-colors"
     >
       Next Week
     </Button>
@@ -124,7 +125,7 @@ const QuickSelect = ({ onSelect }: { onSelect: (range: DateRange) => void }) => 
       variant="outline" 
       size="sm"
       onClick={() => onSelect(getThisMonthRange())}
-      className="text-xs hover:bg-black hover:text-white"
+      className="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium rounded-md transition-colors"
     >
       This Month
     </Button>
@@ -553,7 +554,6 @@ export default function DailyMenuPage() {
   // -----------------------------------
   // Filtered Menus Calculation
   // -----------------------------------
-  // Add this right before the return statement
   const filteredMenus = dailyMenus
     .filter((menu: DailyMenu) => {
       if (filter.pattern !== "all" && menu.repeat_pattern !== filter.pattern) return false;
@@ -604,10 +604,10 @@ export default function DailyMenuPage() {
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Calendar Section */}
-          <div className="bg-white p-6 shadow-sm">
+          <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
             <div className="mb-6">
-              <h2 className={headingClasses}>Calendar View</h2>
-              <p className={subheadingClasses}>Select dates to view or schedule menus</p>
+              <h2 className="text-2xl font-semibold">Calendar View</h2>
+              <p className="text-sm text-gray-500 mt-1">SELECT DATES TO VIEW OR SCHEDULE MENUS</p>
             </div>
 
             {/* Quick Select Buttons */}
@@ -625,26 +625,43 @@ export default function DailyMenuPage() {
               }
               numberOfMonths={1}
               locale={es}
+              classNames={{
+                months: "space-y-4",
+                month: "space-y-4",
+                caption: "flex justify-center pt-1 relative items-center",
+                caption_label: "text-sm font-medium",
+                nav: "space-x-1 flex items-center",
+                nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
+                nav_button_previous: "absolute left-1",
+                nav_button_next: "absolute right-1",
+                table: "w-full border-collapse space-y-1",
+                head_row: "flex",
+                head_cell: "text-gray-500 rounded-md w-9 font-normal text-[0.8rem]",
+                row: "flex w-full mt-2",
+                cell: "text-center text-sm relative p-0 rounded-md hover:bg-gray-100 focus-within:relative focus-within:z-20",
+                day: "h-9 w-9 p-0 font-normal",
+                day_range_middle: "rounded-none",
+                day_selected: "bg-black text-white hover:bg-gray-800 hover:text-white focus:bg-gray-800 focus:text-white",
+                day_today: "bg-gray-50",
+                day_outside: "opacity-50",
+                day_disabled: "opacity-50",
+                day_hidden: "invisible",
+              }}
               modifiers={{
-                booked: (date: Date) =>
+                booked: (date) =>
                   dailyMenus.some((menu) => isSameDay(new Date(menu.date), date)),
-                weekly: (date: Date) =>
+                weekly: (date) =>
                   dailyMenus.some(
                     (menu) =>
                       isSameDay(new Date(menu.date), date) &&
                       menu.repeat_pattern === "weekly"
                   ),
-                monthly: (date: Date) =>
+                monthly: (date) =>
                   dailyMenus.some(
                     (menu) =>
                       isSameDay(new Date(menu.date), date) &&
                       menu.repeat_pattern === "monthly"
                   ),
-              }}
-              modifiersStyles={{
-                booked: { backgroundColor: "rgb(0, 0, 0)", color: "white" },
-                weekly: { backgroundColor: "#2563eb", color: "white" },
-                monthly: { backgroundColor: "#7c3aed", color: "white" },
               }}
               onDayMouseEnter={(date) => setHoveredDate(date)}
               onDayMouseLeave={() => setHoveredDate(null)}
@@ -690,19 +707,19 @@ export default function DailyMenuPage() {
               }}
             />
 
-            {/* Legend for Calendar */}
-            <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+            {/* Improved legend */}
+            <div className="mt-6 flex items-center justify-between px-2">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-black rounded-sm" />
-                <span>Single</span>
+                <span className="text-sm text-gray-600">Single</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-[#2563eb] rounded-sm" />
-                <span>Weekly</span>
+                <span className="text-sm text-gray-600">Weekly</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-[#7c3aed] rounded-sm" />
-                <span>Monthly</span>
+                <span className="text-sm text-gray-600">Monthly</span>
               </div>
             </div>
           </div>
