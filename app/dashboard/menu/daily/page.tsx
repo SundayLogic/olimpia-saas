@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Plus, Calendar, ToggleLeft } from "lucide-react";
+import { Plus, ToggleLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -17,9 +17,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils"; // Assuming 'cn' is a utility for conditional classNames
 
+// Utility classes adhering to Swiss Design principles
+const gridClasses = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8";
+const cardClasses = "bg-white border-0 shadow-sm hover:shadow-md transition-shadow p-8 relative";
+const headingClasses = "text-2xl font-light tracking-tight mb-6";
+const subheadingClasses = "text-sm font-medium uppercase tracking-widest text-muted-foreground mb-4";
+const labelClasses = "text-xs uppercase tracking-wider font-medium text-muted-foreground";
+
+// Header Component
+const Header = ({ children }: { children: React.ReactNode }) => (
+  <div className="mb-8 flex justify-between items-center">
+    <div>
+      <h1 className={headingClasses}>Daily Menus</h1>
+      <p className={subheadingClasses}>Menu Schedule Management</p>
+    </div>
+    {children}
+  </div>
+);
+
+// TypeScript Interfaces
 interface DailyMenuItem {
   id: string;
   course_name: string;
@@ -238,107 +257,133 @@ export default function DailyMenuPage() {
   };
 
   return (
-    <div className="container p-6">
-      <PageHeader
-        heading="Daily Menus"
-        text="Manage your restaurant's daily menus"
-      >
-        <Button onClick={() => setIsDialogOpen(true)}>
+    <div className="min-h-screen bg-[#f8f8f8] p-8">
+      {/* Header Component with New Menu Button */}
+      <Header>
+        <Button 
+          onClick={() => setIsDialogOpen(true)}
+          className="bg-black hover:bg-gray-800 text-white rounded-none"
+        >
           <Plus className="mr-2 h-4 w-4" />
-          Create Daily Menu
+          New Menu
         </Button>
-      </PageHeader>
+      </Header>
 
+      {/* Display error if any */}
       {error && (
         <Alert variant="destructive" className="mb-4">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      {isLoading ? (
-        <div className="flex h-[200px] items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      ) : dailyMenus.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">No daily menus found. Create one to get started.</p>
-        </div>
-      ) : (
-        <div className="grid gap-6">
-          {dailyMenus.map((menu) => (
+      {/* Main content with grid layout */}
+      <div className={gridClasses}>
+        {isLoading ? (
+          <div className="flex h-[200px] items-center justify-center col-span-full">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
+          </div>
+        ) : dailyMenus.length === 0 ? (
+          <div className="text-center py-12 col-span-full">
+            <p className="text-muted-foreground">No daily menus found. Create one to get started.</p>
+          </div>
+        ) : (
+          dailyMenus.map((menu) => (
             <div
               key={menu.id}
-              className="rounded-lg border bg-card text-card-foreground shadow-sm"
+              className={cardClasses}
             >
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="font-semibold flex items-center">
-                      <Calendar className="mr-2 h-4 w-4" />
-                      {formatDate(menu.date)}
-                    </h3>
-                    <Badge className="mt-2" variant={menu.active ? "success" : "secondary"}>
-                      {menu.active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => toggleMenuStatus(menu.id, menu.active)}
-                    >
-                      <ToggleLeft className="h-4 w-4" />
-                    </Button>
+              {/* Date display with strong typography */}
+              <div className="mb-6">
+                <div className={labelClasses}>
+                  Date
+                </div>
+                <div className="text-xl font-light mt-1">
+                  {formatDate(menu.date)}
+                </div>
+              </div>
+
+              {/* Status badge with high contrast */}
+              <Badge 
+                className={cn(
+                  "absolute top-8 right-8 rounded-none px-3 py-1",
+                  menu.active 
+                    ? "bg-black text-white" 
+                    : "bg-gray-100 text-gray-600"
+                )}
+              >
+                {menu.active ? 'Active' : 'Inactive'}
+              </Badge>
+
+              {/* Menu details with clear hierarchy */}
+              <div className="space-y-6">
+                <div>
+                  <div className={labelClasses}>Pattern</div>
+                  <div className="mt-1">
+                    {menu.repeat_pattern.charAt(0).toUpperCase() + menu.repeat_pattern.slice(1)}
                   </div>
                 </div>
-                <div className="mt-4">
-                  <div className="text-lg font-bold mb-2">
-                    Scheduled For: {new Date(menu.scheduled_for).toLocaleString('en-US', {
-                      timeZone: 'Europe/Madrid',
-                      dateStyle: 'full',
-                      timeStyle: 'short',
-                    })}
-                  </div>
-                  <div className="text-lg font-bold mb-2">
-                    Repeat Pattern: {menu.repeat_pattern.charAt(0).toUpperCase() + menu.repeat_pattern.slice(1)}
-                  </div>
-                  <div className="space-y-2">
+
+                <div>
+                  <div className={labelClasses}>Courses</div>
+                  <div className="mt-2 space-y-2">
                     {menu.daily_menu_items
                       ?.sort((a, b) => a.display_order - b.display_order)
                       .map((item) => (
-                        <div key={item.id} className="text-sm flex items-center">
-                          {item.course_type === 'first' ? '• First Course:' : '• Second Course:'} {item.course_name}
+                        <div 
+                          key={item.id} 
+                          className="flex items-start space-x-2"
+                        >
+                          <span className="text-xs uppercase text-muted-foreground w-24">
+                            {item.course_type === 'first' ? 'First' : 'Second'}
+                          </span>
+                          <span className="font-light">
+                            {item.course_name}
+                          </span>
                         </div>
                       ))}
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
 
+              {/* Actions with minimal design */}
+              <div className="absolute bottom-8 right-8">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => toggleMenuStatus(menu.id, menu.active)}
+                  className="rounded-none border-black hover:bg-black hover:text-white"
+                >
+                  <ToggleLeft className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Dialog with Swiss Design principles */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
+        <DialogContent className="rounded-none p-8 max-w-xl bg-white">
           <DialogHeader>
-            <DialogTitle>Create Daily Menu</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-2xl font-light tracking-tight mb-6">Create Daily Menu</DialogTitle>
+            <DialogDescription className="text-sm font-medium uppercase tracking-widest text-muted-foreground mb-4">
               Create a new daily menu by selecting the date, repeat pattern, and entering the course names.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-6">
             <div className="grid gap-2">
-              <Label htmlFor="date">Date</Label>
+              <Label htmlFor="date" className={labelClasses}>Date</Label>
               <Input
                 id="date"
                 type="date"
                 value={newMenu.date}
                 onChange={(e) => setNewMenu({ ...newMenu, date: e.target.value })}
+                className="border border-gray-300 rounded-none p-2"
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="repeat_pattern">Repeat Pattern</Label>
+              <Label htmlFor="repeat_pattern" className={labelClasses}>Repeat Pattern</Label>
               <Select
                 value={newMenu.repeat_pattern}
                 onValueChange={(value: 'none' | 'weekly' | 'monthly') => 
@@ -348,7 +393,7 @@ export default function DailyMenuPage() {
                   })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="border border-gray-300 rounded-none p-2">
                   <SelectValue placeholder="Select repeat pattern" />
                 </SelectTrigger>
                 <SelectContent>
@@ -359,32 +404,41 @@ export default function DailyMenuPage() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="firstCourse">First Course</Label>
+              <Label htmlFor="firstCourse" className={labelClasses}>First Course</Label>
               <Input
                 id="firstCourse"
                 type="text"
                 value={newMenu.firstCourse}
                 onChange={(e) => setNewMenu({ ...newMenu, firstCourse: e.target.value })}
                 placeholder="Enter first course name"
+                className="border border-gray-300 rounded-none p-2"
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="secondCourse">Second Course</Label>
+              <Label htmlFor="secondCourse" className={labelClasses}>Second Course</Label>
               <Input
                 id="secondCourse"
                 type="text"
                 value={newMenu.secondCourse}
                 onChange={(e) => setNewMenu({ ...newMenu, secondCourse: e.target.value })}
                 placeholder="Enter second course name"
+                className="border border-gray-300 rounded-none p-2"
               />
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+          <DialogFooter className="mt-6 flex justify-end space-x-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsDialogOpen(false)}
+              className="bg-white border-gray-300 text-gray-700 hover:bg-gray-100 rounded-none"
+            >
               Cancel
             </Button>
-            <Button onClick={handleCreateMenu}>
+            <Button 
+              onClick={handleCreateMenu}
+              className="bg-black hover:bg-gray-800 text-white rounded-none"
+            >
               Create Menu
             </Button>
           </DialogFooter>
