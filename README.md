@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-11-27 11:50:38
+Generated on: 2024-11-27 16:43:03
 
 ## Documented Directories:
 - app/
@@ -2270,7 +2270,7 @@ export default function DailyMenuPage() {
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Plus, Image as ImageIcon } from "lucide-react"; // Removed unused import 'Wine'
+import { Plus, Image as ImageIcon, Edit, Search } from "lucide-react"; // Added 'Search' icon
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -2293,7 +2293,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
-import Image from "next/image"; // Next.js Image component
+import Image from "next/image";
 
 // Updated Interfaces
 interface WineCategoryAssignment {
@@ -2346,6 +2346,12 @@ interface NewWine {
   image_path: string; // New field
 }
 
+// Define the structure for the edit dialog state
+interface EditWineDialog {
+  open: boolean;
+  wine: Wine | null;
+}
+
 export default function WinePage() {
   const [wines, setWines] = useState<Wine[]>([]);
   const [categories, setCategories] = useState<WineCategory[]>([]);
@@ -2364,6 +2370,25 @@ export default function WinePage() {
     image_path: "wines/wine.webp", // Updated initial state
   });
 
+  // ====== New State Variables for Editing ======
+  const [editDialog, setEditDialog] = useState<EditWineDialog>({
+    open: false,
+    wine: null,
+  });
+
+  const [editForm, setEditForm] = useState({
+    name: "",
+    description: "",
+    bottle_price: "",
+    glass_price: "",
+    category_ids: [] as number[],
+  });
+  // ==============================================
+
+  // ====== New State for Search ======
+  const [searchTerm, setSearchTerm] = useState("");
+  // =================================
+
   // New state variables for filtering and sorting
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"name" | "price">("name");
@@ -2375,19 +2400,48 @@ export default function WinePage() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null); // Ref for file input
 
+  // ====== Helper Function to Highlight Matching Text ======
+  const highlightText = (text: string, searchTerm: string) => {
+    if (!searchTerm.trim()) return text;
+
+    const regex = new RegExp(`(${searchTerm})`, 'gi');
+    const parts = text.split(regex);
+
+    return parts.map((part, index) =>
+      regex.test(part) ? (
+        <span key={index} className="bg-orange-500 text-white">
+          {part}
+        </span>
+      ) : (
+        part
+      )
+    );
+  };
+  // ========================================================
+
   // Filter and sort wines using useMemo for performance optimization
   const filteredAndSortedWines = useMemo(() => {
     let filtered = wines;
 
-    // Filter by category
+    // First apply search filter if there's a search term
+    if (searchTerm.trim()) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (wine) =>
+          wine.name.toLowerCase().includes(lowerSearchTerm) ||
+          wine.description.toLowerCase().includes(lowerSearchTerm)
+      );
+    }
+
+    // Then apply category filter
     if (selectedFilter !== "all") {
-      filtered = wines.filter((wine) =>
+      filtered = filtered.filter((wine) =>
         wine.categories.some((cat) => cat.id.toString() === selectedFilter)
       );
     }
 
-    // Sort wines
-    const sorted = [...filtered].sort((a, b) => {
+    // Then sort
+    return [...filtered].sort((a, b) => {
       if (sortBy === "name") {
         return sortOrder === "asc"
           ? a.name.localeCompare(b.name)
@@ -2398,9 +2452,7 @@ export default function WinePage() {
           : b.bottle_price - a.bottle_price;
       }
     });
-
-    return sorted;
-  }, [wines, selectedFilter, sortBy, sortOrder]);
+  }, [wines, selectedFilter, sortBy, sortOrder, searchTerm]);
 
   const fetchData = async () => {
     try {
@@ -2664,6 +2716,205 @@ export default function WinePage() {
     }
   };
 
+  // ====== New Handlers for Editing ======
+  // Handler to open the edit dialog with the selected wine's data
+  const handleEdit = (wine: Wine) => {
+    setEditForm({
+      name: wine.name,
+      description: wine.description,
+      bottle_price: wine.bottle_price.toString(),
+      glass_price: wine.glass_price?.toString() || "",
+      category_ids: wine.categories.map((c) => c.id),
+    });
+    setEditDialog({ open: true, wine });
+  };
+
+  // Updated handleSaveEdit with your changes
+  const handleSaveEdit = async () => {
+    if (!editDialog.wine) return;
+
+    try {
+      // Add this check at the start of category assignment
+      console.log("Category IDs before processing:", {
+        rawIds: editForm.category_ids,
+        processedIds: editForm.category_ids.map((id) => Number(id)),
+      });
+
+      // Log update data
+      console.log("Update data:", {
+        wineId: editDialog.wine.id,
+        updates: {
+          name: editForm.name,
+          description: editForm.description,
+          bottle_price: parseFloat(editForm.bottle_price),
+          glass_price: editForm.glass_price
+            ? parseFloat(editForm.glass_price)
+            : null,
+        },
+        categories: editForm.category_ids,
+      });
+
+      // First update the wine details
+      const { data: wineData, error: wineError } = await supabase
+        .from("wines")
+        .update({
+          name: editForm.name,
+          description: editForm.description,
+          bottle_price: parseFloat(editForm.bottle_price),
+          glass_price: editForm.glass_price
+            ? parseFloat(editForm.glass_price)
+            : null,
+        })
+        .eq("id", editDialog.wine.id)
+        .select("*")
+        .single(); // Make sure to return the updated data
+
+      if (wineError) {
+        console.error("Wine update error:", wineError);
+        throw wineError;
+      }
+
+      console.log("Wine updated successfully:", wineData);
+
+      // Always delete existing assignments first
+      console.log(
+        "Deleting existing category assignments for wine:",
+        editDialog.wine.id
+      );
+      const { error: deleteError } = await supabase
+        .from("wine_category_assignments")
+        .delete()
+        .eq("wine_id", editDialog.wine.id);
+
+      if (deleteError) {
+        console.error("Delete categories error:", deleteError);
+        throw deleteError;
+      }
+
+      // Only attempt category assignments if we have categories
+      if (editForm.category_ids && editForm.category_ids.length > 0) {
+        // Create all assignments at once
+        const assignments = editForm.category_ids.map((categoryId) => ({
+          wine_id: Number(editDialog.wine!.id), // Ensure it's a number
+          category_id: Number(categoryId), // Ensure it's a number
+        }));
+
+        console.log("Attempting to insert assignments:", assignments);
+
+        // Insert all assignments in one operation
+        const { error: assignmentError } = await supabase
+          .from("wine_category_assignments")
+          .insert(assignments)
+          .select();
+
+        if (assignmentError) {
+          console.error("Assignment error:", assignmentError);
+          throw assignmentError;
+        }
+      }
+
+      // Refresh data
+      await fetchData();
+      toast({
+        title: "Success",
+        description: "Wine updated successfully",
+      });
+      setEditDialog({ open: false, wine: null });
+    } catch (error: any) {
+      console.error("Complete error details:", {
+        error,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+      });
+
+      // Still refresh data to ensure UI is in sync
+      await fetchData();
+
+      // More specific error message
+      toast({
+        title: "Warning",
+        description:
+          error?.message ||
+          "Wine details updated but categories could not be assigned",
+        variant: "destructive",
+      });
+      setEditDialog({ open: false, wine: null });
+    }
+  };
+  // ==========================================
+
+  // ====== WineCard Component ======
+  const WineCard = ({ wine }: { wine: Wine }) => (
+    <div
+      className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm 
+                 transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
+    >
+      {/* Edit button in top-right corner */}
+      <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <Button
+          variant="secondary" // Changed to secondary to be visible on white
+          size="sm"
+          onClick={() => handleEdit(wine)}
+          className="h-8 w-8 p-0"
+          aria-label={`Edit ${wine.name}`} // Enhanced ARIA label for accessibility
+        >
+          <Edit className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Image Container */}
+      <div className="relative w-full pb-[150%] mb-4">
+        <Image
+          src={wine.image_url}
+          alt={wine.name}
+          fill
+          className="object-contain"
+          sizes="(max-width: 640px) 100vw, 
+                 (max-width: 1024px) 50vw, 
+                 (max-width: 1536px) 33vw,
+                 25vw"
+          priority={false}
+          loading="lazy"
+          unoptimized
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.src = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`;
+          }}
+        />
+      </div>
+
+      {/* Wine Details */}
+      <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
+        {wine.categories.map((category) => category.name).join(" · ")}
+      </div>
+
+      <h3 className="text-lg font-medium mb-2 line-clamp-2">
+        {highlightText(wine.name, searchTerm)}
+      </h3>
+
+      <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
+        {highlightText(wine.description, searchTerm)}
+      </p>
+
+      {/* Prices */}
+      <div className="mt-auto grid grid-cols-2 gap-x-4 text-sm">
+        <div>
+          <div className="font-medium">${wine.bottle_price.toFixed(2)}</div>
+          <div className="text-neutral-500 uppercase text-xs">bottle</div>
+        </div>
+        {wine.glass_price && (
+          <div>
+            <div className="font-medium">${wine.glass_price.toFixed(2)}</div>
+            <div className="text-neutral-500 uppercase text-xs">glass</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+  // =================================
+
   return (
     <div className="container p-6">
       <PageHeader heading="Wine List" text="Manage your restaurant's wine selection">
@@ -2673,12 +2924,24 @@ export default function WinePage() {
         </Button>
       </PageHeader>
 
-      {/* Filter and Sort Controls */}
+      {/* Filter, Sort, and Search Controls */}
       <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
-        <div className="flex gap-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          {/* Search input */}
+          <div className="relative w-full md:w-[300px]">
+            <Input
+              type="text"
+              placeholder="Search wines..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10"
+            />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          </div>
+
           {/* Filter by Category */}
           <Select value={selectedFilter} onValueChange={setSelectedFilter}>
-            <SelectTrigger className="w-[180px]"> {/* Added className here */}
+            <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Filter by Category" />
             </SelectTrigger>
             <SelectContent>
@@ -2692,11 +2955,11 @@ export default function WinePage() {
           </Select>
 
           {/* Sort By */}
-          <Select 
-            value={sortBy} 
+          <Select
+            value={sortBy}
             onValueChange={(value: "name" | "price") => setSortBy(value)}
           >
-            <SelectTrigger className="w-[180px]"> {/* Added className here */}
+            <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>
@@ -2735,82 +2998,7 @@ export default function WinePage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
           {filteredAndSortedWines.map((wine) => (
-            <div
-              key={wine.id}
-              className="group flex flex-col bg-white border border-neutral-100 rounded-sm 
-                         transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
-            >
-              {/* Image Container with fixed proportions */}
-              <div className="relative w-full pb-[150%] mb-4"> {/* 2:3 aspect ratio */}
-                <Image
-                  src={wine.image_url}
-                  alt={wine.name}
-                  fill
-                  className="object-contain" // Changed from cover to contain
-                  sizes="(max-width: 640px) 100vw, 
-                         (max-width: 1024px) 50vw, 
-                         (max-width: 1536px) 33vw,
-                         25vw"
-                  priority={false}
-                  loading="lazy"
-                  unoptimized
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`;
-                  }}
-                />
-              </div>
-
-              {/* Wine Category */}
-              <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
-                {wine.categories.map((category) => category.name).join(" · ")}
-              </div>
-
-              {/* Wine Name */}
-              <h3 className="text-lg font-medium mb-2 line-clamp-2">
-                {wine.name}
-              </h3>
-
-              {/* Description */}
-              <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
-                {wine.description}
-              </p>
-
-              {/* Prices */}
-              <div className="mt-auto grid grid-cols-2 gap-x-4 text-sm">
-                <div>
-                  <div className="font-medium">${wine.bottle_price.toFixed(2)}</div>
-                  <div className="text-neutral-500 uppercase text-xs">bottle</div>
-                </div>
-                {wine.glass_price && (
-                  <div>
-                    <div className="font-medium">${wine.glass_price.toFixed(2)}</div>
-                    <div className="text-neutral-500 uppercase text-xs">glass</div>
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-2 mt-4 pt-4 border-t border-neutral-100">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 h-8 text-xs rounded-sm"
-                  onClick={() => toggleWineStatus(wine.id, wine.active)}
-                >
-                  {wine.active ? "Available" : "Unavailable"}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8 p-0 rounded-sm"
-                  onClick={() => handleSelectImage(wine.id)}
-                  aria-label="Change Wine Image" // Added ARIA label for accessibility
-                >
-                  <ImageIcon className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+            <WineCard key={wine.id} wine={wine} />
           ))}
         </div>
       )}
@@ -2888,7 +3076,7 @@ export default function WinePage() {
                   })
                 }
               >
-                <SelectTrigger className="w-full"> {/* Added className here */}
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select categories" />
                 </SelectTrigger>
                 <SelectContent>
@@ -2947,6 +3135,170 @@ export default function WinePage() {
         </DialogContent>
       </Dialog>
 
+      {/* ======== Edit Wine Dialog Start ======== */}
+      <Dialog
+        open={editDialog.open}
+        onOpenChange={(open) => !open && setEditDialog({ open, wine: null })}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Wine</DialogTitle>
+            <DialogDescription>Update the details of the wine.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, name: e.target.value })
+                }
+                placeholder="Wine name"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Input
+                id="edit-description"
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, description: e.target.value })
+                }
+                placeholder="Wine description"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-bottle-price">Bottle Price</Label>
+                <Input
+                  id="edit-bottle-price"
+                  type="number"
+                  step="0.01"
+                  value={editForm.bottle_price}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, bottle_price: e.target.value })
+                  }
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-glass-price">Glass Price (Optional)</Label>
+                <Input
+                  id="edit-glass-price"
+                  type="number"
+                  step="0.01"
+                  value={editForm.glass_price}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, glass_price: e.target.value })
+                  }
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            {/* Categories selection - similar to your add form */}
+            <div className="grid gap-2">
+              <Label>Categories</Label>
+              <Select
+                value={editForm.category_ids[0]?.toString() || ""}
+                onValueChange={(value: string) =>
+                  setEditForm({
+                    ...editForm,
+                    category_ids: [...editForm.category_ids, parseInt(value)],
+                  })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem
+                      key={category.id}
+                      value={category.id.toString()}
+                      disabled={editForm.category_ids.includes(category.id)}
+                    >
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Display selected categories as badges */}
+              <div className="flex flex-wrap gap-2 mt-2">
+                {editForm.category_ids.map((categoryId) => {
+                  const category = categories.find((c) => c.id === categoryId);
+                  return category ? (
+                    <Badge
+                      key={category.id}
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
+                      {category.name}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditForm({
+                            ...editForm,
+                            category_ids: editForm.category_ids.filter(
+                              (id) => id !== categoryId
+                            ),
+                          })
+                        }
+                        className="ml-1 hover:text-destructive"
+                        aria-label={`Remove category ${category.name}`} // Added ARIA label
+                      >
+                        ×
+                      </button>
+                    </Badge>
+                  ) : null;
+                })}
+              </div>
+            </div>
+
+            {/* Add Controls Section */}
+            <div className="flex gap-4 pt-4 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() =>
+                  editDialog.wine &&
+                  toggleWineStatus(editDialog.wine.id, editDialog.wine.active)
+                }
+              >
+                {editDialog.wine?.active ? "Set Unavailable" : "Set Available"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  editDialog.wine && handleSelectImage(editDialog.wine.id)
+                }
+              >
+                <ImageIcon className="h-4 w-4 mr-2" />
+                Change Image
+              </Button>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditDialog({ open: false, wine: null })}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* ======== Edit Wine Dialog End ======== */}
+
       {/* ======== Image Upload Dialog Start ======== */}
       <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
         <DialogContent>
@@ -2980,7 +3332,10 @@ export default function WinePage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsImageDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsImageDialogOpen(false)}
+            >
               Cancel
             </Button>
           </DialogFooter>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Plus, Image as ImageIcon, Edit, Search } from "lucide-react"; // Added 'Search' icon
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
+
+// ====== Custom Error Type ======
+interface SupabaseError {
+  message: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+}
+// ===============================
 
 // Updated Interfaces
 interface WineCategoryAssignment {
@@ -83,6 +92,14 @@ interface EditWineDialog {
   open: boolean;
   wine: Wine | null;
 }
+
+// ====== WineCardProps Interface ======
+interface WineCardProps {
+  wine: Wine; // Using the Wine interface we already defined
+  searchTerm: string; // To pass the search term for highlighting
+  handleEdit: (wine: Wine) => void; // Handler to edit wine
+}
+// =====================================
 
 export default function WinePage() {
   const [wines, setWines] = useState<Wine[]>([]);
@@ -151,42 +168,8 @@ export default function WinePage() {
   };
   // ========================================================
 
-  // Filter and sort wines using useMemo for performance optimization
-  const filteredAndSortedWines = useMemo(() => {
-    let filtered = wines;
-
-    // First apply search filter if there's a search term
-    if (searchTerm.trim()) {
-      const lowerSearchTerm = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (wine) =>
-          wine.name.toLowerCase().includes(lowerSearchTerm) ||
-          wine.description.toLowerCase().includes(lowerSearchTerm)
-      );
-    }
-
-    // Then apply category filter
-    if (selectedFilter !== "all") {
-      filtered = filtered.filter((wine) =>
-        wine.categories.some((cat) => cat.id.toString() === selectedFilter)
-      );
-    }
-
-    // Then sort
-    return [...filtered].sort((a, b) => {
-      if (sortBy === "name") {
-        return sortOrder === "asc"
-          ? a.name.localeCompare(b.name)
-          : b.name.localeCompare(a.name);
-      } else {
-        return sortOrder === "asc"
-          ? a.bottle_price - b.bottle_price
-          : b.bottle_price - a.bottle_price;
-      }
-    });
-  }, [wines, selectedFilter, sortBy, sortOrder, searchTerm]);
-
-  const fetchData = async () => {
+  // ====== fetchData Function with useCallback ======
+  const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -238,8 +221,16 @@ export default function WinePage() {
 
       setCategories(categoriesData || []);
       setWines(transformedWines || []);
-    } catch (error) {
-      console.error("Error fetching data:", error);
+    } catch (error: unknown) {
+      const supabaseError = error as SupabaseError;
+      console.error("Complete error details:", {
+        error: supabaseError,
+        message: supabaseError.message,
+        details: supabaseError.details,
+        hint: supabaseError.hint,
+        code: supabaseError.code,
+      });
+
       setError("Failed to load wines");
       toast({
         title: "Error",
@@ -249,11 +240,49 @@ export default function WinePage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [supabase, toast]);
+  // ================================================
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]); // Added fetchData to dependencies
+
+  // ====== Filter and Sort Wines ======
+  // Filter and sort wines using useMemo for performance optimization
+  const filteredAndSortedWines = useMemo(() => {
+    let filtered = wines;
+
+    // First apply search filter if there's a search term
+    if (searchTerm.trim()) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (wine) =>
+          wine.name.toLowerCase().includes(lowerSearchTerm) ||
+          wine.description.toLowerCase().includes(lowerSearchTerm)
+      );
+    }
+
+    // Then apply category filter
+    if (selectedFilter !== "all") {
+      filtered = filtered.filter((wine) =>
+        wine.categories.some((cat) => cat.id.toString() === selectedFilter)
+      );
+    }
+
+    // Then sort
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "name") {
+        return sortOrder === "asc"
+          ? a.name.localeCompare(b.name)
+          : b.name.localeCompare(a.name);
+      } else {
+        return sortOrder === "asc"
+          ? a.bottle_price - b.bottle_price
+          : b.bottle_price - a.bottle_price;
+      }
+    });
+  }, [wines, selectedFilter, sortBy, sortOrder, searchTerm]);
+  // ====================================
 
   const handleCreateWine = async () => {
     try {
@@ -317,11 +346,13 @@ export default function WinePage() {
         title: "Success",
         description: "Wine added successfully",
       });
-    } catch (error) {
-      console.error("Error creating wine:", error);
+    } catch (error: unknown) {
+      console.error("Error:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "An unexpected error occurred";
       toast({
         title: "Error",
-        description: "Failed to create wine",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -348,11 +379,13 @@ export default function WinePage() {
           !currentStatus ? "activated" : "deactivated"
         } successfully`,
       });
-    } catch (error) {
-      console.error("Error toggling wine status:", error);
+    } catch (error: unknown) {
+      console.error("Error:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "An unexpected error occurred";
       toast({
         title: "Error",
-        description: "Failed to update wine status",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -436,11 +469,13 @@ export default function WinePage() {
       // Close the image dialog
       setIsImageDialogOpen(false);
       setSelectedWineId(null);
-    } catch (error) {
-      console.error("Error uploading image:", error);
+    } catch (error: unknown) {
+      console.error("Error:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "An unexpected error occurred";
       toast({
         title: "Error",
-        description: "Failed to upload image",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -552,13 +587,14 @@ export default function WinePage() {
         description: "Wine updated successfully",
       });
       setEditDialog({ open: false, wine: null });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const supabaseError = error as SupabaseError;
       console.error("Complete error details:", {
-        error,
-        message: error?.message,
-        details: error?.details,
-        hint: error?.hint,
-        code: error?.code,
+        error: supabaseError,
+        message: supabaseError.message,
+        details: supabaseError.details,
+        hint: supabaseError.hint,
+        code: supabaseError.code,
       });
 
       // Still refresh data to ensure UI is in sync
@@ -568,7 +604,7 @@ export default function WinePage() {
       toast({
         title: "Warning",
         description:
-          error?.message ||
+          supabaseError.message ||
           "Wine details updated but categories could not be assigned",
         variant: "destructive",
       });
@@ -578,7 +614,7 @@ export default function WinePage() {
   // ==========================================
 
   // ====== WineCard Component ======
-  const WineCard = ({ wine }: { wine: Wine }) => (
+  const WineCard: React.FC<WineCardProps> = ({ wine, searchTerm, handleEdit }) => (
     <div
       className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm 
                  transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
@@ -730,7 +766,12 @@ export default function WinePage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
           {filteredAndSortedWines.map((wine) => (
-            <WineCard key={wine.id} wine={wine} />
+            <WineCard
+              key={wine.id}
+              wine={wine}
+              searchTerm={searchTerm}
+              handleEdit={handleEdit}
+            />
           ))}
         </div>
       )}
