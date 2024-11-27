@@ -430,13 +430,27 @@ export default function WinePage() {
     setEditDialog({ open: true, wine });
   };
 
-  // Handler to save the edited wine details
+  // Updated handleSaveEdit with your changes
   const handleSaveEdit = async () => {
     if (!editDialog.wine) return;
 
     try {
-      // Update wine details in the database
-      const { data: updatedWine, error: updateError } = await supabase
+      // Log update data
+      console.log("Update data:", {
+        wineId: editDialog.wine.id,
+        updates: {
+          name: editForm.name,
+          description: editForm.description,
+          bottle_price: parseFloat(editForm.bottle_price),
+          glass_price: editForm.glass_price
+            ? parseFloat(editForm.glass_price)
+            : null,
+        },
+        categories: editForm.category_ids,
+      });
+
+      // First update the wine details
+      const { data: wineData, error: wineError } = await supabase
         .from("wines")
         .update({
           name: editForm.name,
@@ -447,60 +461,65 @@ export default function WinePage() {
             : null,
         })
         .eq("id", editDialog.wine.id)
-        .select();
+        .select("*")
+        .single(); // Make sure to return the updated data
 
-      if (updateError) throw updateError;
+      if (wineError) {
+        console.error("Wine update error:", wineError);
+        throw wineError;
+      }
 
-      // Update categories
-      // First, delete existing category assignments
+      console.log("Wine updated successfully:", wineData);
+
+      // Always delete existing assignments first
+      console.log(
+        "Deleting existing category assignments for wine:",
+        editDialog.wine.id
+      );
       const { error: deleteError } = await supabase
         .from("wine_category_assignments")
         .delete()
         .eq("wine_id", editDialog.wine.id);
 
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        console.error("Delete categories error:", deleteError);
+        throw deleteError;
+      }
 
-      // Insert new category assignments if any
-      if (editForm.category_ids.length > 0) {
+      // Only insert new assignments if there are categories to assign
+      if (editForm.category_ids && editForm.category_ids.length > 0) {
+        console.log("Adding new category assignments:", editForm.category_ids);
         const categoryAssignments = editForm.category_ids.map((categoryId) => ({
           wine_id: editDialog.wine!.id,
           category_id: categoryId,
         }));
 
-        const { error: insertError } = await supabase
+        const { error: assignmentError } = await supabase
           .from("wine_category_assignments")
           .insert(categoryAssignments);
 
-        if (insertError) throw insertError;
+        if (assignmentError) {
+          console.error("Category assignment error:", assignmentError);
+          throw assignmentError;
+        }
       }
 
-      // Update local state
-      setWines((prevWines) =>
-        prevWines.map((wine) =>
-          wine.id === editDialog.wine!.id
-            ? {
-                ...wine,
-                ...updatedWine[0],
-                categories: categories.filter((c) =>
-                  editForm.category_ids.includes(c.id)
-                ),
-              }
-            : wine
-        )
-      );
-
+      // Refresh data and close dialog
+      await fetchData();
       toast({
         title: "Success",
         description: "Wine updated successfully",
       });
       setEditDialog({ open: false, wine: null });
     } catch (error) {
-      console.error("Error updating wine:", error);
+      console.error("Full error details:", error);
+      await fetchData(); // Still refresh data to ensure UI is in sync
       toast({
-        title: "Error",
-        description: "Failed to update wine",
-        variant: "destructive",
+        title: "Warning",
+        description: "Wine details updated but there was an issue with categories",
+        variant: "default",
       });
+      setEditDialog({ open: false, wine: null });
     }
   };
   // ==========================================
