@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-11-25 11:50:01
+Generated on: 2024-11-27 11:50:38
 
 ## Documented Directories:
 - app/
@@ -76,11 +76,13 @@ src/
             │   ├── alert.tsx
             │   ├── badge.tsx
             │   ├── button.tsx
+            │   ├── calendar.tsx
             │   ├── dialog.tsx
             │   ├── dropdown-menu.tsx
             │   ├── form.tsx
             │   ├── input.tsx
             │   ├── label.tsx
+            │   ├── popover.tsx
             │   ├── select.tsx
             │   ├── table.tsx
             │   ├── toast.tsx
@@ -1385,8 +1387,8 @@ export default function ImagesPage() {
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Plus, Calendar, ToggleLeft } from "lucide-react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { Plus, ToggleLeft, Edit, Copy, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -1407,91 +1409,318 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { addDays, addWeeks, addMonths, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isSameDay } from "date-fns";
+import { es } from "date-fns/locale";
+import { DateRange } from "react-day-picker";
 
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  active: boolean;
-}
+// -----------------------------------
+// Utility Functions
+// -----------------------------------
+
+// Calculate date ranges for quick selection
+const getThisWeekRange = (): DateRange => ({
+  from: startOfWeek(new Date(), { locale: es }),
+  to: endOfWeek(new Date(), { locale: es }),
+});
+
+const getNextWeekRange = (): DateRange => ({
+  from: startOfWeek(addWeeks(new Date(), 1), { locale: es }),
+  to: endOfWeek(addWeeks(new Date(), 1), { locale: es }),
+});
+
+const getThisMonthRange = (): DateRange => ({
+  from: startOfMonth(new Date()),
+  to: endOfMonth(new Date()),
+});
+
+// -----------------------------------
+// Utility Classes
+// -----------------------------------
+const cardClasses = "bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all p-6 rounded-sm relative group";
+const headingClasses = "text-2xl font-medium mb-1";
+const subheadingClasses = "text-sm uppercase text-muted-foreground tracking-wide";
+const labelClasses = "text-xs uppercase text-muted-foreground font-medium tracking-wide";
+
+// -----------------------------------
+// TypeScript Interfaces
+// -----------------------------------
 
 interface DailyMenuItem {
-  menu_items: MenuItem;
+  id: string;
+  course_name: string;
+  course_type: "first" | "second";
+  display_order: number;
 }
 
 interface DailyMenu {
-  id: number;
+  id: string;
   date: string;
-  price: number;
+  repeat_pattern: "none" | "weekly" | "monthly";
   active: boolean;
+  scheduled_for: string;
   created_at: string;
   daily_menu_items: DailyMenuItem[];
 }
 
 interface NewMenu {
-  date: string;
-  price: string;
+  dateRange: DateRange;
+  repeat_pattern: "none" | "weekly" | "monthly";
   active: boolean;
-  selectedItems: string[];
+  firstCourse: string;
+  secondCourse: string;
 }
 
+interface FilterOptions {
+  search: string;
+  pattern: "all" | "none" | "weekly" | "monthly";
+  status: "all" | "active" | "inactive";
+}
+
+// -----------------------------------
+// Components
+// -----------------------------------
+
+// QuickSelect Component: Allows quick selection of date ranges
+const QuickSelect = ({ onSelect }: { onSelect: (range: DateRange) => void }) => (
+  <div className="flex gap-2 mb-6">
+    {/* Improved button styling */}
+    <Button 
+      variant="outline" 
+      size="sm"
+      onClick={() => onSelect(getThisWeekRange())}
+      className="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium rounded-md transition-colors"
+    >
+      This Week
+    </Button>
+    <Button 
+      variant="outline" 
+      size="sm"
+      onClick={() => onSelect(getNextWeekRange())}
+      className="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium rounded-md transition-colors"
+    >
+      Next Week
+    </Button>
+    <Button 
+      variant="outline" 
+      size="sm"
+      onClick={() => onSelect(getThisMonthRange())}
+      className="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium rounded-md transition-colors"
+    >
+      This Month
+    </Button>
+  </div>
+);
+
+// MenuCardProps Type Definition
+type MenuCardProps = {
+  menu: DailyMenu;
+  onStatusToggle: (id: string, status: boolean) => void;
+  onEdit: (menu: DailyMenu) => void;
+  onDuplicate: (menu: DailyMenu) => void;
+};
+
+// MenuCard Component: Displays individual menu details with interactive buttons
+const MenuCard = ({ 
+  menu, 
+  onStatusToggle,
+  onEdit,
+  onDuplicate 
+}: MenuCardProps) => (
+  <div className={cardClasses}>
+    <div className="flex justify-between items-start mb-6">
+      <div>
+        <div className={labelClasses}>DATE</div>
+        <div className="text-lg mt-1">{format(new Date(menu.date), "PPP", { locale: es })}</div>
+      </div>
+      <Badge 
+        className={cn(
+          "rounded-none px-3 py-1",
+          menu.active ? "bg-black text-white" : "bg-gray-100 text-gray-600"
+        )}
+      >
+        {menu.active ? 'Active' : 'Inactive'}
+      </Badge>
+    </div>
+
+    <div className="space-y-4">
+      <div>
+        <div className={labelClasses}>PATTERN</div>
+        <div className="mt-1 capitalize">{menu.repeat_pattern}</div>
+      </div>
+
+      <div>
+        <div className={labelClasses}>COURSES</div>
+        <div className="grid gap-2 mt-2">
+          {menu.daily_menu_items
+            ?.sort((a, b) => a.display_order - b.display_order)
+            .map((item) => (
+              <div key={item.id} className="flex justify-between items-center">
+                <div>
+                  <div className={labelClasses}>{item.course_type.toUpperCase()}</div>
+                  <div className="text-sm mt-1">{item.course_name}</div>
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+    </div>
+
+    {/* Hover Actions */}
+    <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute bottom-4 right-4 flex gap-2">
+        <Button 
+          size="sm" 
+          variant="ghost"
+          onClick={() => onEdit(menu)}
+          className="hover:bg-black hover:text-white"
+        >
+          <Edit className="h-4 w-4" />
+        </Button>
+        <Button 
+          size="sm" 
+          variant="ghost"
+          onClick={() => onDuplicate(menu)}
+          className="hover:bg-black hover:text-white"
+        >
+          <Copy className="h-4 w-4" />
+        </Button>
+        <Button
+          size="sm" 
+          variant="ghost"
+          onClick={() => onStatusToggle(menu.id, menu.active)}
+          className="hover:bg-black hover:text-white"
+        >
+          <ToggleLeft className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  </div>
+);
+
+// FilterBar Component: Provides filtering and search functionalities
+const FilterBar = ({ 
+  filter, 
+  onFilterChange 
+}: { 
+  filter: FilterOptions;
+  onFilterChange: (filter: FilterOptions) => void;
+}) => (
+  <div className="flex gap-4 items-center mb-6">
+    <div className="relative flex-1 max-w-xs">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <Input 
+        placeholder="Search menus..."
+        value={filter.search}
+        onChange={(e) => onFilterChange({ ...filter, search: e.target.value })}
+        className="pl-9"
+      />
+    </div>
+    <Select
+      value={filter.pattern}
+      onValueChange={(value: FilterOptions['pattern']) => 
+        onFilterChange({ ...filter, pattern: value })
+      }
+    >
+      <SelectTrigger className="w-[180px]">
+        <SelectValue placeholder="Filter by pattern" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">All Patterns</SelectItem>
+        <SelectItem value="none">Single</SelectItem>
+        <SelectItem value="weekly">Weekly</SelectItem>
+        <SelectItem value="monthly">Monthly</SelectItem>
+      </SelectContent>
+    </Select>
+    <Select
+      value={filter.status}
+      onValueChange={(value: FilterOptions['status']) => 
+        onFilterChange({ ...filter, status: value })
+      }
+    >
+      <SelectTrigger className="w-[180px]">
+        <SelectValue placeholder="Filter by status" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">All Status</SelectItem>
+        <SelectItem value="active">Active</SelectItem>
+        <SelectItem value="inactive">Inactive</SelectItem>
+      </SelectContent>
+    </Select>
+  </div>
+);
+
+// -----------------------------------
+// Main Component: DailyMenuPage
+// -----------------------------------
+
 export default function DailyMenuPage() {
+  // -----------------------------------
+  // State Management
+  // -----------------------------------
   const [dailyMenus, setDailyMenus] = useState<DailyMenu[]>([]);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
+  const [editingMenu, setEditingMenu] = useState<DailyMenu | null>(null);
+  const [filter, setFilter] = useState<FilterOptions>({
+    search: "",
+    pattern: "all",
+    status: "all",
+  });
   const [newMenu, setNewMenu] = useState<NewMenu>({
-    date: new Date().toISOString().split('T')[0],
-    price: '',
+    dateRange: {
+      from: new Date(),
+      to: new Date(),
+    },
+    repeat_pattern: "none",
     active: true,
-    selectedItems: []
+    firstCourse: "",
+    secondCourse: "",
   });
 
   const supabase = createClientComponentClient();
   const { toast } = useToast();
 
+  // -----------------------------------
+  // Data Fetching
+  // -----------------------------------
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
         setError(null);
-        
-        // Fetch menu items for selection
-        const { data: itemsData, error: itemsError } = await supabase
-          .from('menu_items')
-          .select('*')
-          .eq('active', true)
-          .order('name');
 
-        if (itemsError) throw itemsError;
-
-        // Fetch daily menus
         const { data: menusData, error: menusError } = await supabase
-          .from('daily_menus')
+          .from("daily_menus")
           .select(`
-            *,
+            id,
+            date,
+            repeat_pattern,
+            active,
+            scheduled_for,
+            created_at,
             daily_menu_items (
-              menu_items (
-                id,
-                name,
-                description,
-                price
-              )
+              id,
+              course_name,
+              course_type,
+              display_order
             )
           `)
-          .order('date', { ascending: false });
+          .order("date", { ascending: false });
 
         if (menusError) throw menusError;
-
-        setMenuItems(itemsData || []);
         setDailyMenus(menusData || []);
       } catch (error) {
-        console.error('Error fetching data:', error);
-        setError('Failed to load daily menus');
+        console.error("Error fetching data:", error);
+        setError("Failed to load daily menus");
         toast({
           title: "Error",
           description: "Failed to load daily menus",
@@ -1505,111 +1734,32 @@ export default function DailyMenuPage() {
     fetchData();
   }, [supabase, toast]);
 
-  const handleCreateMenu = async () => {
-    try {
-      if (!newMenu.date || !newMenu.price || newMenu.selectedItems.length === 0) {
-        toast({
-          title: "Error",
-          description: "Please fill in all required fields and select at least one item",
-          variant: "destructive",
-        });
-        return;
-      }
+  // -----------------------------------
+  // Event Handlers
+  // -----------------------------------
 
-      const { data: menuData, error: menuError } = await supabase
-        .from('daily_menus')
-        .insert({
-          date: newMenu.date,
-          price: parseFloat(newMenu.price),
-          active: newMenu.active,
-        })
-        .select()
-        .single();
-
-      if (menuError) throw menuError;
-
-      const menuItemAssociations = newMenu.selectedItems.map(itemId => ({
-        daily_menu_id: menuData.id,
-        menu_item_id: itemId
-      }));
-
-      const { error: associationError } = await supabase
-        .from('daily_menu_items')
-        .insert(menuItemAssociations);
-
-      if (associationError) throw associationError;
-
-      const { data: updatedMenu, error: fetchError } = await supabase
-        .from('daily_menus')
-        .select(`
-          *,
-          daily_menu_items (
-            menu_items (
-              id,
-              name,
-              description,
-              price
-            )
-          )
-        `)
-        .eq('id', menuData.id)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      setDailyMenus(prev => [updatedMenu, ...prev]);
-      setIsDialogOpen(false);
-      setNewMenu({
-        date: new Date().toISOString().split('T')[0],
-        price: '',
-        active: true,
-        selectedItems: []
-      });
-
-      toast({
-        title: "Success",
-        description: "Daily menu created successfully",
-      });
-    } catch (error) {
-      console.error('Error creating daily menu:', error);
-      toast({
-        title: "Error",
-        description: "Failed to create daily menu",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  const toggleMenuStatus = async (menuId: number, currentStatus: boolean) => {
+  // Toggle the active status of a menu
+  const toggleMenuStatus = async (id: string, currentStatus: boolean) => {
     try {
       const { error } = await supabase
-        .from('daily_menus')
+        .from("daily_menus")
         .update({ active: !currentStatus })
-        .eq('id', menuId);
+        .eq("id", id);
 
       if (error) throw error;
 
-      setDailyMenus(prev =>
-        prev.map(menu =>
-          menu.id === menuId ? { ...menu, active: !currentStatus } : menu
+      setDailyMenus((prevMenus) =>
+        prevMenus.map((menu) =>
+          menu.id === id ? { ...menu, active: !currentStatus } : menu
         )
       );
 
       toast({
         title: "Success",
-        description: `Menu ${!currentStatus ? 'activated' : 'deactivated'} successfully`,
+        description: "Menu status updated successfully",
       });
     } catch (error) {
-      console.error('Error toggling menu status:', error);
+      console.error("Error toggling menu status:", error);
       toast({
         title: "Error",
         description: "Failed to update menu status",
@@ -1618,174 +1768,499 @@ export default function DailyMenuPage() {
     }
   };
 
+  // Handle creating or updating a menu
+  const handleCreateMenu = async () => {
+    try {
+      const { dateRange, firstCourse, secondCourse, repeat_pattern, active } = newMenu;
+      if (!dateRange.from || !firstCourse || !secondCourse) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields and select dates",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Generate dates based on repeat pattern
+      const datesToSchedule: Date[] = [];
+      let currentDate = new Date(dateRange.from);
+      const endDate = dateRange.to ? new Date(dateRange.to) : new Date(dateRange.from);
+
+      while (currentDate <= endDate) {
+        datesToSchedule.push(new Date(currentDate));
+        switch (repeat_pattern) {
+          case "weekly":
+            currentDate = addWeeks(currentDate, 1);
+            break;
+          case "monthly":
+            currentDate = addMonths(currentDate, 1);
+            break;
+          default:
+            currentDate = addDays(currentDate, 1);
+        }
+      }
+
+      // Create menus for all dates
+      for (const date of datesToSchedule) {
+        // Skip if menu exists
+        if (dailyMenus.some((menu) => isSameDay(new Date(menu.date), date))) {
+          continue;
+        }
+
+        const menuData = {
+          date: format(date, "yyyy-MM-dd"),
+          repeat_pattern,
+          active,
+          scheduled_for: format(date, "yyyy-MM-dd'T'11:00:00.000'Z'"),
+        };
+
+        const { data: menu, error: menuError } = await supabase
+          .from("daily_menus")
+          .insert(menuData)
+          .select()
+          .single();
+
+        if (menuError) throw menuError;
+
+        const menuItems = [
+          {
+            daily_menu_id: menu.id,
+            course_name: firstCourse,
+            course_type: "first",
+            display_order: 1,
+          },
+          {
+            daily_menu_id: menu.id,
+            course_name: secondCourse,
+            course_type: "second",
+            display_order: 2,
+          },
+        ];
+
+        const { error: itemsError } = await supabase
+          .from("daily_menu_items")
+          .insert(menuItems);
+
+        if (itemsError) throw itemsError;
+      }
+
+      // Refresh menus
+      const { data: updatedMenus, error: fetchError } = await supabase
+        .from("daily_menus")
+        .select(`
+          id,
+          date,
+          repeat_pattern,
+          active,
+          scheduled_for,
+          created_at,
+          daily_menu_items (
+            id,
+            course_name,
+            course_type,
+            display_order
+          )
+        `)
+        .order("date", { ascending: false });
+
+      if (fetchError) throw fetchError;
+      setDailyMenus(updatedMenus || []);
+      setIsDialogOpen(false);
+      resetNewMenu();
+
+      toast({
+        title: "Success",
+        description: "Menus scheduled successfully",
+      });
+    } catch (error) {
+      console.error("Error creating menus:", error);
+      toast({
+        title: "Error",
+        description: "Failed to schedule menus",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle duplicating a menu
+  const handleDuplicateMenu = (menu: DailyMenu) => {
+    setNewMenu({
+      dateRange: {
+        from: new Date(),
+        to: new Date(),
+      },
+      repeat_pattern: "none",
+      active: true,
+      firstCourse: menu.daily_menu_items.find((item) => item.course_type === "first")?.course_name || "",
+      secondCourse: menu.daily_menu_items.find((item) => item.course_type === "second")?.course_name || "",
+    });
+    setIsDialogOpen(true);
+  };
+
+  // Handle editing a menu
+  const handleEditMenu = (menu: DailyMenu) => {
+    setEditingMenu(menu);
+    setNewMenu({
+      dateRange: {
+        from: new Date(menu.date),
+        to: new Date(menu.date),
+      },
+      repeat_pattern: menu.repeat_pattern,
+      active: menu.active,
+      firstCourse: menu.daily_menu_items.find((item) => item.course_type === "first")?.course_name || "",
+      secondCourse: menu.daily_menu_items.find((item) => item.course_type === "second")?.course_name || "",
+    });
+    setIsDialogOpen(true);
+  };
+
+  // Reset newMenu state
+  const resetNewMenu = () => {
+    setNewMenu({
+      dateRange: {
+        from: new Date(),
+        to: new Date(),
+      },
+      repeat_pattern: "none",
+      active: true,
+      firstCourse: "",
+      secondCourse: "",
+    });
+    setEditingMenu(null);
+  };
+
+  // -----------------------------------
+  // Helper Functions
+  // -----------------------------------
+
+  // Get menu for a specific date
+  const getMenuForDate = (date: Date): DailyMenu | undefined => {
+    return dailyMenus.find(menu => isSameDay(new Date(menu.date), date));
+  };
+
+  // -----------------------------------
+  // Filtered Menus Calculation
+  // -----------------------------------
+  const filteredMenus = dailyMenus
+    .filter((menu: DailyMenu) => {
+      if (filter.pattern !== "all" && menu.repeat_pattern !== filter.pattern) return false;
+      if (filter.status !== "all" && menu.active !== (filter.status === "active")) return false;
+      if (filter.search) {
+        const searchLower = filter.search.toLowerCase();
+        return (
+          menu.daily_menu_items.some((item) =>
+            item.course_name.toLowerCase().includes(searchLower)
+          )
+        );
+      }
+      return true;
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // -----------------------------------
+  // Rendering
+  // -----------------------------------
   return (
-    <div className="container p-6">
-      <PageHeader
-        heading="Daily Menus"
-        text="Manage your restaurant's daily menus"
-      >
-        <Button onClick={() => setIsDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Daily Menu
-        </Button>
-      </PageHeader>
-
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {isLoading ? (
-        <div className="flex h-[200px] items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+    <div className="min-h-screen bg-background">
+      <div className="container py-6 space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className={headingClasses}>Daily Menus</h1>
+            <p className={subheadingClasses}>Menu Schedule Management</p>
+          </div>
+          <Button
+            onClick={() => {
+              resetNewMenu();
+              setIsDialogOpen(true);
+            }}
+            className="bg-black hover:bg-gray-800 text-white rounded-none"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Schedule Menu
+          </Button>
         </div>
-      ) : dailyMenus.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">No daily menus found. Create one to get started.</p>
-        </div>
-      ) : (
-        <div className="grid gap-6">
-          {dailyMenus.map((menu) => (
-            <div
-              key={menu.id}
-              className="rounded-lg border bg-card text-card-foreground shadow-sm"
-            >
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="font-semibold flex items-center">
-                      <Calendar className="mr-2 h-4 w-4" />
-                      {formatDate(menu.date)}
-                    </h3>
-                    <Badge className="mt-2" variant={menu.active ? "success" : "secondary"}>
-                      {menu.active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => toggleMenuStatus(menu.id, menu.active)}
-                    >
-                      <ToggleLeft className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <div className="text-lg font-bold mb-2">
-                    Price: ${menu.price.toFixed(2)}
-                  </div>
-                  <div className="space-y-2">
-                    {menu.daily_menu_items?.map(({ menu_items }) => (
-                      <div key={menu_items.id} className="text-sm">
-                        • {menu_items.name}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create Daily Menu</DialogTitle>
-            <DialogDescription>
-              Create a new daily menu by selecting the date, price, and menu items.
-            </DialogDescription>
-          </DialogHeader>
+        {/* Error Display */}
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="date">Date</Label>
-              <Input
-                id="date"
-                type="date"
-                value={newMenu.date}
-                onChange={(e) => setNewMenu({ ...newMenu, date: e.target.value })}
-              />
+        {/* Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Calendar Section */}
+          <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold">Calendar View</h2>
+              <p className="text-sm text-gray-500 mt-1">SELECT DATES TO VIEW OR SCHEDULE MENUS</p>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="price">Price</Label>
-              <Input
-                id="price"
-                type="number"
-                step="0.01"
-                value={newMenu.price}
-                onChange={(e) => setNewMenu({ ...newMenu, price: e.target.value })}
-                placeholder="0.00"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Menu Items</Label>
-              <Select
-                value={newMenu.selectedItems[0] || ''}
-                onValueChange={(value) => 
-                  setNewMenu({ 
-                    ...newMenu, 
-                    selectedItems: [...newMenu.selectedItems, value] 
-                  })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select items" />
-                </SelectTrigger>
-                <SelectContent>
-                  {menuItems.map((item) => (
-                    <SelectItem 
-                      key={item.id} 
-                      value={item.id}
-                      disabled={newMenu.selectedItems.includes(item.id)}
-                    >
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {newMenu.selectedItems.map((itemId) => {
-                  const item = menuItems.find(i => i.id === itemId);
-                  return item ? (
-                    <Badge 
-                      key={item.id}
-                      variant="secondary"
-                      className="flex items-center gap-1"
-                    >
-                      {item.name}
-                      <button
-                        type="button"
-                        onClick={() => setNewMenu({
-                          ...newMenu,
-                          selectedItems: newMenu.selectedItems.filter(id => id !== itemId)
-                        })}
-                        className="ml-1 hover:text-destructive"
+
+            {/* Quick Select Buttons */}
+            <QuickSelect onSelect={(range) => setNewMenu({ ...newMenu, dateRange: range })} />
+
+            {/* Calendar Component with Visual Feedback */}
+            <Calendar
+              mode="range"
+              selected={newMenu.dateRange}
+              onSelect={(range) =>
+                setNewMenu({
+                  ...newMenu,
+                  dateRange: range || { from: undefined, to: undefined },
+                })
+              }
+              numberOfMonths={1}
+              locale={es}
+              classNames={{
+                months: "space-y-4",
+                month: "space-y-4",
+                caption: "flex justify-center pt-1 relative items-center",
+                caption_label: "text-sm font-medium",
+                nav: "space-x-1 flex items-center",
+                nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
+                nav_button_previous: "absolute left-1",
+                nav_button_next: "absolute right-1",
+                table: "w-full border-collapse space-y-1",
+                head_row: "flex",
+                head_cell: "text-gray-500 rounded-md w-9 font-normal text-[0.8rem]",
+                row: "flex w-full mt-2",
+                cell: "text-center text-sm relative p-0 rounded-md hover:bg-gray-100 focus-within:relative focus-within:z-20",
+                day: "h-9 w-9 p-0 font-normal",
+                day_range_middle: "rounded-none",
+                day_selected: "bg-black text-white hover:bg-gray-800 hover:text-white focus:bg-gray-800 focus:text-white",
+                day_today: "bg-gray-50",
+                day_outside: "opacity-50",
+                day_disabled: "opacity-50",
+                day_hidden: "invisible",
+              }}
+              modifiers={{
+                booked: (date) =>
+                  dailyMenus.some((menu) => isSameDay(new Date(menu.date), date)),
+                weekly: (date) =>
+                  dailyMenus.some(
+                    (menu) =>
+                      isSameDay(new Date(menu.date), date) &&
+                      menu.repeat_pattern === "weekly"
+                  ),
+                monthly: (date) =>
+                  dailyMenus.some(
+                    (menu) =>
+                      isSameDay(new Date(menu.date), date) &&
+                      menu.repeat_pattern === "monthly"
+                  ),
+              }}
+              onDayMouseEnter={(date) => setHoveredDate(date)}
+              onDayMouseLeave={() => setHoveredDate(null)}
+              components={{
+                DayContent: (props) => {
+                  const menu = getMenuForDate(props.date);
+                  const isHovered = hoveredDate && isSameDay(hoveredDate, props.date);
+
+                  return (
+                    <div className="relative w-full h-full">
+                      <div
+                        className={cn(
+                          "w-full h-full flex items-center justify-center",
+                          menu && "font-medium"
+                        )}
                       >
-                        ×
-                      </button>
-                    </Badge>
-                  ) : null;
-                })}
+                        {props.date.getDate()}
+                      </div>
+                      {isHovered && menu && (
+                        <Popover>
+                          <PopoverContent className="w-80 p-0" align="center">
+                            <div className="p-4">
+                              <div className="mb-2 font-medium">
+                                {format(props.date, "PPP", { locale: es })}
+                              </div>
+                              <div className="space-y-2">
+                                {menu.daily_menu_items.map((item) => (
+                                  <div key={item.id} className="text-sm">
+                                    <span className="font-medium">
+                                      {item.course_type === "first" ? "First" : "Second"}:
+                                    </span>{" "}
+                                    {item.course_name}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    </div>
+                  );
+                },
+              }}
+            />
+
+            {/* Improved legend */}
+            <div className="mt-6 flex items-center justify-between px-2">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-black rounded-sm" />
+                <span className="text-sm text-gray-600">Single</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-[#2563eb] rounded-sm" />
+                <span className="text-sm text-gray-600">Weekly</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-[#7c3aed] rounded-sm" />
+                <span className="text-sm text-gray-600">Monthly</span>
               </div>
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateMenu}>
-              Create Menu
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          {/* Menu List Section */}
+          <div className="space-y-6">
+            <div>
+              <h2 className={headingClasses}>Scheduled Menus</h2>
+              <p className={subheadingClasses}>View and manage your daily menus</p>
+            </div>
+
+            {/* Filter and Search Bar */}
+            <FilterBar filter={filter} onFilterChange={setFilter} />
+
+            {/* Loading State */}
+            {isLoading ? (
+              <div className="flex h-[200px] items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
+              </div>
+            ) : filteredMenus.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">
+                  No menus found. {filter.search || filter.pattern !== "all" || filter.status !== "all"
+                    ? "Try adjusting your filters."
+                    : "Create one to get started."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4 max-h-[800px] overflow-y-auto pr-2">
+                {filteredMenus.map((menu) => (
+                  <MenuCard
+                    key={menu.id}
+                    menu={menu}
+                    onStatusToggle={toggleMenuStatus}
+                    onEdit={handleEditMenu}
+                    onDuplicate={handleDuplicateMenu}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Create/Edit Menu Dialog */}
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          if (!open) resetNewMenu();
+          setIsDialogOpen(open);
+        }}>
+          <DialogContent className="max-w-xl">
+            <DialogHeader>
+              <DialogTitle>{editingMenu ? "Edit Menu" : "Schedule Menu"}</DialogTitle>
+              <DialogDescription>
+                {editingMenu
+                  ? "Modify the menu details"
+                  : "Create a new menu by selecting dates and entering courses"}
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              handleCreateMenu();
+            }} className="grid gap-6 py-4">
+              {/* Selected Dates Display */}
+              <div className="grid gap-2">
+                <Label htmlFor="date-range" className={labelClasses}>
+                  Selected Dates
+                </Label>
+                <div className="text-sm">
+                  {newMenu.dateRange.from &&
+                    format(newMenu.dateRange.from, "PPP", { locale: es })}
+                  {newMenu.dateRange.to &&
+                    newMenu.dateRange.from !== newMenu.dateRange.to &&
+                    ` - ${format(newMenu.dateRange.to, "PPP", { locale: es })}`}
+                </div>
+              </div>
+
+              {/* Repeat Pattern Selection */}
+              <div className="grid gap-2">
+                <Label htmlFor="repeat_pattern" className={labelClasses}>
+                  Repeat Pattern
+                </Label>
+                <Select
+                  value={newMenu.repeat_pattern}
+                  onValueChange={(value: "none" | "weekly" | "monthly") =>
+                    setNewMenu({
+                      ...newMenu,
+                      repeat_pattern: value,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select repeat pattern" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* First Course Input */}
+              <div className="grid gap-2">
+                <Label htmlFor="firstCourse" className={labelClasses}>
+                  First Course
+                </Label>
+                <Input
+                  id="firstCourse"
+                  value={newMenu.firstCourse}
+                  onChange={(e) =>
+                    setNewMenu({ ...newMenu, firstCourse: e.target.value })
+                  }
+                  placeholder="Enter first course"
+                  required
+                />
+              </div>
+
+              {/* Second Course Input */}
+              <div className="grid gap-2">
+                <Label htmlFor="secondCourse" className={labelClasses}>
+                  Second Course
+                </Label>
+                <Input
+                  id="secondCourse"
+                  value={newMenu.secondCourse}
+                  onChange={(e) =>
+                    setNewMenu({ ...newMenu, secondCourse: e.target.value })
+                  }
+                  placeholder="Enter second course"
+                  required
+                />
+              </div>
+            </form>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  resetNewMenu();
+                  setIsDialogOpen(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" onClick={handleCreateMenu}>
+                {editingMenu ? "Update Menu" : "Schedule Menu"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
 }
+
 ```
 
 ### app/dashboard/menu/wine/page.tsx
@@ -2524,8 +2999,8 @@ export default function WinePage() {
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import Image from "next/image"; // **Added Image Import**
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import Image from "next/image";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -2546,152 +3021,163 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert"; // **Ensured Alert Import**
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
-import { Badge } from "@/components/ui/badge"; // Ensure Badge component exists
+import { Badge } from "@/components/ui/badge";
 
-// **1. Type Definitions**
-
+// Basic types
 type Allergen = {
-  id: number;
+  id: string;
   name: string;
 };
 
-type MenuItemWithRelations = {
+type Category = {
+  id: string;
+  name: string;
+};
+
+// Raw response types from Supabase
+type RawMenuItemResponse = {
   id: string;
   name: string;
   description: string;
   price: number;
-  category_id: number;
-  image_url: string | null;
-  image_alt: string | null; // **Added image_alt**
-  image_path: string | null; // **Added image_path**
+  category_id: string;
+  image_path: string | null;
   active: boolean;
-  menu_categories: {
-    id: number;
+  menu_categories: Array<{
+    id: string;
     name: string;
-  };
-  menu_item_allergens: {
-    allergens: Allergen;
-  }[];
+  }>;
+  menu_item_allergens: Array<{
+    allergens: {
+      id: string;
+      name: string;
+    };
+  }>;
 };
 
+// Transformed MenuItem type for the application
 type MenuItem = {
   id: string;
   name: string;
   description: string;
   price: number;
-  category_id: number;
+  category_id: string;
   image_url: string | null;
-  image_alt: string | null; // **Added image_alt**
-  image_path: string | null; // **Added image_path**
+  image_path: string | null;
   active: boolean;
   category?: {
-    id: number;
+    id: string;
     name: string;
-  };
-  allergens?: Allergen[]; // Added allergens
+  } | null;
+  allergens?: Allergen[];
 };
 
-type Category = {
-  id: number;
-  name: string;
-};
-
-// Updated NewMenuItem type to include allergen_ids
+// Type for new menu item form
 type NewMenuItem = {
   name: string;
   description: string;
   price: string;
   category_id: string;
   active: boolean;
-  allergen_ids: number[]; // Added allergen IDs for selection
+  allergen_ids: string[];
 };
 
 export default function MenuPage() {
-  // **2. State Management**
-
+  // State declarations
   const [items, setItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [allergens, setAllergens] = useState<Allergen[]>([]); // Added allergens state
+  const [allergens, setAllergens] = useState<Allergen[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<string>("all");
   const [newItem, setNewItem] = useState<NewMenuItem>({
-    name: '',
-    description: '',
-    price: '',
-    category_id: '',
+    name: "",
+    description: "",
+    price: "",
+    category_id: "",
     active: true,
-    allergen_ids: [], // Initialized allergen_ids
+    allergen_ids: [],
   });
-  const [selectedFilter, setSelectedFilter] = useState<string>('all'); // Added filter state
 
+  // Initialize Supabase client and toast
   const supabase = createClientComponentClient();
   const { toast } = useToast();
 
-  // **3. Data Fetching with useEffect**
+  // Helper function for image URL construction
+  const getImageUrl = (imagePath: string | null): string | null => {
+    if (!imagePath) return null;
+    return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/${imagePath}`;
+  };
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        
-        // Fetch categories
-        const { data: categoriesData, error: categoriesError } = await supabase
-          .from('menu_categories') // Ensure this table name matches your Supabase schema
-          .select('*')
-          .order('name');
 
-        if (categoriesError) throw categoriesError;
+        // Parallel data fetching
+        const [allergensResponse, categoriesResponse, itemsResponse] =
+          await Promise.all([
+            supabase.from("allergens").select("*").order("name"),
+            supabase.from("menu_categories").select("*").order("name"),
+            supabase
+              .from("menu_items")
+              .select(
+                `
+              id,
+              name,
+              description,
+              price,
+              category_id,
+              image_path,
+              active,
+              menu_categories!menu_items_category_id_fkey (
+                id,
+                name
+              ),
+              menu_item_allergens (
+                allergens (
+                  id,
+                  name
+                )
+              )
+            `
+              )
+              .order("name"),
+          ]);
 
-        // Fetch allergens
-        const { data: allergensData, error: allergensError } = await supabase
-          .from('allergens')
-          .select('*')
-          .order('name');
+        // Error checking
+        if (allergensResponse.error) throw allergensResponse.error;
+        if (categoriesResponse.error) throw categoriesResponse.error;
+        if (itemsResponse.error) throw itemsResponse.error;
 
-        if (allergensError) throw allergensError;
+        // Set basic data
+        setAllergens(allergensResponse.data || []);
+        setCategories(categoriesResponse.data || []);
 
-        // Fetch menu items with allergens and categories
-        const { data: itemsData, error: itemsError } = await supabase
-          .from('menu_items')
-          .select(`
-            *,
-            menu_categories!inner(*),
-            menu_item_allergens!inner(
-              allergens(*)
-            )
-          `)
-          .order('name');
+        // Transform and type menu items
+        const rawItems = itemsResponse.data as unknown as RawMenuItemResponse[];
+        const transformedItems = rawItems.map((item) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          price: item.price,
+          category_id: item.category_id,
+          image_url: getImageUrl(item.image_path),
+          image_path: item.image_path,
+          active: item.active,
+          category: item.menu_categories[0] || null,
+          allergens: item.menu_item_allergens.map(
+            (relation) => relation.allergens
+          ),
+        }));
 
-        if (itemsError) throw itemsError;
-
-        // **Debug the data**
-        console.log('Raw items data:', itemsData);
-
-        // Map fetched items to include allergens and category
-        setItems(
-          (itemsData as MenuItemWithRelations[])?.map(item => ({
-            id: item.id,
-            name: item.name,
-            description: item.description,
-            price: item.price,
-            category_id: item.category_id,
-            image_url: item.image_url,
-            image_alt: item.image_alt, // **Added image_alt**
-            image_path: item.image_path, // **Added image_path**
-            active: item.active,
-            category: item.menu_categories,
-            allergens: item.menu_item_allergens?.map(relation => relation.allergens) || []
-          })) || []
-        );
-
-        setCategories(categoriesData || []);
-        setAllergens(allergensData || []);
+        setItems(transformedItems);
       } catch (error) {
-        console.error('Error fetching data:', error);
-        setError('Failed to load menu items');
+        console.error("Error fetching data:", error);
+        setError("Failed to load menu items");
         toast({
           title: "Error",
           description: "Failed to load menu items",
@@ -2705,11 +3191,9 @@ export default function MenuPage() {
     fetchData();
   }, [supabase, toast]);
 
-  // **4. Handle Create Item with Allergens**
-
+  // Create new item handler
   const handleCreateItem = async () => {
     try {
-      // Basic validation
       if (!newItem.name || !newItem.category_id || !newItem.price) {
         toast({
           title: "Error",
@@ -2721,12 +3205,12 @@ export default function MenuPage() {
 
       // Create menu item
       const { data: item, error: itemError } = await supabase
-        .from('menu_items')
+        .from("menu_items")
         .insert({
           name: newItem.name,
           description: newItem.description,
           price: parseFloat(newItem.price),
-          category_id: parseInt(newItem.category_id),
+          category_id: newItem.category_id,
           active: newItem.active,
         })
         .select()
@@ -2736,41 +3220,46 @@ export default function MenuPage() {
 
       // Create allergen assignments if any
       if (newItem.allergen_ids.length > 0) {
-        const allergenAssignments = newItem.allergen_ids.map(allergenId => ({
+        const allergenAssignments = newItem.allergen_ids.map((allergenId) => ({
           menu_item_id: item.id,
           allergen_id: allergenId,
         }));
 
         const { error: assignmentError } = await supabase
-          .from('menu_item_allergens')
+          .from("menu_item_allergens")
           .insert(allergenAssignments);
 
         if (assignmentError) throw assignmentError;
       }
 
-      // Optimistically update the UI
+      // Find category for the new item
+      const category = categories.find((c) => c.id === newItem.category_id);
+      const itemAllergens = allergens.filter((a) =>
+        newItem.allergen_ids.includes(a.id)
+      );
+
+      // Create new menu item for state
       const newMenuItem: MenuItem = {
         id: item.id,
         name: newItem.name,
         description: newItem.description,
         price: parseFloat(newItem.price),
-        category_id: parseInt(newItem.category_id),
-        image_url: null, // Assuming no image upload in this flow
-        image_alt: null, // **Set to null or handle as needed**
-        image_path: null, // **Set to null or handle as needed**
+        category_id: newItem.category_id,
+        image_url: null,
+        image_path: null,
         active: newItem.active,
-        category: categories.find(c => c.id === parseInt(newItem.category_id)),
-        allergens: allergens.filter(a => newItem.allergen_ids.includes(a.id)),
+        category: category || null,
+        allergens: itemAllergens,
       };
 
-      setItems(prev => [...prev, newMenuItem]);
-
+      // Update state and cleanup
+      setItems((prev) => [...prev, newMenuItem]);
       setIsDialogOpen(false);
       setNewItem({
-        name: '',
-        description: '',
-        price: '',
-        category_id: '',
+        name: "",
+        description: "",
+        price: "",
+        category_id: "",
         active: true,
         allergen_ids: [],
       });
@@ -2780,7 +3269,7 @@ export default function MenuPage() {
         description: "Menu item created successfully",
       });
     } catch (error) {
-      console.error('Error creating item:', error);
+      console.error("Error creating item:", error);
       toast({
         title: "Error",
         description: "Failed to create menu item",
@@ -2789,67 +3278,73 @@ export default function MenuPage() {
     }
   };
 
-  // **5. Filtering Logic**
+  // Filter items based on selected category
+  const filteredItems =
+    selectedFilter === "all"
+      ? items
+      : items.filter(
+          (item) =>
+            item.category?.id === selectedFilter ||
+            item.category_id === selectedFilter
+        );
 
-  const filteredItems = selectedFilter === 'all'
-    ? items
-    : items.filter(item => item.category_id === parseInt(selectedFilter));
-
-  // **6. Error Boundaries and Loading States**
-  if (isLoading) return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-    </div>
-  );
-
-  // **Replaced the error return statement**
-  if (error) return (
-    <div className="container p-6">
-      <Alert>
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
-    </div>
-  );
-
-  // **Replaced the no items return statement**
-  if (!items.length) return (
-    <div className="container p-6">
-      <Alert>
-        <AlertDescription>No menu items found.</AlertDescription>
-      </Alert>
-      <div className="mt-4">
-        <Button onClick={() => setIsDialogOpen(true)}>Add Your First Item</Button>
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
-    </div>
-  );
+    );
+  }
 
+  // Error state
+  if (error) {
+    return (
+      <div className="container p-6">
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // Empty state
+  if (!items.length) {
+    return (
+      <div className="container p-6">
+        <Alert>
+          <AlertDescription>No menu items found.</AlertDescription>
+        </Alert>
+        <div className="mt-4">
+          <Button onClick={() => setIsDialogOpen(true)}>
+            Add Your First Item
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Main render
   return (
     <div className="container p-6">
-      {/* **7. Updated PageHeader with Filter Controls and Add Button** */}
       <PageHeader
         heading="Menu Items"
         text="Manage your restaurant's menu selection"
       >
         <div className="flex items-center gap-4">
-          {/* **Filter Controls** */}
-          <Select
-            value={selectedFilter}
-            onValueChange={setSelectedFilter}
-          >
+          <Select value={selectedFilter} onValueChange={setSelectedFilter}>
             <SelectTrigger className="h-9 w-[180px]">
               <SelectValue placeholder="Filter by Category" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
               {categories.map((category) => (
-                <SelectItem key={category.id} value={category.id.toString()}>
+                <SelectItem key={category.id} value={category.id}>
                   {category.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-
-          {/* **Add Item Button** */}
           <Button onClick={() => setIsDialogOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Add Item
@@ -2857,29 +3352,22 @@ export default function MenuPage() {
         </div>
       </PageHeader>
 
-      {/* **8. Menu Items Grid** */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
         {filteredItems.map((item) => (
           <div
             key={item.id}
-            className="group flex flex-col bg-white border border-neutral-100 rounded-sm transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
+            className="group flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm"
           >
-            {/* **a. Image Container with Fixed Proportions** */}
-            <div className="relative w-full pb-[100%] mb-4"> {/* Square aspect ratio container */}
+            <div className="relative w-full pb-[100%] mb-4">
               {item.image_url ? (
                 <Image
                   src={item.image_url}
-                  alt={item.image_alt || item.name}
+                  alt={item.name}
                   fill
-                  className="object-cover rounded-sm" // Changed from object-contain to object-cover
-                  sizes="(max-width: 640px) 100vw, 
-                         (max-width: 1024px) 50vw, 
-                         (max-width: 1536px) 33vw,
-                         25vw"
-                  priority={false}
+                  className="object-cover rounded-sm"
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                   loading="lazy"
                   onError={(e) => {
-                    console.error('Image load error for:', item.name, item.image_url);
                     const target = e.target as HTMLImageElement;
                     target.src = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/placeholder.webp`;
                   }}
@@ -2890,23 +3378,11 @@ export default function MenuPage() {
                 </div>
               )}
             </div>
-
-            {/* **c. Category Label** */}
             <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
               {item.category?.name}
             </div>
-
-            {/* **d. Item Name** */}
-            <h3 className="text-lg font-medium mb-2 line-clamp-2">
-              {item.name}
-            </h3>
-
-            {/* **e. Description** */}
-            <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
-              {item.description}
-            </p>
-
-            {/* **f. Allergens with Improved Styling** */}
+            <h3 className="text-lg font-medium mb-2">{item.name}</h3>
+            <p className="text-sm text-neutral-600 mb-4">{item.description}</p>
             <div className="flex flex-wrap gap-1 mb-4">
               {item.allergens?.map((allergen) => (
                 <Badge
@@ -2918,172 +3394,80 @@ export default function MenuPage() {
                 </Badge>
               ))}
             </div>
-
-            {/* **g. Price** */}
             <div className="mt-auto font-medium text-lg">
               ${item.price.toFixed(2)}
-            </div>
-
-            {/* **h. Actions** */}
-            <div className="flex gap-2 mt-4 pt-4 border-t border-neutral-100">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 h-8 text-xs rounded-sm"
-              >
-                {item.active ? "Available" : "Unavailable"}
-              </Button>
             </div>
           </div>
         ))}
       </div>
 
-      {/* **9. Add Item Dialog with Updated Form Layout** */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-xl font-medium">Add Menu Item</DialogTitle>
-            <DialogDescription className="text-neutral-600">
-              Create a new item for your menu
+            <DialogTitle>Add Menu Item</DialogTitle>
+            <DialogDescription>
+              Create a new menu item with details
             </DialogDescription>
           </DialogHeader>
-
-          <div className="grid gap-6 py-4">
-            {/* **a. Name and Description** */}
-            <div className="space-y-4">
-              {/* **Name Input** */}
-              <div className="grid gap-2">
-                <Label htmlFor="name" className="text-sm font-medium">Name</Label>
-                <Input
-                  id="name"
-                  className="h-9"
-                  value={newItem.name}
-                  onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                  placeholder="Item name"
-                />
-              </div>
-
-              {/* **Description Input** */}
-              <div className="grid gap-2">
-                <Label htmlFor="description" className="text-sm font-medium">Description</Label>
-                <Input
-                  id="description"
-                  className="h-9"
-                  value={newItem.description}
-                  onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                  placeholder="Item description"
-                />
-              </div>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={newItem.name}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, name: e.target.value })
+                }
+              />
             </div>
-
-            {/* **b. Price and Category** */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* **Price Input** */}
-              <div className="grid gap-2">
-                <Label htmlFor="price" className="text-sm font-medium">Price</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  step="0.01"
-                  className="h-9"
-                  value={newItem.price}
-                  onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                  placeholder="0.00"
-                />
-              </div>
-
-              {/* **Category Select** */}
-              <div className="grid gap-2">
-                <Label htmlFor="category" className="text-sm font-medium">Category</Label>
-                <Select
-                  value={newItem.category_id}
-                  onValueChange={(value) => setNewItem({ ...newItem, category_id: value })}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category.id} value={category.id.toString()}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="grid gap-2">
+              <Label htmlFor="price">Price</Label>
+              <Input
+                id="price"
+                type="number"
+                step="0.01"
+                value={newItem.price}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, price: e.target.value })
+                }
+              />
             </div>
-
-            {/* **c. Allergens** */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Allergens</Label>
+            <div className="grid gap-2">
+              <Label htmlFor="category">Category</Label>
               <Select
-                onValueChange={(value) => {
-                  const allergenId = parseInt(value);
-                  if (allergenId && !newItem.allergen_ids.includes(allergenId)) {
-                    setNewItem({
-                      ...newItem,
-                      allergen_ids: [...newItem.allergen_ids, allergenId],
-                    });
-                  }
-                }}
-                // Since multiple selection isn't directly supported, handle single selection and add to the list
+                value={newItem.category_id}
+                onValueChange={(value) =>
+                  setNewItem({ ...newItem, category_id: value })
+                }
               >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Select allergens" />
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {allergens.map((allergen) => (
-                    <SelectItem
-                      key={allergen.id}
-                      value={allergen.id.toString()}
-                      disabled={newItem.allergen_ids.includes(allergen.id)}
-                    >
-                      {allergen.name}
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-
-              {/* **Display Selected Allergens** */}
-              <div className="flex flex-wrap gap-2 mt-2">
-                {newItem.allergen_ids.map((allergenId) => {
-                  const allergen = allergens.find((a) => a.id === allergenId);
-                  return allergen ? (
-                    <Badge
-                      key={allergen.id}
-                      variant="secondary"
-                      className="flex items-center gap-1"
-                    >
-                      {allergen.name}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setNewItem({
-                            ...newItem,
-                            allergen_ids: newItem.allergen_ids.filter(
-                              (id) => id !== allergenId
-                            ),
-                          })
-                        }
-                        className="ml-1 hover:text-destructive"
-                        aria-label={`Remove ${allergen.name}`}
-                      >
-                        ×
-                      </button>
-                    </Badge>
-                  ) : null;
-                })}
-              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Input
+                id="description"
+                value={newItem.description}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, description: e.target.value })
+                }
+              />
             </div>
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateItem}>
-              Create Item
-            </Button>
+            <Button onClick={handleCreateItem}>Create Item</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -5561,6 +5945,82 @@ export { Button, buttonVariants }
 
 ```
 
+### src/components/ui/calendar.tsx
+
+```typescript
+import * as React from "react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
+import { DayPicker } from "react-day-picker"
+
+import { cn } from "@/lib/utils"
+import { buttonVariants } from "@/components/ui/button"
+
+export type CalendarProps = React.ComponentProps<typeof DayPicker>
+
+function Calendar({
+  className,
+  classNames,
+  showOutsideDays = true,
+  ...props
+}: CalendarProps) {
+  return (
+    <DayPicker
+      showOutsideDays={showOutsideDays}
+      className={cn("p-3", className)}
+      classNames={{
+        months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+        month: "space-y-4",
+        caption: "flex justify-center pt-1 relative items-center",
+        caption_label: "text-sm font-medium",
+        nav: "space-x-1 flex items-center",
+        nav_button: cn(
+          buttonVariants({ variant: "outline" }),
+          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100"
+        ),
+        nav_button_previous: "absolute left-1",
+        nav_button_next: "absolute right-1",
+        table: "w-full border-collapse space-y-1",
+        head_row: "flex",
+        head_cell:
+          "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem]",
+        row: "flex w-full mt-2",
+        cell: cn(
+          "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected].day-range-end)]:rounded-r-md",
+          props.mode === "range"
+            ? "[&:has(>.day-range-end)]:rounded-r-md [&:has(>.day-range-start)]:rounded-l-md first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md"
+            : "[&:has([aria-selected])]:rounded-md"
+        ),
+        day: cn(
+          buttonVariants({ variant: "ghost" }),
+          "h-8 w-8 p-0 font-normal aria-selected:opacity-100"
+        ),
+        day_range_start: "day-range-start",
+        day_range_end: "day-range-end",
+        day_selected:
+          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+        day_today: "bg-accent text-accent-foreground",
+        day_outside:
+          "day-outside text-muted-foreground aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
+        day_disabled: "text-muted-foreground opacity-50",
+        day_range_middle:
+          "aria-selected:bg-accent aria-selected:text-accent-foreground",
+        day_hidden: "invisible",
+        ...classNames,
+      }}
+      components={{
+        IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
+        IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
+      }}
+      {...props}
+    />
+  )
+}
+Calendar.displayName = "Calendar"
+
+export { Calendar }
+
+```
+
 ### src/components/ui/dialog.tsx
 
 ```typescript
@@ -6126,6 +6586,43 @@ const Label = React.forwardRef<
 Label.displayName = LabelPrimitive.Root.displayName
 
 export { Label }
+
+```
+
+### src/components/ui/popover.tsx
+
+```typescript
+import * as React from "react"
+import * as PopoverPrimitive from "@radix-ui/react-popover"
+
+import { cn } from "@/lib/utils"
+
+const Popover = PopoverPrimitive.Root
+
+const PopoverTrigger = PopoverPrimitive.Trigger
+
+const PopoverAnchor = PopoverPrimitive.Anchor
+
+const PopoverContent = React.forwardRef<
+  React.ElementRef<typeof PopoverPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
+>(({ className, align = "center", sideOffset = 4, ...props }, ref) => (
+  <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Content
+      ref={ref}
+      align={align}
+      sideOffset={sideOffset}
+      className={cn(
+        "z-50 w-72 rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        className
+      )}
+      {...props}
+    />
+  </PopoverPrimitive.Portal>
+))
+PopoverContent.displayName = PopoverPrimitive.Content.displayName
+
+export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor }
 
 ```
 
