@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Plus, Image as ImageIcon, Edit } from "lucide-react"; // Added 'Edit' icon
+import { Plus, Image as ImageIcon, Edit, Search } from "lucide-react"; // Added 'Search' icon
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -102,13 +102,6 @@ export default function WinePage() {
     image_path: "wines/wine.webp", // Updated initial state
   });
 
-  // New state variables for filtering and sorting
-  const [selectedFilter, setSelectedFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<"name" | "price">("name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-
-  const [isUploadingImage, setIsUploadingImage] = useState(false); // New loading state
-
   // ====== New State Variables for Editing ======
   const [editDialog, setEditDialog] = useState<EditWineDialog>({
     open: false,
@@ -124,23 +117,63 @@ export default function WinePage() {
   });
   // ==============================================
 
+  // ====== New State for Search ======
+  const [searchTerm, setSearchTerm] = useState("");
+  // =================================
+
+  // New state variables for filtering and sorting
+  const [selectedFilter, setSelectedFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"name" | "price">("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  const [isUploadingImage, setIsUploadingImage] = useState(false); // New loading state
+
   const supabase = createClientComponentClient();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null); // Ref for file input
+
+  // ====== Helper Function to Highlight Matching Text ======
+  const highlightText = (text: string, searchTerm: string) => {
+    if (!searchTerm.trim()) return text;
+
+    const regex = new RegExp(`(${searchTerm})`, 'gi');
+    const parts = text.split(regex);
+
+    return parts.map((part, index) =>
+      regex.test(part) ? (
+        <span key={index} className="bg-orange-500 text-white">
+          {part}
+        </span>
+      ) : (
+        part
+      )
+    );
+  };
+  // ========================================================
 
   // Filter and sort wines using useMemo for performance optimization
   const filteredAndSortedWines = useMemo(() => {
     let filtered = wines;
 
-    // Filter by category
+    // First apply search filter if there's a search term
+    if (searchTerm.trim()) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (wine) =>
+          wine.name.toLowerCase().includes(lowerSearchTerm) ||
+          wine.description.toLowerCase().includes(lowerSearchTerm)
+      );
+    }
+
+    // Then apply category filter
     if (selectedFilter !== "all") {
-      filtered = wines.filter((wine) =>
+      filtered = filtered.filter((wine) =>
         wine.categories.some((cat) => cat.id.toString() === selectedFilter)
       );
     }
 
-    // Sort wines
-    const sorted = [...filtered].sort((a, b) => {
+    // Then sort
+    return [...filtered].sort((a, b) => {
       if (sortBy === "name") {
         return sortOrder === "asc"
           ? a.name.localeCompare(b.name)
@@ -151,9 +184,7 @@ export default function WinePage() {
           : b.bottle_price - a.bottle_price;
       }
     });
-
-    return sorted;
-  }, [wines, selectedFilter, sortBy, sortOrder]);
+  }, [wines, selectedFilter, sortBy, sortOrder, searchTerm]);
 
   const fetchData = async () => {
     try {
@@ -435,6 +466,12 @@ export default function WinePage() {
     if (!editDialog.wine) return;
 
     try {
+      // Add this check at the start of category assignment
+      console.log("Category IDs before processing:", {
+        rawIds: editForm.category_ids,
+        processedIds: editForm.category_ids.map((id) => Number(id)),
+      });
+
       // Log update data
       console.log("Update data:", {
         wineId: editDialog.wine.id,
@@ -486,38 +523,54 @@ export default function WinePage() {
         throw deleteError;
       }
 
-      // Only insert new assignments if there are categories to assign
+      // Only attempt category assignments if we have categories
       if (editForm.category_ids && editForm.category_ids.length > 0) {
-        console.log("Adding new category assignments:", editForm.category_ids);
-        const categoryAssignments = editForm.category_ids.map((categoryId) => ({
-          wine_id: editDialog.wine!.id,
-          category_id: categoryId,
+        // Create all assignments at once
+        const assignments = editForm.category_ids.map((categoryId) => ({
+          wine_id: Number(editDialog.wine!.id), // Ensure it's a number
+          category_id: Number(categoryId), // Ensure it's a number
         }));
 
+        console.log("Attempting to insert assignments:", assignments);
+
+        // Insert all assignments in one operation
         const { error: assignmentError } = await supabase
           .from("wine_category_assignments")
-          .insert(categoryAssignments);
+          .insert(assignments)
+          .select();
 
         if (assignmentError) {
-          console.error("Category assignment error:", assignmentError);
+          console.error("Assignment error:", assignmentError);
           throw assignmentError;
         }
       }
 
-      // Refresh data and close dialog
+      // Refresh data
       await fetchData();
       toast({
         title: "Success",
         description: "Wine updated successfully",
       });
       setEditDialog({ open: false, wine: null });
-    } catch (error) {
-      console.error("Full error details:", error);
-      await fetchData(); // Still refresh data to ensure UI is in sync
+    } catch (error: any) {
+      console.error("Complete error details:", {
+        error,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+      });
+
+      // Still refresh data to ensure UI is in sync
+      await fetchData();
+
+      // More specific error message
       toast({
         title: "Warning",
-        description: "Wine details updated but there was an issue with categories",
-        variant: "default",
+        description:
+          error?.message ||
+          "Wine details updated but categories could not be assigned",
+        variant: "destructive",
       });
       setEditDialog({ open: false, wine: null });
     }
@@ -569,10 +622,12 @@ export default function WinePage() {
         {wine.categories.map((category) => category.name).join(" · ")}
       </div>
 
-      <h3 className="text-lg font-medium mb-2 line-clamp-2">{wine.name}</h3>
+      <h3 className="text-lg font-medium mb-2 line-clamp-2">
+        {highlightText(wine.name, searchTerm)}
+      </h3>
 
       <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
-        {wine.description}
+        {highlightText(wine.description, searchTerm)}
       </p>
 
       {/* Prices */}
@@ -601,9 +656,21 @@ export default function WinePage() {
         </Button>
       </PageHeader>
 
-      {/* Filter and Sort Controls */}
+      {/* Filter, Sort, and Search Controls */}
       <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
-        <div className="flex gap-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          {/* Search input */}
+          <div className="relative w-full md:w-[300px]">
+            <Input
+              type="text"
+              placeholder="Search wines..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10"
+            />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          </div>
+
           {/* Filter by Category */}
           <Select value={selectedFilter} onValueChange={setSelectedFilter}>
             <SelectTrigger className="w-[180px]">
