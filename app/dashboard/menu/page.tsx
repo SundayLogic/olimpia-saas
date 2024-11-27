@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Image from "next/image";
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -104,6 +104,9 @@ export default function MenuPage() {
     allergen_ids: [],
   });
 
+  // Add search state
+  const [searchTerm, setSearchTerm] = useState("");
+
   // Initialize Supabase client and toast
   const supabase = createClientComponentClient();
   const { toast } = useToast();
@@ -112,6 +115,24 @@ export default function MenuPage() {
   const getImageUrl = (imagePath: string | null): string | null => {
     if (!imagePath) return null;
     return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/${imagePath}`;
+  };
+
+  // Add highlight text function
+  const highlightText = (text: string, searchTerm: string) => {
+    if (!searchTerm.trim()) return text;
+
+    const regex = new RegExp(`(${searchTerm})`, 'gi');
+    const parts = text.split(regex);
+
+    return parts.map((part, index) =>
+      regex.test(part) ? (
+        <span key={index} className="bg-orange-500 text-white">
+          {part}
+        </span>
+      ) : (
+        part
+      )
+    );
   };
 
   useEffect(() => {
@@ -192,6 +213,32 @@ export default function MenuPage() {
 
     fetchData();
   }, [supabase, toast]);
+
+  // Filter items with search and category filter
+  const filteredItems = useMemo(() => {
+    let filtered = items;
+
+    // Apply search filter
+    if (searchTerm.trim()) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (item) =>
+          item.name.toLowerCase().includes(lowerSearchTerm) ||
+          item.description.toLowerCase().includes(lowerSearchTerm)
+      );
+    }
+
+    // Apply category filter
+    if (selectedFilter !== "all") {
+      filtered = filtered.filter(
+        (item) =>
+          item.category?.id === selectedFilter ||
+          item.category_id === selectedFilter
+      );
+    }
+
+    return filtered;
+  }, [items, selectedFilter, searchTerm]);
 
   // Create new item handler
   const handleCreateItem = async () => {
@@ -280,16 +327,6 @@ export default function MenuPage() {
     }
   };
 
-  // Filter items based on selected category
-  const filteredItems =
-    selectedFilter === "all"
-      ? items
-      : items.filter(
-          (item) =>
-            item.category?.id === selectedFilter ||
-            item.category_id === selectedFilter
-        );
-
   // Loading state
   if (isLoading) {
     return (
@@ -329,13 +366,35 @@ export default function MenuPage() {
   // Main render
   return (
     <div className="container p-6">
+      {/* Page Header */}
       <PageHeader
         heading="Menu Items"
         text="Manage your restaurant's menu selection"
       >
-        <div className="flex items-center gap-4">
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Item
+        </Button>
+      </PageHeader>
+
+      {/* Search and Filter Controls */}
+      <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
+        <div className="flex flex-col md:flex-row gap-4">
+          {/* Search input */}
+          <div className="relative w-full md:w-[300px]">
+            <Input
+              type="text"
+              placeholder="Search menu items..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10"
+            />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          </div>
+
+          {/* Category filter */}
           <Select value={selectedFilter} onValueChange={setSelectedFilter}>
-            <SelectTrigger className="h-9 w-[180px]">
+            <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Filter by Category" />
             </SelectTrigger>
             <SelectContent>
@@ -347,13 +406,10 @@ export default function MenuPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button onClick={() => setIsDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Item
-          </Button>
         </div>
-      </PageHeader>
+      </div>
 
+      {/* Menu Items Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
         {filteredItems.map((item) => (
           <div
@@ -383,8 +439,16 @@ export default function MenuPage() {
             <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
               {item.category?.name}
             </div>
-            <h3 className="text-lg font-medium mb-2">{item.name}</h3>
-            <p className="text-sm text-neutral-600 mb-4">{item.description}</p>
+            {item.name && (
+              <h3 className="text-lg font-medium mb-2">
+                {highlightText(item.name, searchTerm)}
+              </h3>
+            )}
+            {item.description && (
+              <p className="text-sm text-neutral-600 mb-4">
+                {highlightText(item.description, searchTerm)}
+              </p>
+            )}
             <div className="flex flex-wrap gap-1 mb-4">
               {item.allergens?.map((allergen) => (
                 <Badge
@@ -403,6 +467,7 @@ export default function MenuPage() {
         ))}
       </div>
 
+      {/* Add Menu Item Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
