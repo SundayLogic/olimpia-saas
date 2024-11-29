@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Image from "next/image";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Edit } from "lucide-react"; // Added 'Edit' icon
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -26,6 +26,8 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
+import type { PostgrestError } from "@supabase/postgrest-js"; // Added type import
+import { MultiSelect } from "@/components/ui/multi-select"; // Imported MultiSelect
 
 // Basic types
 type Allergen = {
@@ -44,7 +46,7 @@ type RawMenuItemResponse = {
   name: string;
   description: string;
   price: number;
-  category_id: string;
+  category_id: number; // Changed to number to match Database type
   image_path: string | null;
   active: boolean;
   menu_categories: Array<{
@@ -65,7 +67,7 @@ type MenuItem = {
   name: string;
   description: string;
   price: number;
-  category_id: string;
+  category_id: number; // Changed to number
   image_url: string | null;
   image_path: string | null;
   active: boolean;
@@ -85,6 +87,20 @@ type NewMenuItem = {
   active: boolean;
   allergen_ids: string[];
 };
+
+// Updated Types for Edit Functionality
+interface EditDialogState {
+  open: boolean;
+  item: MenuItem | null;
+}
+
+interface EditFormData {
+  name: string;
+  description: string;
+  price: string;
+  category_id: string;
+  allergen_ids: string[];
+}
 
 export default function MenuPage() {
   // State declarations
@@ -107,6 +123,20 @@ export default function MenuPage() {
   // Add search state
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Add state for Edit Functionality
+  const [editDialog, setEditDialog] = useState<EditDialogState>({
+    open: false,
+    item: null,
+  });
+
+  const [editForm, setEditForm] = useState<EditFormData>({
+    name: "",
+    description: "",
+    price: "",
+    category_id: "",
+    allergen_ids: [],
+  });
+
   // Initialize Supabase client and toast
   const supabase = createClientComponentClient();
   const { toast } = useToast();
@@ -121,7 +151,7 @@ export default function MenuPage() {
   const highlightText = (text: string, searchTerm: string) => {
     if (!searchTerm.trim()) return text;
 
-    const regex = new RegExp(`(${searchTerm})`, 'gi');
+    const regex = new RegExp(`(${searchTerm})`, "gi");
     const parts = text.split(regex);
 
     return parts.map((part, index) =>
@@ -135,84 +165,98 @@ export default function MenuPage() {
     );
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
+  // Consolidate fetchData function with useCallback
+  const fetchData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const [allergensResponse, categoriesResponse, itemsResponse] = await Promise.all([
+        supabase.from("allergens").select("*").order("name"),
+        supabase.from("menu_categories").select("*").order("name"),
+        supabase
+          .from("menu_items")
+          .select(`
+            id,
+            name,
+            description,
+            price,
+            category_id,
+            image_path,
+            active,
+            menu_categories (id, name),
+            menu_item_allergens (
+              allergens (id, name)
+            )
+          `)
+          .order("name"),
+      ]);
 
-        // Parallel data fetching
-        const [allergensResponse, categoriesResponse, itemsResponse] =
-          await Promise.all([
-            supabase.from("allergens").select("*").order("name"),
-            supabase.from("menu_categories").select("*").order("name"),
-            supabase
-              .from("menu_items")
-              .select(
-                `
-              id,
-              name,
-              description,
-              price,
-              category_id,
-              image_path,
-              active,
-              menu_categories!menu_items_category_id_fkey (
-                id,
-                name
-              ),
-              menu_item_allergens (
-                allergens (
-                  id,
-                  name
-                )
-              )
-            `
-              )
-              .order("name"),
-          ]);
+      // Add error handling
+      if (allergensResponse.error) throw allergensResponse.error;
+      if (categoriesResponse.error) throw categoriesResponse.error;
+      if (itemsResponse.error) throw itemsResponse.error;
 
-        // Error checking
-        if (allergensResponse.error) throw allergensResponse.error;
-        if (categoriesResponse.error) throw categoriesResponse.error;
-        if (itemsResponse.error) throw itemsResponse.error;
+      // Set basic data
+      setAllergens(allergensResponse.data || []);
+      setCategories(categoriesResponse.data || []);
 
-        // Set basic data
-        setAllergens(allergensResponse.data || []);
-        setCategories(categoriesResponse.data || []);
+      // Transform and type menu items
+      const rawItems = itemsResponse.data as unknown as RawMenuItemResponse[];
+      const transformedItems = rawItems.map((item) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        price: item.price,
+        category_id: item.category_id,
+        image_url: getImageUrl(item.image_path),
+        image_path: item.image_path,
+        active: item.active,
+        category: item.menu_categories[0] || null,
+        allergens: item.menu_item_allergens.map(
+          (relation) => relation.allergens
+        ),
+      }));
 
-        // Transform and type menu items
-        const rawItems = itemsResponse.data as unknown as RawMenuItemResponse[];
-        const transformedItems = rawItems.map((item) => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          price: item.price,
-          category_id: item.category_id,
-          image_url: getImageUrl(item.image_path),
-          image_path: item.image_path,
-          active: item.active,
-          category: item.menu_categories[0] || null,
-          allergens: item.menu_item_allergens.map(
-            (relation) => relation.allergens
-          ),
-        }));
+      setItems(transformedItems);
+    } catch (error) {
+      // Define the type guard
+      const isPostgrestError = (error: unknown): error is PostgrestError =>
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        "message" in error;
 
-        setItems(transformedItems);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        setError("Failed to load menu items");
+      if (isPostgrestError(error)) {
+        console.error("Database error:", error);
         toast({
-          title: "Error",
-          description: "Failed to load menu items",
+          title: "Database Error",
+          description: error.message,
           variant: "destructive",
         });
-      } finally {
-        setIsLoading(false);
+      } else if (error instanceof Error) {
+        console.error("Application error:", error);
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        console.error("Unknown error:", error);
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred",
+          variant: "destructive",
+        });
       }
-    };
-
-    fetchData();
+      setError("Failed to load menu items");
+    } finally {
+      setIsLoading(false);
+    }
   }, [supabase, toast]);
+
+  // Call fetchData inside useEffect
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
 
   // Filter items with search and category filter
   const filteredItems = useMemo(() => {
@@ -230,10 +274,11 @@ export default function MenuPage() {
 
     // Apply category filter
     if (selectedFilter !== "all") {
+      const parsedFilter = parseInt(selectedFilter);
       filtered = filtered.filter(
         (item) =>
           item.category?.id === selectedFilter ||
-          item.category_id === selectedFilter
+          item.category_id === parsedFilter
       );
     }
 
@@ -252,14 +297,25 @@ export default function MenuPage() {
         return;
       }
 
+      // Validate price
+      const priceValue = parseFloat(newItem.price);
+      if (isNaN(priceValue) || priceValue < 0) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid positive price.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Create menu item
       const { data: item, error: itemError } = await supabase
         .from("menu_items")
         .insert({
           name: newItem.name,
           description: newItem.description,
-          price: parseFloat(newItem.price),
-          category_id: newItem.category_id,
+          price: priceValue,
+          category_id: parseInt(newItem.category_id), // Convert to number
           active: newItem.active,
         })
         .select()
@@ -292,8 +348,8 @@ export default function MenuPage() {
         id: item.id,
         name: newItem.name,
         description: newItem.description,
-        price: parseFloat(newItem.price),
-        category_id: newItem.category_id,
+        price: priceValue,
+        category_id: parseInt(newItem.category_id), // Convert to number
         image_url: null,
         image_path: null,
         active: newItem.active,
@@ -318,14 +374,164 @@ export default function MenuPage() {
         description: "Menu item created successfully",
       });
     } catch (error) {
+      // Define the type guard
+      const isPostgrestError = (error: unknown): error is PostgrestError =>
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        "message" in error;
+
+      if (isPostgrestError(error)) {
+        console.error("Database error:", error);
+        toast({
+          title: "Database Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else if (error instanceof Error) {
+        console.error("Application error:", error);
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        console.error("Unknown error:", error);
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred",
+          variant: "destructive",
+        });
+      }
       console.error("Error creating item:", error);
-      toast({
-        title: "Error",
-        description: "Failed to create menu item",
-        variant: "destructive",
-      });
+      setError("Failed to create menu item");
     }
   };
+
+  // Handler to open the edit dialog with the selected menu item's data
+  const handleEdit = useCallback((item: MenuItem) => {
+    setEditForm({
+      name: item.name,
+      description: item.description,
+      price: item.price.toString(),
+      category_id: item.category_id.toString(),
+      allergen_ids: item.allergens?.map((a) => a.id) || [],
+    });
+    setEditDialog({ open: true, item });
+  }, []);
+
+  // Handler to save the edited menu item
+  const handleSaveEdit = useCallback(async () => {
+    if (!editDialog.item) return;
+
+    try {
+      // Validation
+      if (!editForm.name || !editForm.category_id || !editForm.price) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const priceValue = parseFloat(editForm.price);
+      if (isNaN(priceValue) || priceValue < 0) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid positive price.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const categoryId = parseInt(editForm.category_id);
+      if (isNaN(categoryId)) {
+        toast({
+          title: "Error",
+          description: "Please select a valid category.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Update menu item details
+      const { error: itemError } = await supabase
+        .from("menu_items")
+        .update({
+          name: editForm.name,
+          description: editForm.description,
+          price: priceValue,
+          category_id: categoryId,
+        })
+        .eq("id", editDialog.item.id);
+
+      if (itemError) throw itemError;
+
+      // Update allergen assignments
+      // First, delete existing assignments
+      const { error: deleteError } = await supabase
+        .from("menu_item_allergens")
+        .delete()
+        .eq("menu_item_id", editDialog.item.id);
+
+      if (deleteError) throw deleteError;
+
+      // Then, insert new assignments if any
+      if (editForm.allergen_ids.length > 0) {
+        const allergenAssignments = editForm.allergen_ids.map((allergenId) => ({
+          menu_item_id: editDialog.item!.id,
+          allergen_id: allergenId,
+        }));
+
+        const { error: assignmentError } = await supabase
+          .from("menu_item_allergens")
+          .insert(allergenAssignments);
+
+        if (assignmentError) throw assignmentError;
+      }
+
+      // Refresh data
+      await fetchData();
+      toast({
+        title: "Success",
+        description: "Menu item updated successfully.",
+      });
+      setEditDialog({ open: false, item: null });
+    } catch (error) {
+      // Define the type guard
+      const isPostgrestError = (error: unknown): error is PostgrestError =>
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        "message" in error;
+
+      if (isPostgrestError(error)) {
+        console.error("Database error:", error);
+        toast({
+          title: "Database Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else if (error instanceof Error) {
+        console.error("Application error:", error);
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        console.error("Unknown error:", error);
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred",
+          variant: "destructive",
+        });
+      }
+      console.error("Error updating menu item:", error);
+      setError("Failed to update menu item");
+    }
+  }, [editDialog.item, editForm, supabase, toast, fetchData]);
 
   // Loading state
   if (isLoading) {
@@ -410,12 +616,26 @@ export default function MenuPage() {
       </div>
 
       {/* Menu Items Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8 relative">
         {filteredItems.map((item) => (
           <div
             key={item.id}
-            className="group flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm"
+            className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm"
           >
+            {/* Add Edit Button */}
+            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleEdit(item)}
+                className="h-8 w-8 p-0"
+                aria-label={`Edit ${item.name}`}
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Image */}
             <div className="relative w-full pb-[100%] mb-4">
               {item.image_url ? (
                 <Image
@@ -436,19 +656,27 @@ export default function MenuPage() {
                 </div>
               )}
             </div>
+
+            {/* Category */}
             <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
               {item.category?.name}
             </div>
+
+            {/* Name */}
             {item.name && (
               <h3 className="text-lg font-medium mb-2">
                 {highlightText(item.name, searchTerm)}
               </h3>
             )}
+
+            {/* Description */}
             {item.description && (
               <p className="text-sm text-neutral-600 mb-4">
                 {highlightText(item.description, searchTerm)}
               </p>
             )}
+
+            {/* Allergens */}
             <div className="flex flex-wrap gap-1 mb-4">
               {item.allergens?.map((allergen) => (
                 <Badge
@@ -460,6 +688,8 @@ export default function MenuPage() {
                 </Badge>
               ))}
             </div>
+
+            {/* Price */}
             <div className="mt-auto font-medium text-lg">
               ${item.price.toFixed(2)}
             </div>
@@ -472,11 +702,10 @@ export default function MenuPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Menu Item</DialogTitle>
-            <DialogDescription>
-              Create a new menu item with details
-            </DialogDescription>
+            <DialogDescription>Create a new menu item with details</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            {/* Name Field */}
             <div className="grid gap-2">
               <Label htmlFor="name">Name</Label>
               <Input
@@ -485,8 +714,10 @@ export default function MenuPage() {
                 onChange={(e) =>
                   setNewItem({ ...newItem, name: e.target.value })
                 }
+                placeholder="Menu item name"
               />
             </div>
+            {/* Price Field */}
             <div className="grid gap-2">
               <Label htmlFor="price">Price</Label>
               <Input
@@ -497,17 +728,19 @@ export default function MenuPage() {
                 onChange={(e) =>
                   setNewItem({ ...newItem, price: e.target.value })
                 }
+                placeholder="0.00"
               />
             </div>
+            {/* Category Selection */}
             <div className="grid gap-2">
-              <Label htmlFor="category">Category</Label>
+              <Label>Category</Label>
               <Select
                 value={newItem.category_id}
-                onValueChange={(value) =>
+                onValueChange={(value: string) =>
                   setNewItem({ ...newItem, category_id: value })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -519,6 +752,7 @@ export default function MenuPage() {
                 </SelectContent>
               </Select>
             </div>
+            {/* Description Field */}
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
               <Input
@@ -527,6 +761,19 @@ export default function MenuPage() {
                 onChange={(e) =>
                   setNewItem({ ...newItem, description: e.target.value })
                 }
+                placeholder="Menu item description"
+              />
+            </div>
+            {/* Allergen Selection */}
+            <div className="grid gap-2">
+              <Label>Allergens</Label>
+              <MultiSelect
+                options={allergens}
+                selected={newItem.allergen_ids}
+                onChange={(selectedIds: string[]) =>
+                  setNewItem({ ...newItem, allergen_ids: selectedIds })
+                }
+                placeholder="Select allergens"
               />
             </div>
           </div>
@@ -535,6 +782,107 @@ export default function MenuPage() {
               Cancel
             </Button>
             <Button onClick={handleCreateItem}>Create Item</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Menu Item Dialog */}
+      <Dialog
+        open={editDialog.open}
+        onOpenChange={(open) => !open && setEditDialog({ open: false, item: null })}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Menu Item</DialogTitle>
+            <DialogDescription>
+              Update the details of the selected menu item.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            {/* Name Field */}
+            <div className="grid gap-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, name: e.target.value })
+                }
+                placeholder="Menu item name"
+              />
+            </div>
+            {/* Description Field */}
+            <div className="grid gap-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Input
+                id="edit-description"
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, description: e.target.value })
+                }
+                placeholder="Menu item description"
+              />
+            </div>
+            {/* Price Field */}
+            <div className="grid gap-2">
+              <Label htmlFor="edit-price">Price</Label>
+              <Input
+                id="edit-price"
+                type="number"
+                step="0.01"
+                value={editForm.price}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, price: e.target.value })
+                }
+                placeholder="0.00"
+              />
+            </div>
+            {/* Category Selection */}
+            <div className="grid gap-2">
+              <Label>Category</Label>
+              <Select
+                value={editForm.category_id}
+                onValueChange={(value: string) =>
+                  setEditForm({ ...editForm, category_id: value })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem
+                      key={category.id}
+                      value={category.id}
+                      disabled={editForm.category_id === category.id}
+                    >
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Allergen Selection */}
+            <div className="grid gap-2">
+              <Label>Allergens</Label>
+              <MultiSelect
+                options={allergens}
+                selected={editForm.allergen_ids}
+                onChange={(selectedIds: string[]) =>
+                  setEditForm({ ...editForm, allergen_ids: selectedIds })
+                }
+                placeholder="Select allergens"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditDialog({ open: false, item: null })}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit}>Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

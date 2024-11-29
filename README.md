@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-11-27 16:43:03
+Generated on: 2024-11-28 23:19:50
 
 ## Documented Directories:
 - app/
@@ -77,11 +77,13 @@ src/
             │   ├── badge.tsx
             │   ├── button.tsx
             │   ├── calendar.tsx
+            │   ├── command.tsx
             │   ├── dialog.tsx
             │   ├── dropdown-menu.tsx
             │   ├── form.tsx
             │   ├── input.tsx
             │   ├── label.tsx
+            │   ├── multi-select.tsx
             │   ├── popover.tsx
             │   ├── select.tsx
             │   ├── table.tsx
@@ -2268,7 +2270,7 @@ export default function DailyMenuPage() {
 ```typescript
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Plus, Image as ImageIcon, Edit, Search } from "lucide-react"; // Added 'Search' icon
 import { Button } from "@/components/ui/button";
@@ -2294,6 +2296,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
+
+// ====== Custom Error Type ======
+interface SupabaseError {
+  message: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+}
+// ===============================
 
 // Updated Interfaces
 interface WineCategoryAssignment {
@@ -2351,6 +2362,14 @@ interface EditWineDialog {
   open: boolean;
   wine: Wine | null;
 }
+
+// ====== WineCardProps Interface ======
+interface WineCardProps {
+  wine: Wine; // Using the Wine interface we already defined
+  searchTerm: string; // To pass the search term for highlighting
+  handleEdit: (wine: Wine) => void; // Handler to edit wine
+}
+// =====================================
 
 export default function WinePage() {
   const [wines, setWines] = useState<Wine[]>([]);
@@ -2419,42 +2438,8 @@ export default function WinePage() {
   };
   // ========================================================
 
-  // Filter and sort wines using useMemo for performance optimization
-  const filteredAndSortedWines = useMemo(() => {
-    let filtered = wines;
-
-    // First apply search filter if there's a search term
-    if (searchTerm.trim()) {
-      const lowerSearchTerm = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (wine) =>
-          wine.name.toLowerCase().includes(lowerSearchTerm) ||
-          wine.description.toLowerCase().includes(lowerSearchTerm)
-      );
-    }
-
-    // Then apply category filter
-    if (selectedFilter !== "all") {
-      filtered = filtered.filter((wine) =>
-        wine.categories.some((cat) => cat.id.toString() === selectedFilter)
-      );
-    }
-
-    // Then sort
-    return [...filtered].sort((a, b) => {
-      if (sortBy === "name") {
-        return sortOrder === "asc"
-          ? a.name.localeCompare(b.name)
-          : b.name.localeCompare(a.name);
-      } else {
-        return sortOrder === "asc"
-          ? a.bottle_price - b.bottle_price
-          : b.bottle_price - a.bottle_price;
-      }
-    });
-  }, [wines, selectedFilter, sortBy, sortOrder, searchTerm]);
-
-  const fetchData = async () => {
+  // ====== fetchData Function with useCallback ======
+  const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -2506,8 +2491,16 @@ export default function WinePage() {
 
       setCategories(categoriesData || []);
       setWines(transformedWines || []);
-    } catch (error) {
-      console.error("Error fetching data:", error);
+    } catch (error: unknown) {
+      const supabaseError = error as SupabaseError;
+      console.error("Complete error details:", {
+        error: supabaseError,
+        message: supabaseError.message,
+        details: supabaseError.details,
+        hint: supabaseError.hint,
+        code: supabaseError.code,
+      });
+
       setError("Failed to load wines");
       toast({
         title: "Error",
@@ -2517,11 +2510,49 @@ export default function WinePage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [supabase, toast]);
+  // ================================================
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]); // Added fetchData to dependencies
+
+  // ====== Filter and Sort Wines ======
+  // Filter and sort wines using useMemo for performance optimization
+  const filteredAndSortedWines = useMemo(() => {
+    let filtered = wines;
+
+    // First apply search filter if there's a search term
+    if (searchTerm.trim()) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (wine) =>
+          wine.name.toLowerCase().includes(lowerSearchTerm) ||
+          wine.description.toLowerCase().includes(lowerSearchTerm)
+      );
+    }
+
+    // Then apply category filter
+    if (selectedFilter !== "all") {
+      filtered = filtered.filter((wine) =>
+        wine.categories.some((cat) => cat.id.toString() === selectedFilter)
+      );
+    }
+
+    // Then sort
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "name") {
+        return sortOrder === "asc"
+          ? a.name.localeCompare(b.name)
+          : b.name.localeCompare(a.name);
+      } else {
+        return sortOrder === "asc"
+          ? a.bottle_price - b.bottle_price
+          : b.bottle_price - a.bottle_price;
+      }
+    });
+  }, [wines, selectedFilter, sortBy, sortOrder, searchTerm]);
+  // ====================================
 
   const handleCreateWine = async () => {
     try {
@@ -2585,11 +2616,13 @@ export default function WinePage() {
         title: "Success",
         description: "Wine added successfully",
       });
-    } catch (error) {
-      console.error("Error creating wine:", error);
+    } catch (error: unknown) {
+      console.error("Error:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "An unexpected error occurred";
       toast({
         title: "Error",
-        description: "Failed to create wine",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -2616,11 +2649,13 @@ export default function WinePage() {
           !currentStatus ? "activated" : "deactivated"
         } successfully`,
       });
-    } catch (error) {
-      console.error("Error toggling wine status:", error);
+    } catch (error: unknown) {
+      console.error("Error:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "An unexpected error occurred";
       toast({
         title: "Error",
-        description: "Failed to update wine status",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -2704,11 +2739,13 @@ export default function WinePage() {
       // Close the image dialog
       setIsImageDialogOpen(false);
       setSelectedWineId(null);
-    } catch (error) {
-      console.error("Error uploading image:", error);
+    } catch (error: unknown) {
+      console.error("Error:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "An unexpected error occurred";
       toast({
         title: "Error",
-        description: "Failed to upload image",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -2820,13 +2857,14 @@ export default function WinePage() {
         description: "Wine updated successfully",
       });
       setEditDialog({ open: false, wine: null });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const supabaseError = error as SupabaseError;
       console.error("Complete error details:", {
-        error,
-        message: error?.message,
-        details: error?.details,
-        hint: error?.hint,
-        code: error?.code,
+        error: supabaseError,
+        message: supabaseError.message,
+        details: supabaseError.details,
+        hint: supabaseError.hint,
+        code: supabaseError.code,
       });
 
       // Still refresh data to ensure UI is in sync
@@ -2836,7 +2874,7 @@ export default function WinePage() {
       toast({
         title: "Warning",
         description:
-          error?.message ||
+          supabaseError.message ||
           "Wine details updated but categories could not be assigned",
         variant: "destructive",
       });
@@ -2846,7 +2884,7 @@ export default function WinePage() {
   // ==========================================
 
   // ====== WineCard Component ======
-  const WineCard = ({ wine }: { wine: Wine }) => (
+  const WineCard: React.FC<WineCardProps> = ({ wine, searchTerm, handleEdit }) => (
     <div
       className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm 
                  transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
@@ -2998,7 +3036,12 @@ export default function WinePage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
           {filteredAndSortedWines.map((wine) => (
-            <WineCard key={wine.id} wine={wine} />
+            <WineCard
+              key={wine.id}
+              wine={wine}
+              searchTerm={searchTerm}
+              handleEdit={handleEdit}
+            />
           ))}
         </div>
       )}
@@ -3353,10 +3396,11 @@ export default function WinePage() {
 ```typescript
 "use client";
 
-import { useState, useEffect } from "react";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { useState, useEffect, useMemo } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Image from "next/image";
-import { Plus } from "lucide-react";
+import { Plus, Search, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -3436,8 +3480,23 @@ type NewMenuItem = {
   price: string;
   category_id: string;
   active: boolean;
-  allergen_ids: string[];
+  allergen_ids: string[]; // Ensured as an array of strings
 };
+
+// Type for edit form
+type EditFormState = {
+  name: string;
+  description: string;
+  price: string;
+  category_id: string;
+  allergen_ids: string[]; // Ensured as an array of strings
+};
+
+// Define the edit dialog state interface
+interface EditMenuDialog {
+  open: boolean;
+  item: MenuItem | null;
+}
 
 export default function MenuPage() {
   // State declarations
@@ -3448,13 +3507,33 @@ export default function MenuPage() {
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
+  
+  // Initialize newItem with proper type
   const [newItem, setNewItem] = useState<NewMenuItem>({
     name: "",
     description: "",
     price: "",
     category_id: "",
     active: true,
-    allergen_ids: [],
+    allergen_ids: [], // Initialized as empty array
+  });
+
+  // Add search state
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Define the edit dialog state interface
+  const [editDialog, setEditDialog] = useState<EditMenuDialog>({
+    open: false,
+    item: null,
+  });
+
+  // Initialize editForm with proper type
+  const [editForm, setEditForm] = useState<EditFormState>({
+    name: "",
+    description: "",
+    price: "",
+    category_id: "",
+    allergen_ids: [], // Initialized as empty array with type assertion
   });
 
   // Initialize Supabase client and toast
@@ -3467,84 +3546,125 @@ export default function MenuPage() {
     return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/${imagePath}`;
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
+  // Add highlight text function
+  const highlightText = (text: string, searchTerm: string) => {
+    if (!searchTerm.trim()) return text;
 
-        // Parallel data fetching
-        const [allergensResponse, categoriesResponse, itemsResponse] =
-          await Promise.all([
-            supabase.from("allergens").select("*").order("name"),
-            supabase.from("menu_categories").select("*").order("name"),
-            supabase
-              .from("menu_items")
-              .select(
-                `
+    const regex = new RegExp(`(${searchTerm})`, "gi");
+    const parts = text.split(regex);
+
+    return parts.map((part, index) =>
+      regex.test(part) ? (
+        <span key={index} className="bg-orange-500 text-white">
+          {part}
+        </span>
+      ) : (
+        part
+      )
+    );
+  };
+
+  // Fetch data function accessible throughout the component
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+
+      // Parallel data fetching
+      const [allergensResponse, categoriesResponse, itemsResponse] = await Promise.all([
+        supabase.from("allergens").select("*").order("name"),
+        supabase.from("menu_categories").select("*").order("name"),
+        supabase
+          .from("menu_items")
+          .select(`
+            id,
+            name,
+            description,
+            price,
+            category_id,
+            image_path,
+            active,
+            menu_categories!menu_items_category_id_fkey (
               id,
-              name,
-              description,
-              price,
-              category_id,
-              image_path,
-              active,
-              menu_categories!menu_items_category_id_fkey (
+              name
+            ),
+            menu_item_allergens (
+              allergens (
                 id,
                 name
-              ),
-              menu_item_allergens (
-                allergens (
-                  id,
-                  name
-                )
               )
-            `
-              )
-              .order("name"),
-          ]);
+            )
+          `)
+          .order("name"),
+      ]);
 
-        // Error checking
-        if (allergensResponse.error) throw allergensResponse.error;
-        if (categoriesResponse.error) throw categoriesResponse.error;
-        if (itemsResponse.error) throw itemsResponse.error;
+      // Error checking
+      if (allergensResponse.error) throw allergensResponse.error;
+      if (categoriesResponse.error) throw categoriesResponse.error;
+      if (itemsResponse.error) throw itemsResponse.error;
 
-        // Set basic data
-        setAllergens(allergensResponse.data || []);
-        setCategories(categoriesResponse.data || []);
+      // Set basic data
+      setAllergens(allergensResponse.data || []);
+      setCategories(categoriesResponse.data || []);
 
-        // Transform and type menu items
-        const rawItems = itemsResponse.data as unknown as RawMenuItemResponse[];
-        const transformedItems = rawItems.map((item) => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          price: item.price,
-          category_id: item.category_id,
-          image_url: getImageUrl(item.image_path),
-          image_path: item.image_path,
-          active: item.active,
-          category: item.menu_categories[0] || null,
-          allergens: item.menu_item_allergens.map(
-            (relation) => relation.allergens
-          ),
-        }));
+      // Transform and type menu items
+      const rawItems = itemsResponse.data as unknown as RawMenuItemResponse[];
+      const transformedItems = rawItems.map((item) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        price: item.price,
+        category_id: item.category_id,
+        image_url: getImageUrl(item.image_path),
+        image_path: item.image_path,
+        active: item.active,
+        category: item.menu_categories[0] || null,
+        allergens: item.menu_item_allergens.map((relation) => relation.allergens),
+      }));
 
-        setItems(transformedItems);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        setError("Failed to load menu items");
-        toast({
-          title: "Error",
-          description: "Failed to load menu items",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      setItems(transformedItems);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      setError("Failed to load menu items");
+      toast({
+        title: "Error",
+        description: "Failed to load menu items",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  // Fetch data on component mount
+  useEffect(() => {
     fetchData();
   }, [supabase, toast]);
+
+  // Filter items with search and category filter
+  const filteredItems = useMemo(() => {
+    let filtered = items;
+
+    // Apply search filter
+    if (searchTerm.trim()) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (item) =>
+          item.name.toLowerCase().includes(lowerSearchTerm) ||
+          item.description.toLowerCase().includes(lowerSearchTerm)
+      );
+    }
+
+    // Apply category filter
+    if (selectedFilter !== "all") {
+      filtered = filtered.filter(
+        (item) =>
+          item.category?.id === selectedFilter ||
+          item.category_id === selectedFilter
+      );
+    }
+
+    return filtered;
+  }, [items, selectedFilter, searchTerm]);
 
   // Create new item handler
   const handleCreateItem = async () => {
@@ -3587,28 +3707,8 @@ export default function MenuPage() {
         if (assignmentError) throw assignmentError;
       }
 
-      // Find category for the new item
-      const category = categories.find((c) => c.id === newItem.category_id);
-      const itemAllergens = allergens.filter((a) =>
-        newItem.allergen_ids.includes(a.id)
-      );
-
-      // Create new menu item for state
-      const newMenuItem: MenuItem = {
-        id: item.id,
-        name: newItem.name,
-        description: newItem.description,
-        price: parseFloat(newItem.price),
-        category_id: newItem.category_id,
-        image_url: null,
-        image_path: null,
-        active: newItem.active,
-        category: category || null,
-        allergens: itemAllergens,
-      };
-
-      // Update state and cleanup
-      setItems((prev) => [...prev, newMenuItem]);
+      // Refresh data
+      await fetchData();
       setIsDialogOpen(false);
       setNewItem({
         name: "",
@@ -3633,15 +3733,74 @@ export default function MenuPage() {
     }
   };
 
-  // Filter items based on selected category
-  const filteredItems =
-    selectedFilter === "all"
-      ? items
-      : items.filter(
-          (item) =>
-            item.category?.id === selectedFilter ||
-            item.category_id === selectedFilter
-        );
+  // Edit handlers
+  const handleEdit = (item: MenuItem) => {
+    setEditForm({
+      name: item.name,
+      description: item.description,
+      price: item.price.toString(),
+      category_id: item.category_id,
+      allergen_ids: item.allergens?.map((a) => a.id) || [],
+    });
+    setEditDialog({ open: true, item });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editDialog.item) return;
+
+    try {
+      // Update menu item
+      const { error: itemError } = await supabase
+        .from("menu_items")
+        .update({
+          name: editForm.name,
+          description: editForm.description,
+          price: parseFloat(editForm.price),
+          category_id: editForm.category_id,
+        })
+        .eq("id", editDialog.item.id);
+
+      if (itemError) throw itemError;
+
+      // Update allergens
+      // First, delete existing assignments
+      const { error: deleteError } = await supabase
+        .from("menu_item_allergens")
+        .delete()
+        .eq("menu_item_id", editDialog.item.id);
+
+      if (deleteError) throw deleteError;
+
+      // Then, insert new assignments if any
+      if (editForm.allergen_ids.length > 0) {
+        const allergenAssignments = editForm.allergen_ids.map((allergenId) => ({
+          menu_item_id: editDialog.item!.id,
+          allergen_id: allergenId,
+        }));
+
+        const { error: assignmentError } = await supabase
+          .from("menu_item_allergens")
+          .insert(allergenAssignments);
+
+        if (assignmentError) throw assignmentError;
+      }
+
+      // Refresh data
+      await fetchData();
+      toast({
+        title: "Success",
+        description: "Menu item updated successfully",
+      });
+      setEditDialog({ open: false, item: null });
+    } catch (error) {
+      console.error("Error updating menu item:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update menu item",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Loading state
   if (isLoading) {
@@ -3681,14 +3840,36 @@ export default function MenuPage() {
 
   // Main render
   return (
-    <div className="container p-6">
+    <div className="container p-6 relative">
+      {/* Page Header */}
       <PageHeader
         heading="Menu Items"
         text="Manage your restaurant's menu selection"
       >
-        <div className="flex items-center gap-4">
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Item
+        </Button>
+      </PageHeader>
+
+      {/* Search and Filter Controls */}
+      <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
+        <div className="flex flex-col md:flex-row gap-4">
+          {/* Search input */}
+          <div className="relative w-full md:w-[300px]">
+            <Input
+              type="text"
+              placeholder="Search menu items..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10"
+            />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          </div>
+
+          {/* Category filter */}
           <Select value={selectedFilter} onValueChange={setSelectedFilter}>
-            <SelectTrigger className="h-9 w-[180px]">
+            <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Filter by Category" />
             </SelectTrigger>
             <SelectContent>
@@ -3700,19 +3881,29 @@ export default function MenuPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button onClick={() => setIsDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Item
-          </Button>
         </div>
-      </PageHeader>
+      </div>
 
+      {/* Menu Items Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
         {filteredItems.map((item) => (
           <div
             key={item.id}
-            className="group flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm"
+            className="relative group flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm"
           >
+            {/* Edit Button positioned at top-right */}
+            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleEdit(item)}
+                className="h-8 w-8 p-0"
+                aria-label={`Edit ${item.name}`}
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            </div>
+
             <div className="relative w-full pb-[100%] mb-4">
               {item.image_url ? (
                 <Image
@@ -3736,8 +3927,16 @@ export default function MenuPage() {
             <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
               {item.category?.name}
             </div>
-            <h3 className="text-lg font-medium mb-2">{item.name}</h3>
-            <p className="text-sm text-neutral-600 mb-4">{item.description}</p>
+            {item.name && (
+              <h3 className="text-lg font-medium mb-2">
+                {highlightText(item.name, searchTerm)}
+              </h3>
+            )}
+            {item.description && (
+              <p className="text-sm text-neutral-600 mb-4">
+                {highlightText(item.description, searchTerm)}
+              </p>
+            )}
             <div className="flex flex-wrap gap-1 mb-4">
               {item.allergens?.map((allergen) => (
                 <Badge
@@ -3756,6 +3955,7 @@ export default function MenuPage() {
         ))}
       </div>
 
+      {/* Add Menu Item Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -3817,12 +4017,114 @@ export default function MenuPage() {
                 }
               />
             </div>
+            {/* For Add Menu Item Dialog */}
+            <div className="grid gap-2">
+              <Label htmlFor="allergens">Allergens</Label>
+              <MultiSelect
+                options={allergens}
+                selected={newItem.allergen_ids}
+                onChange={(selectedIds: string[]) =>
+                  setNewItem({ ...newItem, allergen_ids: selectedIds })
+                }
+                placeholder="Select allergens"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleCreateItem}>Create Item</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Menu Item Dialog */}
+      <Dialog
+        open={editDialog.open}
+        onOpenChange={(open) => !open && setEditDialog({ open: false, item: null })}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Menu Item</DialogTitle>
+            <DialogDescription>
+              Update the details of the selected menu item
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, name: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-price">Price</Label>
+              <Input
+                id="edit-price"
+                type="number"
+                step="0.01"
+                value={editForm.price}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, price: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-category">Category</Label>
+              <Select
+                value={editForm.category_id}
+                onValueChange={(value) =>
+                  setEditForm({ ...editForm, category_id: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Input
+                id="edit-description"
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, description: e.target.value })
+                }
+              />
+            </div>
+            {/* For Edit Menu Item Dialog */}
+            <div className="grid gap-2">
+              <Label>Allergens</Label>
+              <MultiSelect
+                options={allergens}
+                selected={editForm.allergen_ids}
+                onChange={(selectedIds: string[]) =>
+                  setEditForm({ ...editForm, allergen_ids: selectedIds })
+                }
+                placeholder="Select allergens"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditDialog({ open: false, item: null })}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit}>Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -6376,6 +6678,163 @@ export { Calendar }
 
 ```
 
+### src/components/ui/command.tsx
+
+```typescript
+import * as React from "react"
+import { type DialogProps } from "@radix-ui/react-dialog"
+import { Command as CommandPrimitive } from "cmdk"
+import { Search } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+
+const Command = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive
+    ref={ref}
+    className={cn(
+      "flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground",
+      className
+    )}
+    {...props}
+  />
+))
+Command.displayName = CommandPrimitive.displayName
+
+const CommandDialog = ({ children, ...props }: DialogProps) => {
+  return (
+    <Dialog {...props}>
+      <DialogContent className="overflow-hidden p-0">
+        <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
+          {children}
+        </Command>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+const CommandInput = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Input>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
+>(({ className, ...props }, ref) => (
+  <div className="flex items-center border-b px-3" cmdk-input-wrapper="">
+    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+    <CommandPrimitive.Input
+      ref={ref}
+      className={cn(
+        "flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      {...props}
+    />
+  </div>
+))
+
+CommandInput.displayName = CommandPrimitive.Input.displayName
+
+const CommandList = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.List>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.List
+    ref={ref}
+    className={cn("max-h-[300px] overflow-y-auto overflow-x-hidden", className)}
+    {...props}
+  />
+))
+
+CommandList.displayName = CommandPrimitive.List.displayName
+
+const CommandEmpty = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Empty>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>
+>((props, ref) => (
+  <CommandPrimitive.Empty
+    ref={ref}
+    className="py-6 text-center text-sm"
+    {...props}
+  />
+))
+
+CommandEmpty.displayName = CommandPrimitive.Empty.displayName
+
+const CommandGroup = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Group>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Group>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.Group
+    ref={ref}
+    className={cn(
+      "overflow-hidden p-1 text-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground",
+      className
+    )}
+    {...props}
+  />
+))
+
+CommandGroup.displayName = CommandPrimitive.Group.displayName
+
+const CommandSeparator = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Separator>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Separator>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.Separator
+    ref={ref}
+    className={cn("-mx-1 h-px bg-border", className)}
+    {...props}
+  />
+))
+CommandSeparator.displayName = CommandPrimitive.Separator.displayName
+
+const CommandItem = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.Item
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default gap-2 select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[disabled=true]:pointer-events-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+      className
+    )}
+    {...props}
+  />
+))
+
+CommandItem.displayName = CommandPrimitive.Item.displayName
+
+const CommandShortcut = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span
+      className={cn(
+        "ml-auto text-xs tracking-widest text-muted-foreground",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+CommandShortcut.displayName = "CommandShortcut"
+
+export {
+  Command,
+  CommandDialog,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandShortcut,
+  CommandSeparator,
+}
+
+```
+
 ### src/components/ui/dialog.tsx
 
 ```typescript
@@ -6942,6 +7401,144 @@ Label.displayName = LabelPrimitive.Root.displayName
 
 export { Label }
 
+```
+
+### src/components/ui/multi-select.tsx
+
+```typescript
+"use client"
+
+import * as React from "react"
+import { Check, ChevronsUpDown } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { cn } from "@/lib/utils"
+
+interface Option {
+  id: string
+  name: string
+}
+
+interface MultiSelectProps {
+  options: Option[]
+  selected: string[]
+  onChange: (selectedIds: string[]) => void
+  placeholder?: string
+}
+
+export function MultiSelect({
+  options = [],
+  selected = [],
+  onChange,
+  placeholder = "Select items..."
+}: MultiSelectProps) {
+  const [open, setOpen] = React.useState(false)
+  const [value, setValue] = React.useState("")
+
+  const filteredOptions = React.useMemo(() => {
+    if (!value) return options
+    return options.filter((option) => 
+      option.name.toLowerCase().includes(value.toLowerCase())
+    )
+  }, [options, value])
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full justify-between"
+          >
+            <span className="truncate">
+              {selected.length === 0
+                ? placeholder
+                : `${selected.length} selected`}
+            </span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-full p-0" align="start">
+          <Command>
+            <CommandInput
+              placeholder="Search..."
+              value={value}
+              onValueChange={setValue}
+              className="h-9"
+            />
+            <CommandEmpty>No options found.</CommandEmpty>
+            <CommandGroup className="max-h-[200px] overflow-auto">
+              {filteredOptions.map((option) => {
+                const isSelected = selected.includes(option.id)
+                return (
+                  <CommandItem
+                    key={option.id}
+                    value={option.name}
+                    onSelect={() => {
+                      const newSelected = isSelected
+                        ? selected.filter((id) => id !== option.id)
+                        : [...selected, option.id]
+                      onChange(newSelected)
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        isSelected ? "opacity-100" : "opacity-0"
+                      )}
+                    />
+                    {option.name}
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selected.map((selectedId) => {
+            const selectedOption = options.find((opt) => opt.id === selectedId)
+            if (!selectedOption) return null
+            return (
+              <Badge
+                key={selectedId}
+                variant="secondary"
+                className="flex items-center gap-1"
+              >
+                {selectedOption.name}
+                <button
+                  type="button"
+                  className="ml-1 rounded-full outline-none hover:bg-secondary"
+                  onClick={() => {
+                    onChange(selected.filter((id) => id !== selectedId))
+                  }}
+                >
+                  ×
+                </button>
+              </Badge>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
 ```
 
 ### src/components/ui/popover.tsx
