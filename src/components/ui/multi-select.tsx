@@ -1,16 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
+import { ChevronsUpDown } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-} from "@/components/ui/command"
+import { Input } from "@/components/ui/input"
 import {
   Popover,
   PopoverContent,
@@ -39,47 +33,26 @@ export function MultiSelect({
   disabled = false
 }: MultiSelectProps) {
   const [open, setOpen] = React.useState(false)
-  const [inputValue, setInputValue] = React.useState("")
+  const [searchQuery, setSearchQuery] = React.useState("")
 
-  // Initialize with memoized safe values
-  const safeOptions = React.useMemo(() => {
-    return Array.isArray(options) 
-      ? options.filter((option): option is Option => 
-          option !== null && 
-          typeof option === 'object' && 
-          'id' in option && 
-          'name' in option
-        )
-      : []
-  }, [options])
-
-  const safeSelected = React.useMemo(() => {
-    return Array.isArray(selected) 
-      ? selected.filter((id): id is string => typeof id === 'string')
-      : []
-  }, [selected])
-
-  // Filter options based on input
+  // Filter options based on search query
   const filteredOptions = React.useMemo(() => {
-    const searchValue = inputValue.toLowerCase().trim()
-    return searchValue === "" 
-      ? safeOptions 
-      : safeOptions.filter((option) => 
-          option.name.toLowerCase().includes(searchValue)
-        )
-  }, [safeOptions, inputValue])
+    return options.filter(option =>
+      option.name.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  }, [options, searchQuery])
 
-  // Handle selection changes
-  const handleSelect = React.useCallback((optionId: string) => {
-    const isSelected = safeSelected.includes(optionId)
+  // Handle option selection
+  const toggleOption = (optionId: string) => {
+    const isSelected = selected.includes(optionId)
     const newSelected = isSelected
-      ? safeSelected.filter((id) => id !== optionId)
-      : [...safeSelected, optionId]
+      ? selected.filter(id => id !== optionId)
+      : [...selected, optionId]
     onChange(newSelected)
-  }, [safeSelected, onChange])
+  }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="relative">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -88,53 +61,73 @@ export function MultiSelect({
             aria-expanded={open}
             className="w-full justify-between"
             disabled={disabled}
-            type="button"
           >
             <span className="truncate">
-              {safeSelected.length === 0
+              {selected.length === 0
                 ? placeholder
-                : `${safeSelected.length} selected`}
+                : `${selected.length} selected`}
             </span>
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-full p-0" align="start">
-          <Command shouldFilter={false}>
-            <CommandInput
+        <PopoverContent className="w-full p-0">
+          <div className="p-2">
+            <Input
               placeholder="Search..."
-              value={inputValue}
-              onValueChange={setInputValue}
-              className="h-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8"
             />
-            <CommandEmpty>No options found.</CommandEmpty>
-            <CommandGroup className="max-h-[200px] overflow-auto">
-              {filteredOptions.map((option) => {
-                const isSelected = safeSelected.includes(option.id)
+          </div>
+          <div className="max-h-[200px] overflow-auto p-2">
+            {filteredOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground p-2">No options found</p>
+            ) : (
+              filteredOptions.map((option) => {
+                const isSelected = selected.includes(option.id)
                 return (
-                  <CommandItem
+                  <div
                     key={option.id}
-                    value={option.id}
-                    onSelect={() => handleSelect(option.id)}
+                    className={cn(
+                      "flex items-center gap-2 p-2 cursor-pointer rounded-sm hover:bg-accent",
+                      isSelected && "bg-accent"
+                    )}
+                    onClick={() => toggleOption(option.id)}
                   >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        isSelected ? "opacity-100" : "opacity-0"
+                    <div className={cn(
+                      "w-4 h-4 border rounded-sm flex items-center justify-center",
+                      isSelected && "bg-primary border-primary"
+                    )}>
+                      {isSelected && (
+                        <svg
+                          className="w-3 h-3 text-primary-foreground"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
                       )}
-                    />
+                    </div>
                     {option.name}
-                  </CommandItem>
+                  </div>
                 )
-              })}
-            </CommandGroup>
-          </Command>
+              })
+            )}
+          </div>
         </PopoverContent>
       </Popover>
-      
-      {safeSelected.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {safeSelected.map((selectedId) => {
-            const selectedOption = safeOptions.find((opt) => opt.id === selectedId)
+
+      {/* Selected Items */}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {selected.map((selectedId) => {
+            const selectedOption = options.find((opt) => opt.id === selectedId)
             if (!selectedOption) return null
             return (
               <Badge
@@ -149,7 +142,7 @@ export function MultiSelect({
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    handleSelect(selectedId)
+                    toggleOption(selectedId)
                   }}
                   disabled={disabled}
                 >
