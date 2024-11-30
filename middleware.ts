@@ -2,12 +2,24 @@ import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+// Check for required environment variables
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  throw new Error(
+    'Please define NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables'
+  );
+}
+
 export async function middleware(request: NextRequest) {
   const res = NextResponse.next();
   const supabase = createMiddlewareClient({ req: request, res });
   const { pathname } = request.nextUrl;
 
   try {
+    // Skip auth check for not-found and error pages
+    if (pathname.includes('/_not-found') || pathname.includes('/_error')) {
+      return res;
+    }
+
     // Refresh session if it exists
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -47,8 +59,12 @@ export async function middleware(request: NextRequest) {
     return res;
   } catch (error) {
     console.error('Middleware error:', error);
-    // On error, redirect to login
-    return NextResponse.redirect(new URL('/login', request.url));
+    
+    // On error, redirect to login except for not-found and error pages
+    if (!pathname.includes('/_not-found') && !pathname.includes('/_error')) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    return res;
   }
 }
 
@@ -60,7 +76,9 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder
+     * - not-found page
+     * - error page
      */
-    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
+    '/((?!_next/static|_next/image|favicon.ico|public/|_not-found|_error).*)',
   ],
 };
