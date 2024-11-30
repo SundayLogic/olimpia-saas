@@ -85,7 +85,7 @@ export const getCategories = async () => {
   const supabase = createServerClient();
   try {
     const { data, error } = await supabase
-      .from("categories")
+      .from("menu_categories")
       .select("*")
       .order("name");
 
