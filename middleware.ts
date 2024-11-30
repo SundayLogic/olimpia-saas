@@ -2,21 +2,26 @@ import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Check for required environment variables
-if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-  throw new Error(
-    'Please define NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables'
-  );
-}
-
 export async function middleware(request: NextRequest) {
   const res = NextResponse.next();
-  const supabase = createMiddlewareClient({ req: request, res });
   const { pathname } = request.nextUrl;
 
   try {
-    // Skip auth check for not-found and error pages
-    if (pathname.includes('/_not-found') || pathname.includes('/_error')) {
+    // Check for environment variables
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      console.warn('Supabase environment variables not found');
+      return NextResponse.next();
+    }
+
+    const supabase = createMiddlewareClient({ req: request, res });
+
+    // Skip auth check for public routes and static files
+    if (
+      pathname.includes('/_not-found') ||
+      pathname.includes('/_error') ||
+      pathname.startsWith('/_next') ||
+      pathname.startsWith('/api/auth')
+    ) {
       return res;
     }
 
@@ -41,16 +46,25 @@ export async function middleware(request: NextRequest) {
       }
 
       // Check for admin-only routes
-      if ((pathname.startsWith('/dashboard/users') || pathname.startsWith('/dashboard/settings'))) {
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        const { data: profile } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', user?.id)
-          .single();
+      if (pathname.startsWith('/dashboard/users') || pathname.startsWith('/dashboard/settings')) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          
+          if (user) {
+            const { data: profile } = await supabase
+              .from('users')
+              .select('role')
+              .eq('id', user.id)
+              .single();
 
-        if (profile?.role !== 'admin') {
+            if (profile?.role !== 'admin') {
+              return NextResponse.redirect(new URL('/dashboard', request.url));
+            }
+          } else {
+            return NextResponse.redirect(new URL('/login', request.url));
+          }
+        } catch (error) {
+          console.error('Error checking admin status:', error);
           return NextResponse.redirect(new URL('/dashboard', request.url));
         }
       }
@@ -61,7 +75,12 @@ export async function middleware(request: NextRequest) {
     console.error('Middleware error:', error);
     
     // On error, redirect to login except for not-found and error pages
-    if (!pathname.includes('/_not-found') && !pathname.includes('/_error')) {
+    if (
+      !pathname.includes('/_not-found') && 
+      !pathname.includes('/_error') &&
+      !pathname.includes('/login') &&
+      !pathname.includes('/signup')
+    ) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
     return res;
