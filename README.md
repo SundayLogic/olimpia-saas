@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-11-28 23:19:50
+Generated on: 2024-11-29 13:52:54
 
 ## Documented Directories:
 - app/
@@ -3396,11 +3396,10 @@ export default function WinePage() {
 ```typescript
 "use client";
 
-import { MultiSelect } from "@/components/ui/multi-select";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Image from "next/image";
-import { Plus, Search, Edit } from "lucide-react";
+import { Plus, Search, Edit } from "lucide-react"; // Added 'Edit' icon
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -3423,6 +3422,8 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
+import type { PostgrestError } from "@supabase/postgrest-js"; // Added type import
+import { MultiSelect } from "@/components/ui/multi-select"; // Imported MultiSelect
 
 // Basic types
 type Allergen = {
@@ -3441,7 +3442,7 @@ type RawMenuItemResponse = {
   name: string;
   description: string;
   price: number;
-  category_id: string;
+  category_id: number; // Changed to number to match Database type
   image_path: string | null;
   active: boolean;
   menu_categories: Array<{
@@ -3462,7 +3463,7 @@ type MenuItem = {
   name: string;
   description: string;
   price: number;
-  category_id: string;
+  category_id: number; // Changed to number
   image_url: string | null;
   image_path: string | null;
   active: boolean;
@@ -3480,22 +3481,21 @@ type NewMenuItem = {
   price: string;
   category_id: string;
   active: boolean;
-  allergen_ids: string[]; // Ensured as an array of strings
+  allergen_ids: string[];
 };
 
-// Type for edit form
-type EditFormState = {
+// Updated Types for Edit Functionality
+interface EditDialogState {
+  open: boolean;
+  item: MenuItem | null;
+}
+
+interface EditFormData {
   name: string;
   description: string;
   price: string;
   category_id: string;
-  allergen_ids: string[]; // Ensured as an array of strings
-};
-
-// Define the edit dialog state interface
-interface EditMenuDialog {
-  open: boolean;
-  item: MenuItem | null;
+  allergen_ids: string[];
 }
 
 export default function MenuPage() {
@@ -3507,33 +3507,30 @@ export default function MenuPage() {
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
-  
-  // Initialize newItem with proper type
   const [newItem, setNewItem] = useState<NewMenuItem>({
     name: "",
     description: "",
     price: "",
     category_id: "",
     active: true,
-    allergen_ids: [], // Initialized as empty array
+    allergen_ids: [],
   });
 
   // Add search state
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Define the edit dialog state interface
-  const [editDialog, setEditDialog] = useState<EditMenuDialog>({
+  // Add state for Edit Functionality
+  const [editDialog, setEditDialog] = useState<EditDialogState>({
     open: false,
     item: null,
   });
 
-  // Initialize editForm with proper type
-  const [editForm, setEditForm] = useState<EditFormState>({
+  const [editForm, setEditForm] = useState<EditFormData>({
     name: "",
     description: "",
     price: "",
     category_id: "",
-    allergen_ids: [], // Initialized as empty array with type assertion
+    allergen_ids: [],
   });
 
   // Initialize Supabase client and toast
@@ -3564,12 +3561,10 @@ export default function MenuPage() {
     );
   };
 
-  // Fetch data function accessible throughout the component
-  const fetchData = async () => {
+  // Consolidate fetchData function with useCallback
+  const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
-
-      // Parallel data fetching
       const [allergensResponse, categoriesResponse, itemsResponse] = await Promise.all([
         supabase.from("allergens").select("*").order("name"),
         supabase.from("menu_categories").select("*").order("name"),
@@ -3583,21 +3578,15 @@ export default function MenuPage() {
             category_id,
             image_path,
             active,
-            menu_categories!menu_items_category_id_fkey (
-              id,
-              name
-            ),
+            menu_categories (id, name),
             menu_item_allergens (
-              allergens (
-                id,
-                name
-              )
+              allergens (id, name)
             )
           `)
           .order("name"),
       ]);
 
-      // Error checking
+      // Add error handling
       if (allergensResponse.error) throw allergensResponse.error;
       if (categoriesResponse.error) throw categoriesResponse.error;
       if (itemsResponse.error) throw itemsResponse.error;
@@ -3618,27 +3607,52 @@ export default function MenuPage() {
         image_path: item.image_path,
         active: item.active,
         category: item.menu_categories[0] || null,
-        allergens: item.menu_item_allergens.map((relation) => relation.allergens),
+        allergens: item.menu_item_allergens.map(
+          (relation) => relation.allergens
+        ),
       }));
 
       setItems(transformedItems);
     } catch (error) {
-      console.error("Error fetching data:", error);
+      // Define the type guard
+      const isPostgrestError = (error: unknown): error is PostgrestError =>
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        "message" in error;
+
+      if (isPostgrestError(error)) {
+        console.error("Database error:", error);
+        toast({
+          title: "Database Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else if (error instanceof Error) {
+        console.error("Application error:", error);
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        console.error("Unknown error:", error);
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred",
+          variant: "destructive",
+        });
+      }
       setError("Failed to load menu items");
-      toast({
-        title: "Error",
-        description: "Failed to load menu items",
-        variant: "destructive",
-      });
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Fetch data on component mount
-  useEffect(() => {
-    fetchData();
   }, [supabase, toast]);
+
+  // Call fetchData inside useEffect
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
 
   // Filter items with search and category filter
   const filteredItems = useMemo(() => {
@@ -3656,10 +3670,11 @@ export default function MenuPage() {
 
     // Apply category filter
     if (selectedFilter !== "all") {
+      const parsedFilter = parseInt(selectedFilter);
       filtered = filtered.filter(
         (item) =>
           item.category?.id === selectedFilter ||
-          item.category_id === selectedFilter
+          item.category_id === parsedFilter
       );
     }
 
@@ -3678,14 +3693,25 @@ export default function MenuPage() {
         return;
       }
 
+      // Validate price
+      const priceValue = parseFloat(newItem.price);
+      if (isNaN(priceValue) || priceValue < 0) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid positive price.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Create menu item
       const { data: item, error: itemError } = await supabase
         .from("menu_items")
         .insert({
           name: newItem.name,
           description: newItem.description,
-          price: parseFloat(newItem.price),
-          category_id: newItem.category_id,
+          price: priceValue,
+          category_id: parseInt(newItem.category_id), // Convert to number
           active: newItem.active,
         })
         .select()
@@ -3707,8 +3733,28 @@ export default function MenuPage() {
         if (assignmentError) throw assignmentError;
       }
 
-      // Refresh data
-      await fetchData();
+      // Find category for the new item
+      const category = categories.find((c) => c.id === newItem.category_id);
+      const itemAllergens = allergens.filter((a) =>
+        newItem.allergen_ids.includes(a.id)
+      );
+
+      // Create new menu item for state
+      const newMenuItem: MenuItem = {
+        id: item.id,
+        name: newItem.name,
+        description: newItem.description,
+        price: priceValue,
+        category_id: parseInt(newItem.category_id), // Convert to number
+        image_url: null,
+        image_path: null,
+        active: newItem.active,
+        category: category || null,
+        allergens: itemAllergens,
+      };
+
+      // Update state and cleanup
+      setItems((prev) => [...prev, newMenuItem]);
       setIsDialogOpen(false);
       setNewItem({
         name: "",
@@ -3724,45 +3770,101 @@ export default function MenuPage() {
         description: "Menu item created successfully",
       });
     } catch (error) {
+      // Define the type guard
+      const isPostgrestError = (error: unknown): error is PostgrestError =>
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        "message" in error;
+
+      if (isPostgrestError(error)) {
+        console.error("Database error:", error);
+        toast({
+          title: "Database Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else if (error instanceof Error) {
+        console.error("Application error:", error);
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        console.error("Unknown error:", error);
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred",
+          variant: "destructive",
+        });
+      }
       console.error("Error creating item:", error);
-      toast({
-        title: "Error",
-        description: "Failed to create menu item",
-        variant: "destructive",
-      });
+      setError("Failed to create menu item");
     }
   };
 
-  // Edit handlers
-  const handleEdit = (item: MenuItem) => {
+  // Handler to open the edit dialog with the selected menu item's data
+  const handleEdit = useCallback((item: MenuItem) => {
     setEditForm({
       name: item.name,
       description: item.description,
       price: item.price.toString(),
-      category_id: item.category_id,
+      category_id: item.category_id.toString(),
       allergen_ids: item.allergens?.map((a) => a.id) || [],
     });
     setEditDialog({ open: true, item });
-  };
+  }, []);
 
-  const handleSaveEdit = async () => {
+  // Handler to save the edited menu item
+  const handleSaveEdit = useCallback(async () => {
     if (!editDialog.item) return;
 
     try {
-      // Update menu item
+      // Validation
+      if (!editForm.name || !editForm.category_id || !editForm.price) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const priceValue = parseFloat(editForm.price);
+      if (isNaN(priceValue) || priceValue < 0) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid positive price.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const categoryId = parseInt(editForm.category_id);
+      if (isNaN(categoryId)) {
+        toast({
+          title: "Error",
+          description: "Please select a valid category.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Update menu item details
       const { error: itemError } = await supabase
         .from("menu_items")
         .update({
           name: editForm.name,
           description: editForm.description,
-          price: parseFloat(editForm.price),
-          category_id: editForm.category_id,
+          price: priceValue,
+          category_id: categoryId,
         })
         .eq("id", editDialog.item.id);
 
       if (itemError) throw itemError;
 
-      // Update allergens
+      // Update allergen assignments
       // First, delete existing assignments
       const { error: deleteError } = await supabase
         .from("menu_item_allergens")
@@ -3789,18 +3891,43 @@ export default function MenuPage() {
       await fetchData();
       toast({
         title: "Success",
-        description: "Menu item updated successfully",
+        description: "Menu item updated successfully.",
       });
       setEditDialog({ open: false, item: null });
     } catch (error) {
+      // Define the type guard
+      const isPostgrestError = (error: unknown): error is PostgrestError =>
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        "message" in error;
+
+      if (isPostgrestError(error)) {
+        console.error("Database error:", error);
+        toast({
+          title: "Database Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else if (error instanceof Error) {
+        console.error("Application error:", error);
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        console.error("Unknown error:", error);
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred",
+          variant: "destructive",
+        });
+      }
       console.error("Error updating menu item:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update menu item",
-        variant: "destructive",
-      });
+      setError("Failed to update menu item");
     }
-  };
+  }, [editDialog.item, editForm, supabase, toast, fetchData]);
 
   // Loading state
   if (isLoading) {
@@ -3840,7 +3967,7 @@ export default function MenuPage() {
 
   // Main render
   return (
-    <div className="container p-6 relative">
+    <div className="container p-6">
       {/* Page Header */}
       <PageHeader
         heading="Menu Items"
@@ -3885,13 +4012,13 @@ export default function MenuPage() {
       </div>
 
       {/* Menu Items Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8 relative">
         {filteredItems.map((item) => (
           <div
             key={item.id}
-            className="relative group flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm"
+            className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm"
           >
-            {/* Edit Button positioned at top-right */}
+            {/* Add Edit Button */}
             <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
               <Button
                 variant="secondary"
@@ -3904,6 +4031,7 @@ export default function MenuPage() {
               </Button>
             </div>
 
+            {/* Image */}
             <div className="relative w-full pb-[100%] mb-4">
               {item.image_url ? (
                 <Image
@@ -3924,19 +4052,27 @@ export default function MenuPage() {
                 </div>
               )}
             </div>
+
+            {/* Category */}
             <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
               {item.category?.name}
             </div>
+
+            {/* Name */}
             {item.name && (
               <h3 className="text-lg font-medium mb-2">
                 {highlightText(item.name, searchTerm)}
               </h3>
             )}
+
+            {/* Description */}
             {item.description && (
               <p className="text-sm text-neutral-600 mb-4">
                 {highlightText(item.description, searchTerm)}
               </p>
             )}
+
+            {/* Allergens */}
             <div className="flex flex-wrap gap-1 mb-4">
               {item.allergens?.map((allergen) => (
                 <Badge
@@ -3948,6 +4084,8 @@ export default function MenuPage() {
                 </Badge>
               ))}
             </div>
+
+            {/* Price */}
             <div className="mt-auto font-medium text-lg">
               ${item.price.toFixed(2)}
             </div>
@@ -3960,11 +4098,10 @@ export default function MenuPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Menu Item</DialogTitle>
-            <DialogDescription>
-              Create a new menu item with details
-            </DialogDescription>
+            <DialogDescription>Create a new menu item with details</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            {/* Name Field */}
             <div className="grid gap-2">
               <Label htmlFor="name">Name</Label>
               <Input
@@ -3973,8 +4110,10 @@ export default function MenuPage() {
                 onChange={(e) =>
                   setNewItem({ ...newItem, name: e.target.value })
                 }
+                placeholder="Menu item name"
               />
             </div>
+            {/* Price Field */}
             <div className="grid gap-2">
               <Label htmlFor="price">Price</Label>
               <Input
@@ -3985,17 +4124,19 @@ export default function MenuPage() {
                 onChange={(e) =>
                   setNewItem({ ...newItem, price: e.target.value })
                 }
+                placeholder="0.00"
               />
             </div>
+            {/* Category Selection */}
             <div className="grid gap-2">
-              <Label htmlFor="category">Category</Label>
+              <Label>Category</Label>
               <Select
                 value={newItem.category_id}
-                onValueChange={(value) =>
+                onValueChange={(value: string) =>
                   setNewItem({ ...newItem, category_id: value })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -4007,6 +4148,7 @@ export default function MenuPage() {
                 </SelectContent>
               </Select>
             </div>
+            {/* Description Field */}
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
               <Input
@@ -4015,11 +4157,12 @@ export default function MenuPage() {
                 onChange={(e) =>
                   setNewItem({ ...newItem, description: e.target.value })
                 }
+                placeholder="Menu item description"
               />
             </div>
-            {/* For Add Menu Item Dialog */}
+            {/* Allergen Selection */}
             <div className="grid gap-2">
-              <Label htmlFor="allergens">Allergens</Label>
+              <Label>Allergens</Label>
               <MultiSelect
                 options={allergens}
                 selected={newItem.allergen_ids}
@@ -4048,10 +4191,11 @@ export default function MenuPage() {
           <DialogHeader>
             <DialogTitle>Edit Menu Item</DialogTitle>
             <DialogDescription>
-              Update the details of the selected menu item
+              Update the details of the selected menu item.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            {/* Name Field */}
             <div className="grid gap-2">
               <Label htmlFor="edit-name">Name</Label>
               <Input
@@ -4060,8 +4204,22 @@ export default function MenuPage() {
                 onChange={(e) =>
                   setEditForm({ ...editForm, name: e.target.value })
                 }
+                placeholder="Menu item name"
               />
             </div>
+            {/* Description Field */}
+            <div className="grid gap-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Input
+                id="edit-description"
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, description: e.target.value })
+                }
+                placeholder="Menu item description"
+              />
+            </div>
+            {/* Price Field */}
             <div className="grid gap-2">
               <Label htmlFor="edit-price">Price</Label>
               <Input
@@ -4072,39 +4230,35 @@ export default function MenuPage() {
                 onChange={(e) =>
                   setEditForm({ ...editForm, price: e.target.value })
                 }
+                placeholder="0.00"
               />
             </div>
+            {/* Category Selection */}
             <div className="grid gap-2">
-              <Label htmlFor="edit-category">Category</Label>
+              <Label>Category</Label>
               <Select
                 value={editForm.category_id}
-                onValueChange={(value) =>
+                onValueChange={(value: string) =>
                   setEditForm({ ...editForm, category_id: value })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
+                    <SelectItem
+                      key={category.id}
+                      value={category.id}
+                      disabled={editForm.category_id === category.id}
+                    >
                       {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-description">Description</Label>
-              <Input
-                id="edit-description"
-                value={editForm.description}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, description: e.target.value })
-                }
-              />
-            </div>
-            {/* For Edit Menu Item Dialog */}
+            {/* Allergen Selection */}
             <div className="grid gap-2">
               <Label>Allergens</Label>
               <MultiSelect
@@ -7409,16 +7563,10 @@ export { Label }
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
+import { ChevronsUpDown } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-} from "@/components/ui/command"
+import { Input } from "@/components/ui/input"
 import {
   Popover,
   PopoverContent,
@@ -7436,26 +7584,37 @@ interface MultiSelectProps {
   selected: string[]
   onChange: (selectedIds: string[]) => void
   placeholder?: string
+  disabled?: boolean
 }
 
 export function MultiSelect({
   options = [],
   selected = [],
   onChange,
-  placeholder = "Select items..."
+  placeholder = "Select items...",
+  disabled = false
 }: MultiSelectProps) {
   const [open, setOpen] = React.useState(false)
-  const [value, setValue] = React.useState("")
+  const [searchQuery, setSearchQuery] = React.useState("")
 
+  // Filter options based on search query
   const filteredOptions = React.useMemo(() => {
-    if (!value) return options
-    return options.filter((option) => 
-      option.name.toLowerCase().includes(value.toLowerCase())
+    return options.filter(option =>
+      option.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
-  }, [options, value])
+  }, [options, searchQuery])
+
+  // Handle option selection
+  const toggleOption = (optionId: string) => {
+    const isSelected = selected.includes(optionId)
+    const newSelected = isSelected
+      ? selected.filter(id => id !== optionId)
+      : [...selected, optionId]
+    onChange(newSelected)
+  }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="relative">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -7463,6 +7622,7 @@ export function MultiSelect({
             role="combobox"
             aria-expanded={open}
             className="w-full justify-between"
+            disabled={disabled}
           >
             <span className="truncate">
               {selected.length === 0
@@ -7472,46 +7632,62 @@ export function MultiSelect({
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-full p-0" align="start">
-          <Command>
-            <CommandInput
+        <PopoverContent className="w-full p-0">
+          <div className="p-2">
+            <Input
               placeholder="Search..."
-              value={value}
-              onValueChange={setValue}
-              className="h-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8"
             />
-            <CommandEmpty>No options found.</CommandEmpty>
-            <CommandGroup className="max-h-[200px] overflow-auto">
-              {filteredOptions.map((option) => {
+          </div>
+          <div className="max-h-[200px] overflow-auto p-2">
+            {filteredOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground p-2">No options found</p>
+            ) : (
+              filteredOptions.map((option) => {
                 const isSelected = selected.includes(option.id)
                 return (
-                  <CommandItem
+                  <div
                     key={option.id}
-                    value={option.name}
-                    onSelect={() => {
-                      const newSelected = isSelected
-                        ? selected.filter((id) => id !== option.id)
-                        : [...selected, option.id]
-                      onChange(newSelected)
-                    }}
+                    className={cn(
+                      "flex items-center gap-2 p-2 cursor-pointer rounded-sm hover:bg-accent",
+                      isSelected && "bg-accent"
+                    )}
+                    onClick={() => toggleOption(option.id)}
                   >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        isSelected ? "opacity-100" : "opacity-0"
+                    <div className={cn(
+                      "w-4 h-4 border rounded-sm flex items-center justify-center",
+                      isSelected && "bg-primary border-primary"
+                    )}>
+                      {isSelected && (
+                        <svg
+                          className="w-3 h-3 text-primary-foreground"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
                       )}
-                    />
+                    </div>
                     {option.name}
-                  </CommandItem>
+                  </div>
                 )
-              })}
-            </CommandGroup>
-          </Command>
+              })
+            )}
+          </div>
         </PopoverContent>
       </Popover>
-      
+
+      {/* Selected Items */}
       {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1 mt-2">
           {selected.map((selectedId) => {
             const selectedOption = options.find((opt) => opt.id === selectedId)
             if (!selectedOption) return null
@@ -7525,9 +7701,12 @@ export function MultiSelect({
                 <button
                   type="button"
                   className="ml-1 rounded-full outline-none hover:bg-secondary"
-                  onClick={() => {
-                    onChange(selected.filter((id) => id !== selectedId))
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    toggleOption(selectedId)
                   }}
+                  disabled={disabled}
                 >
                   ×
                 </button>
@@ -8631,7 +8810,7 @@ export function isArray<T>(value: unknown): value is T[] {
 ```typescript
 import type { ReactNode } from 'react';
 
-// Supabase Database Types
+// Core Database Types
 export type Database = {
   public: {
     Tables: {
@@ -8646,7 +8825,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
-          id?: string; // Made optional for Supabase to auto-generate
+          id?: string;
           email: string;
           name?: string;
           role?: 'admin' | 'user';
@@ -8672,7 +8851,6 @@ export type Database = {
           category_id: number;
           image_url: string | null;
           image_path: string | null;
-          allergens: string[];
           active: boolean;
           created_at: string;
           updated_at: string;
@@ -8684,7 +8862,6 @@ export type Database = {
           category_id: number;
           image_url?: string | null;
           image_path?: string | null;
-          allergens?: string[];
           active?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -8696,51 +8873,60 @@ export type Database = {
           category_id?: number;
           image_url?: string | null;
           image_path?: string | null;
-          allergens?: string[];
           active?: boolean;
           updated_at?: string;
         };
       };
-      categories: {
+      menu_item_allergens: {
         Row: {
-          id: number;
+          menu_item_id: string;
+          allergen_id: string;
+          created_at: string;
+        };
+        Insert: {
+          menu_item_id: string;
+          allergen_id: string;
+          created_at?: string;
+        };
+        Update: {
+          menu_item_id?: string;
+          allergen_id?: string;
+        };
+      };
+      allergens: {
+        Row: {
+          id: string;
           name: string;
-          description: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           name: string;
-          description?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           name?: string;
-          description?: string | null;
           updated_at?: string;
         };
       };
-      daily_menus: {
+      menu_categories: {
         Row: {
-          id: number;
-          date: string;
-          price: number;
-          active: boolean;
+          id: string;
+          name: string;
+          display_order: number;
           created_at: string;
           updated_at: string;
         };
         Insert: {
-          date: string;
-          price: number;
-          active?: boolean;
+          name: string;
+          display_order?: number;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
-          date?: string;
-          price?: number;
-          active?: boolean;
+          name?: string;
+          display_order?: number;
           updated_at?: string;
         };
       };
@@ -8750,15 +8936,13 @@ export type Database = {
     };
     Functions: {
       match_user: {
-        Args: {
-          email: string;
-        };
-        Returns: {
+        Args: { email: string };
+        Returns: Array<{
           id: string;
           email: string;
           role: 'admin' | 'user';
           active: boolean;
-        }[];
+        }>;
       };
     };
     Enums: {
@@ -8767,29 +8951,30 @@ export type Database = {
   };
 };
 
-// Component Props Types
+// Component & Form Types
 export type CommonProps = {
   className?: string;
   children?: ReactNode;
 };
 
-// User Types
+// User Related Types
 export type User = Database['public']['Tables']['users']['Row'];
 export type UserInsert = Database['public']['Tables']['users']['Insert'];
 export type UserUpdate = Database['public']['Tables']['users']['Update'];
 
+export type UserRole = 'admin' | 'user';
+
 export type UserFormData = {
   email: string;
   name: string;
-  role: 'admin' | 'user';
+  role: UserRole;
   active: boolean;
 };
 
-// Auth Types
 export type AuthUser = {
   id: string;
   email: string;
-  role: 'admin' | 'user';
+  role: UserRole;
 };
 
 export type Session = {
@@ -8797,39 +8982,29 @@ export type Session = {
   accessToken: string;
 };
 
-// Menu Types
-export type MenuItem = {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  category_id: number;
-  image_url: string | null;
-  image_path: string | null;
-  allergens: string[];
-  active: boolean;
-  created_at: string;
-  updated_at: string;
-  category?: Category;
+// Menu Related Types
+export type MenuItem = Database['public']['Tables']['menu_items']['Row'] & {
+  menu_categories?: {
+    id: string;
+    name: string;
+    display_order: number;
+  };
+  menu_item_allergens?: Array<{
+    allergens: {
+      id: string;
+      name: string;
+    };
+  }>;
 };
 
-export type Category = {
-  id: number;
-  name: string;
-  description: string | null;
-};
+export type MenuItemInsert = Database['public']['Tables']['menu_items']['Insert'];
+export type MenuItemUpdate = Database['public']['Tables']['menu_items']['Update'];
 
-export type DailyMenu = {
-  id: number;
-  date: string;
-  price: number;
-  active: boolean;
-  items: MenuItem[];
-  created_at: string;
-  updated_at: string;
-};
+export type MenuAllergen = Database['public']['Tables']['allergens']['Row'];
+export type MenuCategory = Database['public']['Tables']['menu_categories']['Row'];
 
-// Form Types
+export type MenuItemAllergen = Database['public']['Tables']['menu_item_allergens']['Row'];
+
 export type MenuItemFormData = {
   name: string;
   description: string;
@@ -8837,8 +9012,51 @@ export type MenuItemFormData = {
   category_id: number;
   image_url?: string | null;
   image_path?: string | null;
-  allergens?: string[];
+  allergen_ids: string[];
   active?: boolean;
+};
+
+export type MenuItemEditFormData = Omit<MenuItemFormData, 'active'>;
+
+// **Added Relation Types**
+export type MenuItemWithRelations = MenuItem & {
+  category: MenuCategory | null;
+  allergens: MenuAllergen[];
+};
+
+export type MenuItemResponse = Database['public']['Tables']['menu_items']['Row'] & {
+  menu_categories: Pick<MenuCategory, 'id' | 'name'>;
+  menu_item_allergens: Array<{
+    allergens: Pick<MenuAllergen, 'id' | 'name'>;
+  }>;
+};
+
+// Form State Types
+export type FormState = {
+  isLoading: boolean;
+  isSubmitting: boolean;
+  error: string | null;
+};
+
+export type DialogState<T = unknown> = {
+  isOpen: boolean;
+  type: 'create' | 'edit' | 'delete' | null;
+  data: T | null;
+};
+
+// Component Specific Types
+export type TableColumn<T> = {
+  title: string;
+  field: keyof T;
+  render?: (value: T[keyof T], item: T) => ReactNode;
+};
+
+
+export type ImageUploadState = {
+  file: File | null;
+  preview: string | null;
+  error: string | null;
+  isUploading: boolean;
 };
 
 // API Response Types
@@ -8846,6 +9064,7 @@ export type ApiSuccessResponse<T> = {
   data: T;
   error: null;
   status: 200 | 201 | 204;
+  count?: number;
 };
 
 export type ApiErrorResponse = {
@@ -8854,13 +9073,22 @@ export type ApiErrorResponse = {
     message: string;
     code?: string;
     details?: unknown;
+    hint?: string;
+    status?: number;
   };
   status: 400 | 401 | 403 | 404 | 500;
 };
 
 export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
-// Paginated Response Types
+// Pagination Types
+export type PaginationParams = {
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+};
+
 export type PaginatedData<T> = {
   items: T[];
   total: number;
@@ -8879,36 +9107,7 @@ export type PaginatedResponse<T> = ApiSuccessResponse<PaginatedData<T>> & {
   };
 };
 
-// Error Types
-export type ErrorResponse = {
-  message: string;
-  code?: string;
-  status: number;
-  details?: Record<string, unknown>;
-};
-
-// Image Types
-export type ImageUpload = {
-  file: File;
-  path: string;
-  category: string;
-};
-
-export type ImageMetadata = {
-  width: number;
-  height: number;
-  format: string;
-  size: number;
-};
-
-// Request Types
-export type PaginationParams = {
-  page?: number;
-  pageSize?: number;
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
-};
-
+// Filter Types
 export type FilterParams = {
   search?: string;
   category?: string;
@@ -8919,50 +9118,80 @@ export type FilterParams = {
 
 export type RequestParams = PaginationParams & FilterParams;
 
+// Supabase Response Types
+export type SupabaseResponse<T> = {
+  data: T | null;
+  error: {
+    message: string;
+    details?: string;
+    hint?: string;
+    code?: string;
+  } | null;
+  count?: number | null;
+  status: number;
+  statusText: string;
+};
+
+// Error Types
+export type ErrorResponse = {
+  message: string;
+  code?: string;
+  status: number;
+  details?: Record<string, unknown>;
+};
+
+// File & Image Types
+export type FileUpload = {
+  file: File;
+  path: string;
+  category: string;
+};
+
+export type ImageMetadata = {
+  width: number;
+  height: number;
+  format: string;
+  size: number;
+  url: string;
+};
+
+export type ImageUploadResponse = {
+  url: string;
+  path: string;
+  metadata: ImageMetadata;
+};
+
 // Utility Types
 export type Nullable<T> = T | null;
 export type Optional<T> = T | undefined;
 export type ValueOf<T> = T[keyof T];
+
 export type DeepPartial<T> = {
   [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
 };
 
-// Strongly typed object keys
+export type RecursivePartial<T> = {
+  [P in keyof T]?: T[P] extends (infer U)[]
+    ? RecursivePartial<U>[]
+    : T[P] extends object
+    ? RecursivePartial<T[P]>
+    : T[P];
+};
+
+// Object Key Types
 export type ObjectKeys<T> = keyof T;
 export type ObjectValues<T> = T[keyof T];
 
 // Function Types
 export type AsyncFunction<T = void> = () => Promise<T>;
 export type AsyncFunctionWithParam<P, T = void> = (param: P) => Promise<T>;
-
-// Constants
-export const ROLES = ['admin', 'user'] as const;
-export type Role = typeof ROLES[number];
-
-export const IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'webp'] as const;
-export type ImageFormat = typeof IMAGE_FORMATS[number];
-
-export const SORT_ORDERS = ['asc', 'desc'] as const;
-export type SortOrder = typeof SORT_ORDERS[number];
-
-export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE'] as const;
-export type HttpMethod = typeof HTTP_METHODS[number];
-
-export const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
-
-// Validation Types
-export type ValidationError = {
-  path: string[];
-  message: string;
-};
-
-export type ValidationResult = {
-  valid: boolean;
-  errors: ValidationError[];
-};
+export type VoidFunction = () => void;
+export type ErrorHandler = (error: unknown) => void;
 
 // Event Types
 export type EventHandler<T = void> = (event: Event) => T;
+export type ChangeHandler<T = string> = (value: T) => void;
+export type SubmitHandler<T> = (data: T) => void | Promise<void>;
 
 // Realtime Types
 export type RealtimeSubscription = {
@@ -8972,6 +9201,11 @@ export type RealtimeSubscription = {
 export type RealtimeMessage<T> = {
   event: string;
   payload: T;
+};
+
+export type RealtimeChannel<T = unknown> = {
+  subscribe: (callback: (payload: T) => void) => RealtimeSubscription;
+  unsubscribe: () => void;
 };
 
 // Type Guards
@@ -8996,5 +9230,149 @@ export function isUser(value: unknown): value is User {
     'role' in value
   );
 }
+
+export function isMenuItem(value: unknown): value is MenuItem {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    'name' in value &&
+    'price' in value &&
+    'category_id' in value
+  );
+}
+
+export function isValidImage(file: File): boolean {
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  return validTypes.includes(file.type) && file.size <= MAX_FILE_SIZE;
+}
+
+// Constants
+export const ROLES = ['admin', 'user'] as const;
+export type Role = typeof ROLES[number];
+
+export const IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'webp'] as const;
+export type ImageFormat = typeof IMAGE_FORMATS[number];
+
+export const SORT_ORDERS = ['asc', 'desc'] as const;
+export type SortOrder = typeof SORT_ORDERS[number];
+
+export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE'] as const;
+export type HttpMethod = typeof HTTP_METHODS[number];
+
+export const MENU_CATEGORIES = [
+  'appetizers',
+  'main-courses',
+  'desserts',
+  'beverages',
+  'specials'
+] as const;
+export type MenuCategoryType = typeof MENU_CATEGORIES[number];
+
+export const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+export const MAX_IMAGE_DIMENSION = 2048; // pixels
+export const ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp'
+] as const;
+
+// Validation Types
+export type ValidationError = {
+  path: string[];
+  message: string;
+  type?: string;
+  value?: unknown;
+};
+
+export type ValidationResult = {
+  valid: boolean;
+  errors: ValidationError[];
+};
+
+export type FormValidation = {
+  [key: string]: boolean | string | undefined;
+  isValid: boolean;
+  message?: string;
+};
+
+export type ValidationRule = {
+  type: 'required' | 'email' | 'min' | 'max' | 'pattern' | 'custom';
+  value?: number | string | RegExp;
+  message: string;
+  validator?: (value: unknown) => boolean;
+};
+
+export type ValidationSchema = {
+  [key: string]: ValidationRule[];
+};
+
+// Form Control Types
+export type FormControl = {
+  value: unknown;
+  error: string | null;
+  touched: boolean;
+  dirty: boolean;
+};
+
+export type FormControls = {
+  [key: string]: FormControl;
+};
+
+// Status Types
+export const STATUS_CODES = {
+  OK: 200,
+  CREATED: 201,
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  INTERNAL_SERVER_ERROR: 500,
+} as const;
+
+export type StatusCode = typeof STATUS_CODES[keyof typeof STATUS_CODES];
+
+// **Renamed ValidationError Class to ValidationException**
+export class ValidationException extends Error {
+  constructor(
+    message: string,
+    public errors: ValidationError[]
+  ) {
+    super(message);
+    this.name = 'ValidationException';
+    Object.setPrototypeOf(this, ValidationException.prototype);
+  }
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code?: string
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+}
+
+// Utility Functions
+export function createFormControl(
+  initialValue: unknown = '',
+): FormControl {
+  return {
+    value: initialValue,
+    error: null,
+    touched: false,
+    dirty: false,
+  };
+}
+
+export function isFormValid(controls: FormControls): boolean {
+  return Object.values(controls).every(
+    control => !control.error && control.touched
+  );
+}
+
 ```
 

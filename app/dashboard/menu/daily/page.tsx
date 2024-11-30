@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Plus, ToggleLeft, Edit, Copy, Search } from "lucide-react";
+import { Plus, ToggleLeft, Edit, Copy, Search, Calendar } from "lucide-react"; // Added 'Calendar' icon
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch"; // Imported Switch component
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -24,43 +25,26 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Calendar } from "@/components/ui/calendar";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"; // Renamed to avoid conflict
 import {
   Popover,
   PopoverContent,
+  PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { addDays, addWeeks, addMonths, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isSameDay } from "date-fns";
+import {
+  addDays,
+  addWeeks,
+  addMonths,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  format,
+  isSameDay,
+} from "date-fns";
 import { es } from "date-fns/locale";
 import { DateRange } from "react-day-picker";
-
-// -----------------------------------
-// Utility Functions
-// -----------------------------------
-
-// Calculate date ranges for quick selection
-const getThisWeekRange = (): DateRange => ({
-  from: startOfWeek(new Date(), { locale: es }),
-  to: endOfWeek(new Date(), { locale: es }),
-});
-
-const getNextWeekRange = (): DateRange => ({
-  from: startOfWeek(addWeeks(new Date(), 1), { locale: es }),
-  to: endOfWeek(addWeeks(new Date(), 1), { locale: es }),
-});
-
-const getThisMonthRange = (): DateRange => ({
-  from: startOfMonth(new Date()),
-  to: endOfMonth(new Date()),
-});
-
-// -----------------------------------
-// Utility Classes
-// -----------------------------------
-const cardClasses = "bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all p-6 rounded-sm relative group";
-const headingClasses = "text-2xl font-medium mb-1";
-const subheadingClasses = "text-sm uppercase text-muted-foreground tracking-wide";
-const labelClasses = "text-xs uppercase text-muted-foreground font-medium tracking-wide";
 
 // -----------------------------------
 // TypeScript Interfaces
@@ -97,40 +81,232 @@ interface FilterOptions {
   status: "all" | "active" | "inactive";
 }
 
+interface AdvancedFilterOptions extends FilterOptions {
+  dateRange: DateRange | undefined;
+  courseSearch: string;
+}
+
+interface GroupedMenus {
+  [key: string]: DailyMenu[];
+}
+
 // -----------------------------------
-// Components
+// Utility Functions
 // -----------------------------------
 
-// QuickSelect Component: Allows quick selection of date ranges
-const QuickSelect = ({ onSelect }: { onSelect: (range: DateRange) => void }) => (
-  <div className="flex gap-2 mb-6">
-    {/* Improved button styling */}
-    <Button 
-      variant="outline" 
-      size="sm"
-      onClick={() => onSelect(getThisWeekRange())}
-      className="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium rounded-md transition-colors"
-    >
-      This Week
-    </Button>
-    <Button 
-      variant="outline" 
-      size="sm"
-      onClick={() => onSelect(getNextWeekRange())}
-      className="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium rounded-md transition-colors"
-    >
-      Next Week
-    </Button>
-    <Button 
-      variant="outline" 
-      size="sm"
-      onClick={() => onSelect(getThisMonthRange())}
-      className="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium rounded-md transition-colors"
-    >
-      This Month
-    </Button>
-  </div>
-);
+// Calculate date ranges for quick selection
+const getThisWeekRange = (): DateRange => ({
+  from: startOfWeek(new Date(), { locale: es }),
+  to: endOfWeek(new Date(), { locale: es }),
+});
+
+const getNextWeekRange = (): DateRange => ({
+  from: startOfWeek(addWeeks(new Date(), 1), { locale: es }),
+  to: endOfWeek(addWeeks(new Date(), 1), { locale: es }),
+});
+
+const getThisMonthRange = (): DateRange => ({
+  from: startOfMonth(new Date()),
+  to: endOfMonth(new Date()),
+});
+
+// Group menus by the start of their week
+function groupMenusByWeek(menus: DailyMenu[]): GroupedMenus {
+  return menus.reduce((acc, menu) => {
+    const weekStart = format(startOfWeek(new Date(menu.date), { locale: es }), 'yyyy-MM-dd');
+    if (!acc[weekStart]) acc[weekStart] = [];
+    acc[weekStart].push(menu);
+    return acc;
+  }, {} as GroupedMenus);
+}
+
+// -----------------------------------
+// Utility Classes
+// -----------------------------------
+const cardClasses =
+  "bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all p-6 rounded-sm relative group";
+const headingClasses = "text-2xl font-medium mb-1";
+const subheadingClasses =
+  "text-sm uppercase text-muted-foreground tracking-wide";
+const labelClasses =
+  "text-xs uppercase text-muted-foreground font-medium tracking-wide";
+
+// -----------------------------------
+// Sub-Components
+// -----------------------------------
+
+// AdvancedFilters Component
+const AdvancedFilters = ({
+  filters,
+  onFilterChange,
+}: {
+  filters: AdvancedFilterOptions;
+  onFilterChange: (filters: AdvancedFilterOptions) => void;
+}) => {
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-4 flex-wrap">
+        {/* Search input */}
+        <div className="flex-1 min-w-[200px]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search menus..."
+              value={filters.search}
+              onChange={(e) =>
+                onFilterChange({
+                  ...filters,
+                  search: e.target.value,
+                })
+              }
+              className="pl-9"
+            />
+          </div>
+        </div>
+
+        {/* Course Search input */}
+        <div className="flex-1 min-w-[200px]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search courses..."
+              value={filters.courseSearch}
+              onChange={(e) =>
+                onFilterChange({
+                  ...filters,
+                  courseSearch: e.target.value,
+                })
+              }
+              className="pl-9"
+            />
+          </div>
+        </div>
+
+        {/* Pattern filter */}
+        <Select
+          value={filters.pattern}
+          onValueChange={(value: FilterOptions["pattern"]) =>
+            onFilterChange({ ...filters, pattern: value })
+          }
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by pattern" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Patterns</SelectItem>
+            <SelectItem value="none">Single</SelectItem>
+            <SelectItem value="weekly">Weekly</SelectItem>
+            <SelectItem value="monthly">Monthly</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Date range picker */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="min-w-[200px] justify-start">
+              <Calendar className="mr-2 h-4 w-4" />
+              {filters.dateRange?.from ? (
+                filters.dateRange.to ? (
+                  <>
+                    {format(filters.dateRange.from, "PPP", { locale: es })} -{" "}
+                    {format(filters.dateRange.to, "PPP", { locale: es })}
+                  </>
+                ) : (
+                  format(filters.dateRange.from, "PPP", { locale: es })
+                )
+              ) : (
+                <span>Pick a date range</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0">
+            <CalendarComponent
+              mode="range"
+              selected={filters.dateRange}
+              onSelect={(range) =>
+                onFilterChange({ ...filters, dateRange: range })
+              }
+            />
+          </PopoverContent>
+        </Popover>
+
+        {/* Status filter */}
+        <Select
+          value={filters.status}
+          onValueChange={(value: FilterOptions["status"]) =>
+            onFilterChange({ ...filters, status: value })
+          }
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+};
+
+// QuickActions Component
+const QuickActions = ({
+  onSelectDateRange,
+  onCreateMenu,
+}: {
+  onSelectDateRange: (range: DateRange) => void;
+  onCreateMenu: () => void;
+}) => {
+  return (
+    <div className="flex items-center justify-between mb-6">
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onSelectDateRange(getThisWeekRange())}
+        >
+          This Week
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onSelectDateRange(getNextWeekRange())}
+        >
+          Next Week
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onSelectDateRange(getThisMonthRange())}
+        >
+          This Month
+        </Button>
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            onSelectDateRange({
+              from: new Date(),
+              to: new Date(),
+            })
+          }
+        >
+          <Calendar className="mr-2 h-4 w-4" />
+          Today
+        </Button>
+        <Button onClick={onCreateMenu}>
+          <Plus className="mr-2 h-4 w-4" />
+          Schedule Menu
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 // MenuCardProps Type Definition
 type MenuCardProps = {
@@ -141,26 +317,38 @@ type MenuCardProps = {
 };
 
 // MenuCard Component: Displays individual menu details with interactive buttons
-const MenuCard = ({ 
-  menu, 
+const MenuCard = ({
+  menu,
   onStatusToggle,
   onEdit,
-  onDuplicate 
+  onDuplicate,
 }: MenuCardProps) => (
   <div className={cardClasses}>
     <div className="flex justify-between items-start mb-6">
       <div>
         <div className={labelClasses}>DATE</div>
-        <div className="text-lg mt-1">{format(new Date(menu.date), "PPP", { locale: es })}</div>
+        <div className="text-lg mt-1">
+          {format(new Date(menu.date), "PPP", { locale: es })}
+        </div>
       </div>
-      <Badge 
+
+      {/* Enhanced status toggle */}
+      <Switch
+        checked={menu.active}
+        onCheckedChange={(checked) => onStatusToggle(menu.id, checked)}
         className={cn(
-          "rounded-none px-3 py-1",
-          menu.active ? "bg-black text-white" : "bg-gray-100 text-gray-600"
+          "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black",
+          menu.active ? "bg-black" : "bg-gray-200"
         )}
       >
-        {menu.active ? 'Active' : 'Inactive'}
-      </Badge>
+        <span className="sr-only">Toggle menu status</span>
+        <span
+          className={cn(
+            "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+            menu.active ? "translate-x-6" : "translate-x-1"
+          )}
+        />
+      </Switch>
     </div>
 
     <div className="space-y-4">
@@ -189,27 +377,30 @@ const MenuCard = ({
     {/* Hover Actions */}
     <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity">
       <div className="absolute bottom-4 right-4 flex gap-2">
-        <Button 
-          size="sm" 
+        <Button
+          size="sm"
           variant="ghost"
           onClick={() => onEdit(menu)}
           className="hover:bg-black hover:text-white"
+          aria-label={`Edit menu scheduled on ${format(new Date(menu.date), "PPP", { locale: es })}`}
         >
           <Edit className="h-4 w-4" />
         </Button>
-        <Button 
-          size="sm" 
+        <Button
+          size="sm"
           variant="ghost"
           onClick={() => onDuplicate(menu)}
           className="hover:bg-black hover:text-white"
+          aria-label={`Duplicate menu scheduled on ${format(new Date(menu.date), "PPP", { locale: es })}`}
         >
           <Copy className="h-4 w-4" />
         </Button>
         <Button
-          size="sm" 
+          size="sm"
           variant="ghost"
           onClick={() => onStatusToggle(menu.id, menu.active)}
           className="hover:bg-black hover:text-white"
+          aria-label={`Toggle status for menu scheduled on ${format(new Date(menu.date), "PPP", { locale: es })}`}
         >
           <ToggleLeft className="h-4 w-4" />
         </Button>
@@ -218,57 +409,43 @@ const MenuCard = ({
   </div>
 );
 
-// FilterBar Component: Provides filtering and search functionalities
-const FilterBar = ({ 
-  filter, 
-  onFilterChange 
-}: { 
-  filter: FilterOptions;
-  onFilterChange: (filter: FilterOptions) => void;
-}) => (
-  <div className="flex gap-4 items-center mb-6">
-    <div className="relative flex-1 max-w-xs">
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-      <Input 
-        placeholder="Search menus..."
-        value={filter.search}
-        onChange={(e) => onFilterChange({ ...filter, search: e.target.value })}
-        className="pl-9"
-      />
+// MenuListSection Component
+const MenuListSection = ({
+  filteredMenus,
+  toggleMenuStatus,
+  handleEditMenu,
+  handleDuplicateMenu,
+}: {
+  filteredMenus: DailyMenu[];
+  toggleMenuStatus: (id: string, status: boolean) => void;
+  handleEditMenu: (menu: DailyMenu) => void;
+  handleDuplicateMenu: (menu: DailyMenu) => void;
+}) => {
+  const groupedMenus = useMemo(() => groupMenusByWeek(filteredMenus), [filteredMenus]);
+
+  return (
+    <div className="space-y-8">
+      {Object.entries(groupedMenus).map(([week, menus]) => (
+        <div key={week} className="space-y-4">
+          <h3 className="text-sm font-medium text-gray-500 sticky top-0 bg-white z-10 py-2">
+            Week of {format(new Date(week), "PPP", { locale: es })}
+          </h3>
+          <div className="space-y-4">
+            {menus.map((menu) => (
+              <MenuCard
+                key={menu.id}
+                menu={menu}
+                onStatusToggle={toggleMenuStatus}
+                onEdit={handleEditMenu}
+                onDuplicate={handleDuplicateMenu}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
-    <Select
-      value={filter.pattern}
-      onValueChange={(value: FilterOptions['pattern']) => 
-        onFilterChange({ ...filter, pattern: value })
-      }
-    >
-      <SelectTrigger className="w-[180px]">
-        <SelectValue placeholder="Filter by pattern" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">All Patterns</SelectItem>
-        <SelectItem value="none">Single</SelectItem>
-        <SelectItem value="weekly">Weekly</SelectItem>
-        <SelectItem value="monthly">Monthly</SelectItem>
-      </SelectContent>
-    </Select>
-    <Select
-      value={filter.status}
-      onValueChange={(value: FilterOptions['status']) => 
-        onFilterChange({ ...filter, status: value })
-      }
-    >
-      <SelectTrigger className="w-[180px]">
-        <SelectValue placeholder="Filter by status" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">All Status</SelectItem>
-        <SelectItem value="active">Active</SelectItem>
-        <SelectItem value="inactive">Inactive</SelectItem>
-      </SelectContent>
-    </Select>
-  </div>
-);
+  );
+};
 
 // -----------------------------------
 // Main Component: DailyMenuPage
@@ -284,10 +461,12 @@ export default function DailyMenuPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
   const [editingMenu, setEditingMenu] = useState<DailyMenu | null>(null);
-  const [filter, setFilter] = useState<FilterOptions>({
+  const [advancedFilter, setAdvancedFilter] = useState<AdvancedFilterOptions>({
     search: "",
     pattern: "all",
     status: "all",
+    dateRange: undefined,
+    courseSearch: "",
   });
   const [newMenu, setNewMenu] = useState<NewMenu>({
     dateRange: {
@@ -331,6 +510,7 @@ export default function DailyMenuPage() {
           .order("date", { ascending: false });
 
         if (menusError) throw menusError;
+
         setDailyMenus(menusData || []);
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -414,49 +594,53 @@ export default function DailyMenuPage() {
         }
       }
 
-      // Create menus for all dates
-      for (const date of datesToSchedule) {
-        // Skip if menu exists
-        if (dailyMenus.some((menu) => isSameDay(new Date(menu.date), date))) {
-          continue;
-        }
-
-        const menuData = {
+      // Batch insert menus
+      const menusToInsert = datesToSchedule
+        .filter((date) => !dailyMenus.some((menu) => isSameDay(new Date(menu.date), date)))
+        .map((date) => ({
           date: format(date, "yyyy-MM-dd"),
           repeat_pattern,
           active,
           scheduled_for: format(date, "yyyy-MM-dd'T'11:00:00.000'Z'"),
-        };
+        }));
 
-        const { data: menu, error: menuError } = await supabase
-          .from("daily_menus")
-          .insert(menuData)
-          .select()
-          .single();
-
-        if (menuError) throw menuError;
-
-        const menuItems = [
-          {
-            daily_menu_id: menu.id,
-            course_name: firstCourse,
-            course_type: "first",
-            display_order: 1,
-          },
-          {
-            daily_menu_id: menu.id,
-            course_name: secondCourse,
-            course_type: "second",
-            display_order: 2,
-          },
-        ];
-
-        const { error: itemsError } = await supabase
-          .from("daily_menu_items")
-          .insert(menuItems);
-
-        if (itemsError) throw itemsError;
+      if (menusToInsert.length === 0) {
+        toast({
+          title: "Info",
+          description: "No new menus to schedule.",
+        });
+        return;
       }
+
+      const { data: insertedMenus, error: insertError } = await supabase
+        .from("daily_menus")
+        .insert(menusToInsert)
+        .select();
+
+      if (insertError) throw insertError;
+
+      // Prepare daily_menu_items for all inserted menus
+      const allMenuItems = insertedMenus.flatMap((menu) => [
+        {
+          daily_menu_id: menu.id,
+          course_name: firstCourse,
+          course_type: "first",
+          display_order: 1,
+        },
+        {
+          daily_menu_id: menu.id,
+          course_name: secondCourse,
+          course_type: "second",
+          display_order: 2,
+        },
+      ]);
+
+      // Batch insert daily_menu_items
+      const { error: itemsError } = await supabase
+        .from("daily_menu_items")
+        .insert(allMenuItems);
+
+      if (itemsError) throw itemsError;
 
       // Refresh menus
       const { data: updatedMenus, error: fetchError } = await supabase
@@ -505,8 +689,12 @@ export default function DailyMenuPage() {
       },
       repeat_pattern: "none",
       active: true,
-      firstCourse: menu.daily_menu_items.find((item) => item.course_type === "first")?.course_name || "",
-      secondCourse: menu.daily_menu_items.find((item) => item.course_type === "second")?.course_name || "",
+      firstCourse:
+        menu.daily_menu_items.find((item) => item.course_type === "first")
+          ?.course_name || "",
+      secondCourse:
+        menu.daily_menu_items.find((item) => item.course_type === "second")
+          ?.course_name || "",
     });
     setIsDialogOpen(true);
   };
@@ -521,8 +709,12 @@ export default function DailyMenuPage() {
       },
       repeat_pattern: menu.repeat_pattern,
       active: menu.active,
-      firstCourse: menu.daily_menu_items.find((item) => item.course_type === "first")?.course_name || "",
-      secondCourse: menu.daily_menu_items.find((item) => item.course_type === "second")?.course_name || "",
+      firstCourse:
+        menu.daily_menu_items.find((item) => item.course_type === "first")
+          ?.course_name || "",
+      secondCourse:
+        menu.daily_menu_items.find((item) => item.course_type === "second")
+          ?.course_name || "",
     });
     setIsDialogOpen(true);
   };
@@ -547,28 +739,64 @@ export default function DailyMenuPage() {
   // -----------------------------------
 
   // Get menu for a specific date
-  const getMenuForDate = (date: Date): DailyMenu | undefined => {
-    return dailyMenus.find(menu => isSameDay(new Date(menu.date), date));
-  };
+  const getMenuForDate = useCallback(
+    (date: Date): DailyMenu | undefined => {
+      return dailyMenus.find((menu) => isSameDay(new Date(menu.date), date));
+    },
+    [dailyMenus]
+  );
 
   // -----------------------------------
   // Filtered Menus Calculation
   // -----------------------------------
-  const filteredMenus = dailyMenus
-    .filter((menu: DailyMenu) => {
-      if (filter.pattern !== "all" && menu.repeat_pattern !== filter.pattern) return false;
-      if (filter.status !== "all" && menu.active !== (filter.status === "active")) return false;
-      if (filter.search) {
-        const searchLower = filter.search.toLowerCase();
-        return (
-          menu.daily_menu_items.some((item) =>
-            item.course_name.toLowerCase().includes(searchLower)
-          )
-        );
-      }
-      return true;
-    })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const filteredMenus = useMemo(() => {
+    let menus = [...dailyMenus];
+
+    // Apply search filter
+    if (advancedFilter.search.trim()) {
+      const searchLower = advancedFilter.search.toLowerCase();
+      menus = menus.filter((menu) =>
+        menu.daily_menu_items.some((item) =>
+          item.course_name.toLowerCase().includes(searchLower)
+        )
+      );
+    }
+
+    // Apply course search filter
+    if (advancedFilter.courseSearch.trim()) {
+      const courseSearchLower = advancedFilter.courseSearch.toLowerCase();
+      menus = menus.filter((menu) =>
+        menu.daily_menu_items.some((item) =>
+          item.course_name.toLowerCase().includes(courseSearchLower)
+        )
+      );
+    }
+
+    // Apply pattern filter
+    if (advancedFilter.pattern !== "all") {
+      menus = menus.filter((menu) => menu.repeat_pattern === advancedFilter.pattern);
+    }
+
+    // Apply status filter
+    if (advancedFilter.status !== "all") {
+      const isActive = advancedFilter.status === "active";
+      menus = menus.filter((menu) => menu.active === isActive);
+    }
+
+    // Apply date range filter
+    if (advancedFilter.dateRange?.from && advancedFilter.dateRange?.to) {
+      const from = advancedFilter.dateRange.from;
+      const to = advancedFilter.dateRange.to;
+      menus = menus.filter((menu) => {
+        const menuDate = new Date(menu.date);
+        return menuDate >= from && menuDate <= to;
+      });
+    }
+
+    return menus.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+  }, [dailyMenus, advancedFilter]);
 
   // -----------------------------------
   // Rendering
@@ -607,14 +835,24 @@ export default function DailyMenuPage() {
           <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
             <div className="mb-6">
               <h2 className="text-2xl font-semibold">Calendar View</h2>
-              <p className="text-sm text-gray-500 mt-1">SELECT DATES TO VIEW OR SCHEDULE MENUS</p>
+              <p className="text-sm text-gray-500 mt-1">
+                SELECT DATES TO VIEW OR SCHEDULE MENUS
+              </p>
             </div>
 
-            {/* Quick Select Buttons */}
-            <QuickSelect onSelect={(range) => setNewMenu({ ...newMenu, dateRange: range })} />
+            {/* Quick Actions Bar */}
+            <QuickActions
+              onSelectDateRange={(range) =>
+                setNewMenu({ ...newMenu, dateRange: range })
+              }
+              onCreateMenu={() => {
+                resetNewMenu();
+                setIsDialogOpen(true);
+              }}
+            />
 
             {/* Calendar Component with Visual Feedback */}
-            <Calendar
+            <CalendarComponent
               mode="range"
               selected={newMenu.dateRange}
               onSelect={(range) =>
@@ -641,7 +879,8 @@ export default function DailyMenuPage() {
                 cell: "text-center text-sm relative p-0 rounded-md hover:bg-gray-100 focus-within:relative focus-within:z-20",
                 day: "h-9 w-9 p-0 font-normal",
                 day_range_middle: "rounded-none",
-                day_selected: "bg-black text-white hover:bg-gray-800 hover:text-white focus:bg-gray-800 focus:text-white",
+                day_selected:
+                  "bg-black text-white hover:bg-gray-800 hover:text-white focus:bg-gray-800 focus:text-white",
                 day_today: "bg-gray-50",
                 day_outside: "opacity-50",
                 day_disabled: "opacity-50",
@@ -666,32 +905,64 @@ export default function DailyMenuPage() {
               onDayMouseEnter={(date) => setHoveredDate(date)}
               onDayMouseLeave={() => setHoveredDate(null)}
               components={{
-                DayContent: (props) => {
-                  const menu = getMenuForDate(props.date);
-                  const isHovered = hoveredDate && isSameDay(hoveredDate, props.date);
+                DayContent: ({ date }: { date: Date }) => {
+                  const menu = getMenuForDate(date);
+                  const isHovered = hoveredDate && isSameDay(hoveredDate, date);
 
                   return (
                     <div className="relative w-full h-full">
+                      {/* Date number and indicators */}
                       <div
                         className={cn(
                           "w-full h-full flex items-center justify-center",
                           menu && "font-medium"
                         )}
                       >
-                        {props.date.getDate()}
+                        {date.getDate()}
+
+                        {/* Menu indicators */}
+                        {menu && (
+                          <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
+                            {menu.daily_menu_items.map((_, i) => (
+                              <div
+                                key={i}
+                                className={cn(
+                                  "w-1 h-1 rounded-full",
+                                  menu.repeat_pattern === "none" && "bg-black",
+                                  menu.repeat_pattern === "weekly" &&
+                                    "bg-[#2563eb]",
+                                  menu.repeat_pattern === "monthly" &&
+                                    "bg-[#7c3aed]"
+                                )}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
+
+                      {/* Enhanced hover popup */}
                       {isHovered && menu && (
                         <Popover>
+                          <PopoverTrigger asChild>
+                            <span />
+                          </PopoverTrigger>
                           <PopoverContent className="w-80 p-0" align="center">
                             <div className="p-4">
-                              <div className="mb-2 font-medium">
-                                {format(props.date, "PPP", { locale: es })}
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="font-medium">
+                                  {format(date, "PPP", { locale: es })}
+                                </span>
+                                <Badge
+                                  variant={menu.active ? "default" : "secondary"}
+                                >
+                                  {menu.active ? "Active" : "Inactive"}
+                                </Badge>
                               </div>
                               <div className="space-y-2">
                                 {menu.daily_menu_items.map((item) => (
                                   <div key={item.id} className="text-sm">
-                                    <span className="font-medium">
-                                      {item.course_type === "first" ? "First" : "Second"}:
+                                    <span className="font-medium capitalize">
+                                      {item.course_type}:
                                     </span>{" "}
                                     {item.course_name}
                                   </div>
@@ -707,7 +978,7 @@ export default function DailyMenuPage() {
               }}
             />
 
-            {/* Improved legend */}
+            {/* Legend */}
             <div className="mt-6 flex items-center justify-between px-2">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-black rounded-sm" />
@@ -728,11 +999,16 @@ export default function DailyMenuPage() {
           <div className="space-y-6">
             <div>
               <h2 className={headingClasses}>Scheduled Menus</h2>
-              <p className={subheadingClasses}>View and manage your daily menus</p>
+              <p className={subheadingClasses}>
+                View and manage your daily menus
+              </p>
             </div>
 
-            {/* Filter and Search Bar */}
-            <FilterBar filter={filter} onFilterChange={setFilter} />
+            {/* Advanced Filters */}
+            <AdvancedFilters
+              filters={advancedFilter}
+              onFilterChange={setAdvancedFilter}
+            />
 
             {/* Loading State */}
             {isLoading ? (
@@ -742,35 +1018,39 @@ export default function DailyMenuPage() {
             ) : filteredMenus.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-muted-foreground">
-                  No menus found. {filter.search || filter.pattern !== "all" || filter.status !== "all"
+                  No menus found.{" "}
+                  {advancedFilter.search ||
+                  advancedFilter.pattern !== "all" ||
+                  advancedFilter.status !== "all" ||
+                  advancedFilter.courseSearch
                     ? "Try adjusting your filters."
                     : "Create one to get started."}
                 </p>
               </div>
             ) : (
-              <div className="space-y-4 max-h-[800px] overflow-y-auto pr-2">
-                {filteredMenus.map((menu) => (
-                  <MenuCard
-                    key={menu.id}
-                    menu={menu}
-                    onStatusToggle={toggleMenuStatus}
-                    onEdit={handleEditMenu}
-                    onDuplicate={handleDuplicateMenu}
-                  />
-                ))}
-              </div>
+              <MenuListSection
+                filteredMenus={filteredMenus}
+                toggleMenuStatus={toggleMenuStatus}
+                handleEditMenu={handleEditMenu}
+                handleDuplicateMenu={handleDuplicateMenu}
+              />
             )}
           </div>
         </div>
 
         {/* Create/Edit Menu Dialog */}
-        <Dialog open={isDialogOpen} onOpenChange={(open) => {
-          if (!open) resetNewMenu();
-          setIsDialogOpen(open);
-        }}>
+        <Dialog
+          open={isDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) resetNewMenu();
+            setIsDialogOpen(open);
+          }}
+        >
           <DialogContent className="max-w-xl">
             <DialogHeader>
-              <DialogTitle>{editingMenu ? "Edit Menu" : "Schedule Menu"}</DialogTitle>
+              <DialogTitle>
+                {editingMenu ? "Edit Menu" : "Schedule Menu"}
+              </DialogTitle>
               <DialogDescription>
                 {editingMenu
                   ? "Modify the menu details"
@@ -778,10 +1058,13 @@ export default function DailyMenuPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              handleCreateMenu();
-            }} className="grid gap-6 py-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCreateMenu();
+              }}
+              className="grid gap-6 py-4"
+            >
               {/* Selected Dates Display */}
               <div className="grid gap-2">
                 <Label htmlFor="date-range" className={labelClasses}>
@@ -803,7 +1086,9 @@ export default function DailyMenuPage() {
                 </Label>
                 <Select
                   value={newMenu.repeat_pattern}
-                  onValueChange={(value: "none" | "weekly" | "monthly") =>
+                  onValueChange={(
+                    value: "none" | "weekly" | "monthly"
+                  ) =>
                     setNewMenu({
                       ...newMenu,
                       repeat_pattern: value,
