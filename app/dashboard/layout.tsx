@@ -13,6 +13,7 @@ import {
   MenuSquare,
   ClipboardList,
   Wine,
+  BookOpen, // Added BookOpen icon
 } from "lucide-react";
 import type { Database } from "@/types";
 
@@ -45,6 +46,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
   if (profileError) {
     console.error('Error fetching user profile:', profileError);
+    // Optionally, you can handle the error by redirecting or showing an error message
   }
 
   return (
@@ -90,6 +92,19 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
                 <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
                   <Wine className="mr-2 h-4 w-4" />
                   Wine List
+                </div>
+              </Link>
+            </div>
+
+            {/* Blog Section - Newly Added */}
+            <div className="pt-4">
+              <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Blog
+              </h2>
+              <Link href="/dashboard/blog">
+                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                  <BookOpen className="mr-2 h-4 w-4" />
+                  Blog Posts
                 </div>
               </Link>
             </div>
