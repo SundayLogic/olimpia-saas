@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-12-01 14:43:42
+Generated on: 2024-12-03 12:54:53
 
 ## Documented Directories:
 - app/
@@ -26,7 +26,17 @@ app/
             ├── auth/
                 ├── [...supabase]/
                 │   ├── route.ts
+        ├── blog/
+            ├── [slug]/
+            │   ├── page.tsx
+        │   
+        │   ├── page.tsx
         ├── dashboard/
+            ├── blog/
+                ├── [id]/
+                │   ├── page.tsx
+            │   
+            │   ├── page.tsx
             ├── images/
             │   ├── page.tsx
             ├── menu/
@@ -751,6 +761,819 @@ export async function POST(request: NextRequest) {
 }
 
 export const dynamic = 'force-dynamic';
+```
+
+### app/blog/[slug]/page.tsx
+
+```typescript
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
+import Image from "next/image";
+import Link from "next/link";
+import { format } from "date-fns";
+
+// Types for blog content structure
+type ContentNode = {
+  type: string;
+  content?: Array<{
+    type: string;
+    text?: string;
+    content?: ContentNode[];
+  }>;
+  text?: string;
+  attrs?: Record<string, unknown>;
+};
+
+type BlogContent = {
+  type: string;
+  content: ContentNode[];
+};
+
+type MenuItem = {
+  id: number;
+  name: string;
+  price: number;
+};
+
+type Wine = {
+  id: number;
+  name: string;
+  bottle_price: number;
+};
+
+type BlogPostData = {
+  id: string;
+  title: string;
+  slug: string;
+  content: BlogContent;
+  featured_image: string | null;
+  featured_image_url: string | null;
+  featured_image_alt: string | null;
+  published: boolean;
+  created_at: string;
+  author_info: Array<{
+    name: string | null;
+    email: string;
+  }>;
+  menu_items: Array<{
+    menu_items: MenuItem;
+  }>;
+  wines: Array<{
+    wines: Wine;
+  }>;
+};
+
+// Helper function to render content
+const renderContent = (content: BlogContent) => {
+  if (!content.content) return null;
+
+  return content.content.map((node, index) => {
+    switch (node.type) {
+      case 'paragraph':
+        return (
+          <p key={index} className="mb-4 leading-relaxed">
+            {node.content?.map((child, childIndex) => (
+              <span key={childIndex}>{child.text}</span>
+            ))}
+          </p>
+        );
+      case 'heading':
+        const HeadingTag = `h${(node.attrs?.level || 1) as number}` as keyof JSX.IntrinsicElements;
+        return (
+          <HeadingTag key={index} className="mb-4 mt-6 font-bold">
+            {node.content?.map((child, childIndex) => (
+              <span key={childIndex}>{child.text}</span>
+            ))}
+          </HeadingTag>
+        );
+      case 'image':
+        return (
+          <div key={index} className="my-6">
+            <Image
+              src={node.attrs?.src as string}
+              alt={node.attrs?.alt as string || ''}
+              width={800}
+              height={400}
+              className="rounded-lg"
+              unoptimized
+            />
+          </div>
+        );
+      default:
+        return null;
+    }
+  });
+};
+
+interface BlogPostPageProps {
+  params: {
+    slug: string;
+  };
+}
+
+export default async function BlogPostPage({ params }: BlogPostPageProps) {
+  const supabase = createServerComponentClient({ cookies });
+
+  // Fetch blog post with related content
+  const { data: post } = await supabase
+    .from('blog_posts')
+    .select(`
+      *,
+      author_info:users(name, email),
+      menu_items:blog_menu_references(
+        menu_items(id, name, price)
+      ),
+      wines:blog_wine_references(
+        wines(id, name, bottle_price)
+      )
+    `)
+    .eq('slug', params.slug)
+    .eq('published', true)
+    .single();
+
+  if (!post) {
+    notFound();
+  }
+
+  const typedPost = post as unknown as BlogPostData;
+
+  return (
+    <article className="mx-auto max-w-3xl px-4 py-8">
+      {/* Header */}
+      <header className="mb-8">
+        <h1 className="mb-4 text-4xl font-bold tracking-tight">
+          {typedPost.title}
+        </h1>
+        <div className="flex items-center gap-4 text-muted-foreground">
+          <span>
+            By {typedPost.author_info[0]?.name || typedPost.author_info[0]?.email || 'Anonymous'}
+          </span>
+          <span>•</span>
+          <time dateTime={typedPost.created_at}>
+            {format(new Date(typedPost.created_at), 'MMMM d, yyyy')}
+          </time>
+        </div>
+      </header>
+
+      {/* Featured Image */}
+      {typedPost.featured_image_url && (
+        <div className="mb-8 overflow-hidden rounded-lg">
+          <Image
+            src={typedPost.featured_image_url}
+            alt={typedPost.featured_image_alt || typedPost.title}
+            width={1200}
+            height={630}
+            className="w-full object-cover"
+            priority
+            unoptimized
+          />
+        </div>
+      )}
+
+      {/* Content */}
+      <div className="prose prose-lg max-w-none">
+        {renderContent(typedPost.content)}
+      </div>
+
+      {/* Related Items Section */}
+      {(typedPost.menu_items?.length > 0 || typedPost.wines?.length > 0) && (
+        <div className="mt-12 border-t pt-8">
+          <h2 className="mb-6 text-2xl font-bold">Featured Items</h2>
+          
+          {/* Menu Items */}
+          {typedPost.menu_items?.length > 0 && (
+            <div className="mb-8">
+              <h3 className="mb-4 text-xl font-semibold">Menu Items</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {typedPost.menu_items.map(({ menu_items: item }) => (
+                  <div key={item.id} className="rounded-lg border p-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium">{item.name}</h4>
+                      <span className="text-muted-foreground">
+                        ${item.price.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Wines */}
+          {typedPost.wines?.length > 0 && (
+            <div>
+              <h3 className="mb-4 text-xl font-semibold">Featured Wines</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {typedPost.wines.map(({ wines: wine }) => (
+                  <div key={wine.id} className="rounded-lg border p-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium">{wine.name}</h4>
+                      <span className="text-muted-foreground">
+                        ${wine.bottle_price.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Back Link */}
+      <div className="mt-12 border-t pt-8">
+        <Link
+          href="/blog"
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          ← Back to all posts
+        </Link>
+      </div>
+    </article>
+  );
+}
+```
+
+### app/blog/page.tsx
+
+```typescript
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
+import Link from "next/link";
+import Image from "next/image";
+import { formatDate } from "@/lib/utils";
+
+// Define types for blog content structure
+type ContentNode = {
+  type: string;
+  content?: Array<{
+    type: string;
+    text?: string;
+    content?: ContentNode[];
+  }>;
+  text?: string;
+};
+
+type BlogContent = {
+  type: string;
+  content: ContentNode[];
+};
+
+type BlogPostType = {
+  id: string;
+  title: string;
+  slug: string;
+  content: BlogContent;
+  featured_image: string | null;
+  featured_image_url: string | null;
+  featured_image_alt: string | null;
+  published: boolean;
+  created_at: string;
+  author_info: Array<{
+    name: string | null;
+    email: string;
+  }>;
+};
+
+export default async function BlogPage() {
+  const supabase = createServerComponentClient({ cookies });
+
+  // Fetch published blog posts
+  const { data: posts } = await supabase
+    .from('blog_posts')
+    .select(`
+      id,
+      title,
+      slug,
+      content,
+      featured_image,
+      featured_image_url,
+      featured_image_alt,
+      published,
+      created_at,
+      author_info:users(name, email)
+    `)
+    .eq('published', true)
+    .order('created_at', { ascending: false });
+
+  // Extract a preview from the content
+  const getPreview = (content: BlogContent | null): string => {
+    if (!content || !content.content) return "";
+    
+    const textContent = content.content.reduce((acc: string, node) => {
+      if (node.content?.[0]?.text) {
+        return acc + " " + node.content[0].text;
+      }
+      return acc;
+    }, "");
+
+    return textContent.length > 200 
+      ? textContent.substring(0, 200) + "..."
+      : textContent;
+  };
+
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-8">
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold tracking-tight">Blog</h1>
+        <p className="text-xl text-muted-foreground">
+          Latest news and updates from our restaurant
+        </p>
+      </div>
+
+      {!posts?.length ? (
+        <div className="mt-8 text-center">
+          <p className="text-muted-foreground">No blog posts found.</p>
+        </div>
+      ) : (
+        <div className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+          {posts.map((post: BlogPostType) => (
+            <Link
+              key={post.id}
+              href={`/blog/${post.slug}`}
+              className="group relative flex flex-col overflow-hidden rounded-lg border bg-card transition-shadow hover:shadow-lg"
+            >
+              {/* Featured Image */}
+              <div className="relative aspect-[16/9] overflow-hidden bg-muted">
+                {post.featured_image_url ? (
+                  <Image
+                    src={post.featured_image_url}
+                    alt={post.featured_image_alt || post.title}
+                    fill
+                    className="object-cover transition-transform duration-300 group-hover:scale-105"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center bg-muted">
+                    <span className="text-sm text-muted-foreground">
+                      No image available
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Content */}
+              <div className="flex flex-1 flex-col justify-between p-6">
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold tracking-tight transition-colors group-hover:text-primary">
+                    {post.title}
+                  </h2>
+                  <p className="text-sm text-muted-foreground line-clamp-3">
+                    {getPreview(post.content)}
+                  </p>
+                </div>
+
+                {/* Metadata */}
+                <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+                  <span>
+                    By {post.author_info[0]?.name || post.author_info[0]?.email || 'Anonymous'}
+                  </span>
+                  <span>{formatDate(post.created_at)}</span>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### app/dashboard/blog/[id]/page.tsx
+
+```typescript
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { Loader2 } from "lucide-react";
+import slugify from "slugify";
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { PageHeader } from "@/components/core/layout";
+
+const blogFormSchema = z.object({
+  title: z.string().min(1, { message: "Title is required" }),
+  content: z.any(),
+  featured_image: z.string().optional(),
+  featured_image_alt: z.string().optional(),
+  published: z.boolean().default(false),
+});
+
+type BlogFormValues = z.infer<typeof blogFormSchema>;
+
+export default function BlogPostPage() {
+  const params = useParams();
+  const router = useRouter();
+  const { toast } = useToast();
+  const supabase = createClientComponentClient();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const isNewPost = params.id === "new";
+
+  const form = useForm<BlogFormValues>({
+    resolver: zodResolver(blogFormSchema),
+    defaultValues: {
+      title: "",
+      content: {
+        type: "doc",
+        content: [{ type: "paragraph" }],
+      },
+      featured_image: "",
+      featured_image_alt: "",
+      published: false,
+    },
+  });
+
+  const editor = useEditor({
+    extensions: [StarterKit],
+    content: {
+      type: "doc",
+      content: [{ type: "paragraph" }],
+    },
+    onUpdate: ({ editor }) => {
+      const json = editor.getJSON();
+      console.log("Editor Update:", json);
+      form.setValue("content", json);
+    },
+  });
+
+  useEffect(() => {
+    const fetchPost = async () => {
+      if (isNewPost) return;
+
+      try {
+        setIsLoading(true);
+        const { data: post, error: supabaseError } = await supabase
+          .from("blog_posts")
+          .select("*")
+          .eq("id", params.id)
+          .single();
+
+        if (supabaseError) {
+          toast({
+            title: "Error",
+            description: "Failed to load blog post",
+            variant: "destructive",
+          });
+          console.error("Error fetching post:", supabaseError);
+          return;
+        }
+
+        if (post && editor) {
+          console.log("Post Content:", post.content);
+          form.reset({
+            ...post,
+            content: post.content,
+          });
+          editor.commands.setContent(
+            post.content || {
+              type: "doc",
+              content: [{ type: "paragraph" }],
+            }
+          );
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPost();
+  }, [isNewPost, params.id, supabase, form, editor, toast]);
+
+  const onSubmit = async (values: BlogFormValues) => {
+    try {
+      setIsLoading(true);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!editor) return;
+
+      const editorContent = editor.getJSON();
+      console.log("Saving content:", editorContent);
+
+      const postData = {
+        title: values.title,
+        slug: slugify(values.title, { lower: true, strict: true }),
+        content: {
+          type: "doc",
+          content: editorContent.content,
+        },
+        featured_image: values.featured_image,
+        featured_image_alt: values.featured_image_alt,
+        published: values.published,
+        author_id: user?.id,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (isNewPost) {
+        const { error: createError } = await supabase
+          .from("blog_posts")
+          .insert([{ ...postData, created_at: new Date().toISOString() }])
+          .select()
+          .single();
+
+        if (createError) throw createError;
+
+        toast({
+          title: "Success",
+          description: "Blog post created successfully",
+        });
+      } else {
+        const { error: updateError } = await supabase
+          .from("blog_posts")
+          .update(postData)
+          .eq("id", params.id);
+
+        if (updateError) throw updateError;
+
+        toast({
+          title: "Success",
+          description: "Blog post updated successfully",
+        });
+      }
+
+      router.push("/dashboard/blog");
+    } catch (error) {
+      console.error("Error saving post:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save blog post",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="p-6">
+      <PageHeader
+        heading={isNewPost ? "Create New Post" : "Edit Post"}
+        text={
+          isNewPost ? "Create a new blog post" : "Edit an existing blog post"
+        }
+      />
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          <FormField
+            control={form.control}
+            name="title"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Title</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Post title" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className="prose prose-sm w-full max-w-none">
+            <FormField
+              control={form.control}
+              name="content"
+              render={() => (
+                <FormItem>
+                  <FormLabel>Content</FormLabel>
+                  <FormControl>
+                    <div className="bg-background rounded-md shadow-sm ring-1 ring-inset ring-input">
+                      <div className="border-b p-2 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          type="button"
+                          onClick={() =>
+                            editor?.chain().focus().toggleBold().run()
+                          }
+                          className={
+                            editor?.isActive("bold") ? "bg-accent" : ""
+                          }
+                        >
+                          Bold
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          type="button"
+                          onClick={() =>
+                            editor?.chain().focus().toggleItalic().run()
+                          }
+                          className={
+                            editor?.isActive("italic") ? "bg-accent" : ""
+                          }
+                        >
+                          Italic
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          type="button"
+                          onClick={() =>
+                            editor
+                              ?.chain()
+                              .focus()
+                              .toggleHeading({ level: 2 })
+                              .run()
+                          }
+                          className={
+                            editor?.isActive("heading", { level: 2 })
+                              ? "bg-accent"
+                              : ""
+                          }
+                        >
+                          H2
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          type="button"
+                          onClick={() =>
+                            editor?.chain().focus().toggleBulletList().run()
+                          }
+                          className={
+                            editor?.isActive("bulletList") ? "bg-accent" : ""
+                          }
+                        >
+                          Bullet List
+                        </Button>
+                      </div>
+                      <div
+                        className="p-4 min-h-[400px] cursor-text focus-within:outline-none"
+                        onClick={() => editor?.chain().focus().run()}
+                      >
+                        <EditorContent
+                          className="[&_*]:outline-none prose-sm focus:outline-none"
+                          editor={editor}
+                        />
+                      </div>
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          <FormField
+            control={form.control}
+            name="published"
+            render={({ field }) => (
+              <FormItem className="flex items-center space-x-2">
+                <FormControl>
+                  <input
+                    type="checkbox"
+                    checked={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
+                <FormLabel className="!mt-0">Publish post</FormLabel>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className="flex justify-end space-x-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push("/dashboard/blog")}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isNewPost ? "Create Post" : "Update Post"}
+            </Button>
+          </div>
+        </form>
+      </Form>
+    </div>
+  );
+}
+
+```
+
+### app/dashboard/blog/page.tsx
+
+```typescript
+"use client";
+
+import { useState, useEffect } from "react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { PageHeader } from "@/components/core/layout";
+import { useRouter } from "next/navigation";
+
+type BlogPost = {
+ id: string;
+ title: string;
+ slug: string;
+ published: boolean;
+ created_at: string;
+ author_id: string;
+};
+
+export default function BlogPage() {
+ const [posts, setPosts] = useState<BlogPost[]>([]);
+ const [isLoading, setIsLoading] = useState(true);
+ const supabase = createClientComponentClient();
+ const { toast } = useToast();
+ const router = useRouter();
+
+ useEffect(() => {
+   const fetchPosts = async () => {
+     try {
+       setIsLoading(true);
+       const { data, error: supabaseError } = await supabase
+         .from('blog_posts')
+         .select('*')
+         .order('created_at', { ascending: false });
+
+       if (supabaseError) {
+         toast({
+           title: "Error",
+           description: "Failed to load blog posts",
+           variant: "destructive",
+         });
+         console.error('Supabase error:', supabaseError);
+         return;
+       }
+
+       setPosts(data || []);
+     } finally {
+       setIsLoading(false);
+     }
+   };
+
+   fetchPosts();
+ }, [supabase, toast]);
+
+ const handleNewPost = () => {
+   router.push('/dashboard/blog/new');
+ };
+
+ return (
+   <div className="p-6">
+     <PageHeader
+       heading="Blog Posts"
+       text="Create and manage your blog content"
+     >
+       <Button onClick={handleNewPost}>
+         <Plus className="mr-2 h-4 w-4" />
+         New Post
+       </Button>
+     </PageHeader>
+
+     {isLoading ? (
+       <div className="flex justify-center items-center h-64">
+         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+       </div>
+     ) : posts.length === 0 ? (
+       <div className="text-center py-12">
+         <p className="text-muted-foreground">No blog posts found. Create your first post!</p>
+       </div>
+     ) : (
+       <div className="grid gap-6">
+         {posts.map((post) => (
+           <div key={post.id} className="flex items-center justify-between p-4 bg-card border rounded-lg">
+             <div>
+               <h3 className="font-medium">{post.title}</h3>
+               <p className="text-sm text-muted-foreground">
+                 Created {new Date(post.created_at).toLocaleDateString()}
+               </p>
+             </div>
+             <Button variant="outline" onClick={() => router.push(`/dashboard/blog/${post.id}`)}>
+               Edit
+             </Button>
+           </div>
+         ))}
+       </div>
+     )}
+   </div>
+ );
+}
 ```
 
 ### app/dashboard/images/page.tsx
@@ -4802,6 +5625,7 @@ import {
   MenuSquare,
   ClipboardList,
   Wine,
+  BookOpen, // Added BookOpen icon
 } from "lucide-react";
 import type { Database } from "@/types";
 
@@ -4834,6 +5658,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
   if (profileError) {
     console.error('Error fetching user profile:', profileError);
+    // Optionally, you can handle the error by redirecting or showing an error message
   }
 
   return (
@@ -4879,6 +5704,19 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
                 <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
                   <Wine className="mr-2 h-4 w-4" />
                   Wine List
+                </div>
+              </Link>
+            </div>
+
+            {/* Blog Section - Newly Added */}
+            <div className="pt-4">
+              <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Blog
+              </h2>
+              <Link href="/dashboard/blog">
+                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                  <BookOpen className="mr-2 h-4 w-4" />
+                  Blog Posts
                 </div>
               </Link>
             </div>
@@ -4948,6 +5786,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     </div>
   );
 }
+
 ```
 
 ### app/dashboard/page.tsx
