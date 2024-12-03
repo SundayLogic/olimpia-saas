@@ -2,7 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Plus, Search, Eye, Trash2, Calendar } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Eye,
+  Trash2,
+  Calendar,
+} from "lucide-react";
 import { format } from "date-fns";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -11,6 +17,13 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/core/layout";
 import { useRouter } from "next/navigation";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +34,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+
+type FilterOptions = {
+  status: "all" | "published" | "draft";
+  author: string;
+  sortBy: "newest" | "oldest" | "title";
+};
 
 type BlogPost = {
   id: string;
@@ -53,37 +72,55 @@ export default function BlogPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [deletePost, setDeletePost] = useState<BlogPost | null>(null);
+  const [filters, setFilters] = useState<FilterOptions>({
+    status: "all",
+    author: "all",
+    sortBy: "newest",
+  });
 
   const supabase = createClientComponentClient();
   const { toast } = useToast();
   const router = useRouter();
 
-  const getContentPreview = (content: BlogPost['content']): string => {
+  const getContentPreview = (content: BlogPost["content"]): string => {
     if (!content?.content) return "";
-    
+
     const textContent = content.content
-      .map(block => 
+      .map((block) =>
         block.content
-          ?.map(item => item.text)
+          ?.map((item) => item.text)
           .filter(Boolean)
-          .join(' ')
+          .join(" ")
       )
       .filter(Boolean)
-      .join(' ');
-    
-    return textContent.length > 150 
+      .join(" ");
+
+    return textContent.length > 150
       ? `${textContent.substring(0, 150)}...`
       : textContent;
+  };
+
+  // Get unique authors for filter
+  const getUniqueAuthors = () => {
+    const authors = new Set<string>();
+    posts.forEach((post) => {
+      if (post.author_info?.[0]) {
+        const identifier =
+          post.author_info[0].name || post.author_info[0].email;
+        authors.add(identifier);
+      }
+    });
+    return Array.from(authors);
   };
 
   useEffect(() => {
     const fetchPosts = async () => {
       try {
         setIsLoading(true);
-        // First fetch posts
         const { data: postsData, error: postsError } = await supabase
-          .from('blog_posts')
-          .select(`
+          .from("blog_posts")
+          .select(
+            `
             id,
             title,
             slug,
@@ -94,11 +131,12 @@ export default function BlogPage() {
             featured_image_url,
             featured_image_alt,
             author_id
-          `)
-          .order('created_at', { ascending: false });
+          `
+          )
+          .order("created_at", { ascending: false });
 
         if (postsError) {
-          console.error('Posts fetch error:', postsError);
+          console.error("Posts fetch error:", postsError);
           toast({
             title: "Error",
             description: "Failed to load blog posts",
@@ -112,22 +150,24 @@ export default function BlogPage() {
           return;
         }
 
-        // Then fetch authors
-        const authorIds = postsData.map(post => post.author_id).filter(Boolean);
+        const authorIds = postsData
+          .map((post) => post.author_id)
+          .filter(Boolean);
         if (authorIds.length > 0) {
           const { data: authorsData, error: authorsError } = await supabase
-            .from('users')
-            .select('id, name, email')
-            .in('id', authorIds);
+            .from("users")
+            .select("id, name, email")
+            .in("id", authorIds);
 
           if (authorsError) {
-            console.error('Authors fetch error:', authorsError);
+            console.error("Authors fetch error:", authorsError);
           }
 
-          // Combine posts with author info
-          const postsWithAuthors = postsData.map(post => ({
+          const postsWithAuthors = postsData.map((post) => ({
             ...post,
-            author_info: authorsData?.filter(author => author.id === post.author_id) || []
+            author_info:
+              authorsData?.filter((author) => author.id === post.author_id) ||
+              [],
           }));
 
           setPosts(postsWithAuthors);
@@ -135,7 +175,7 @@ export default function BlogPage() {
           setPosts(postsData);
         }
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error("Error fetching data:", error);
         toast({
           title: "Error",
           description: "An error occurred while loading posts",
@@ -154,12 +194,12 @@ export default function BlogPage() {
 
     try {
       const { error: deleteError } = await supabase
-        .from('blog_posts')
+        .from("blog_posts")
         .delete()
-        .eq('id', deletePost.id);
+        .eq("id", deletePost.id);
 
       if (deleteError) {
-        console.error('Delete error:', deleteError);
+        console.error("Delete error:", deleteError);
         toast({
           title: "Error",
           description: "Failed to delete post",
@@ -173,12 +213,12 @@ export default function BlogPage() {
         description: "Post deleted successfully",
       });
 
-      setPosts((current) => 
+      setPosts((current) =>
         current.filter((post) => post.id !== deletePost.id)
       );
       setDeletePost(null);
     } catch (error) {
-      console.error('Error:', error);
+      console.error("Error:", error);
       toast({
         title: "Error",
         description: "An unexpected error occurred",
@@ -187,10 +227,43 @@ export default function BlogPage() {
     }
   };
 
-  // Filter posts based on search query
-  const filteredPosts = posts.filter((post) =>
-    post.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Apply filters and sorting
+  const filteredPosts = posts
+    .filter((post) => {
+      const matchesSearch = post.title
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase());
+      const matchesStatus =
+        filters.status === "all"
+          ? true
+          : filters.status === "published"
+            ? post.published
+            : !post.published;
+      const matchesAuthor =
+        filters.author === "all"
+          ? true
+          : post.author_info?.[0] &&
+            (post.author_info[0].name === filters.author ||
+              post.author_info[0].email === filters.author);
+
+      return matchesSearch && matchesStatus && matchesAuthor;
+    })
+    .sort((a, b) => {
+      switch (filters.sortBy) {
+        case "newest":
+          return (
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+        case "oldest":
+          return (
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        case "title":
+          return a.title.localeCompare(b.title);
+        default:
+          return 0;
+      }
+    });
 
   return (
     <div className="p-6">
@@ -198,22 +271,96 @@ export default function BlogPage() {
         heading="Blog Posts"
         text="Create and manage your blog content"
       >
-        <Button onClick={() => router.push('/dashboard/blog/new')}>
+        <Button onClick={() => router.push("/dashboard/blog/new")}>
           <Plus className="mr-2 h-4 w-4" />
           New Post
         </Button>
       </PageHeader>
 
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search posts..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-        />
+      {/* Filter Controls */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search posts..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        <Select
+          value={filters.status}
+          onValueChange={(value: FilterOptions["status"]) =>
+            setFilters((prev) => ({ ...prev, status: value }))
+          }
+        >
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="published">Published</SelectItem>
+            <SelectItem value="draft">Drafts</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={filters.author}
+          onValueChange={(value) =>
+            setFilters((prev) => ({ ...prev, author: value }))
+          }
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by Author" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Authors</SelectItem>
+            {getUniqueAuthors().map((author) => (
+              <SelectItem key={author} value={author}>
+                {author}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={filters.sortBy}
+          onValueChange={(value: FilterOptions["sortBy"]) =>
+            setFilters((prev) => ({ ...prev, sortBy: value }))
+          }
+        >
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Sort by" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="newest">Newest First</SelectItem>
+            <SelectItem value="oldest">Oldest First</SelectItem>
+            <SelectItem value="title">Title A-Z</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
+      {/* Active Filters */}
+      {(filters.status !== "all" ||
+        filters.author !== "all" ||
+        searchQuery) && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {filters.status !== "all" && (
+            <Badge variant="secondary" className="capitalize">
+              {filters.status}
+            </Badge>
+          )}
+          {filters.author !== "all" && (
+            <Badge variant="secondary">Author: {filters.author}</Badge>
+          )}
+          {searchQuery && (
+            <Badge variant="secondary">Search: {searchQuery}</Badge>
+          )}
+        </div>
+      )}
+
+      {/* Posts List */}
       {isLoading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -221,16 +368,16 @@ export default function BlogPage() {
       ) : filteredPosts.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground">
-            {searchQuery 
-              ? "No posts found matching your search." 
+            {searchQuery || filters.status !== "all" || filters.author !== "all"
+              ? "No posts found matching your filters."
               : "No blog posts found. Create your first post!"}
           </p>
         </div>
       ) : (
         <div className="grid gap-6">
           {filteredPosts.map((post) => (
-            <div 
-              key={post.id} 
+            <div
+              key={post.id}
               className="group relative flex gap-4 p-4 bg-card border rounded-lg hover:shadow-md transition-shadow"
             >
               {post.featured_image_url && (
@@ -261,13 +408,19 @@ export default function BlogPage() {
                   {post.author_info?.[0] && (
                     <>
                       <span>•</span>
-                      <span>By {post.author_info[0].name || post.author_info[0].email}</span>
+                      <span>
+                        By{" "}
+                        {post.author_info[0].name || post.author_info[0].email}
+                      </span>
                     </>
                   )}
                   {post.updated_at && post.updated_at !== post.created_at && (
                     <>
                       <span>•</span>
-                      <span>Updated {format(new Date(post.updated_at), "MMM d, yyyy")}</span>
+                      <span>
+                        Updated{" "}
+                        {format(new Date(post.updated_at), "MMM d, yyyy")}
+                      </span>
                     </>
                   )}
                 </div>
@@ -280,8 +433,8 @@ export default function BlogPage() {
 
                 <div className="flex items-center gap-2 mt-4">
                   {post.published && (
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => router.push(`/blog/${post.slug}`)}
                     >
@@ -289,14 +442,14 @@ export default function BlogPage() {
                       View
                     </Button>
                   )}
-                  <Button 
+                  <Button
                     variant="outline"
                     size="sm"
                     onClick={() => router.push(`/dashboard/blog/${post.id}`)}
                   >
                     Edit
                   </Button>
-                  <Button 
+                  <Button
                     variant="outline"
                     size="sm"
                     className="text-destructive hover:text-destructive-foreground hover:bg-destructive"
@@ -316,7 +469,7 @@ export default function BlogPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Post</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &quot;{deletePost?.title}&quot;? 
+              Are you sure you want to delete &quot;{deletePost?.title}&quot;?
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -331,6 +484,34 @@ export default function BlogPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Stats Section */}
+      <div className="mt-8 p-4 border rounded-lg bg-card">
+        <h3 className="font-medium mb-4">Quick Stats</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="p-4 border rounded-md">
+            <div className="text-sm text-muted-foreground">Total Posts</div>
+            <div className="text-2xl font-bold">{posts.length}</div>
+          </div>
+          <div className="p-4 border rounded-md">
+            <div className="text-sm text-muted-foreground">Published</div>
+            <div className="text-2xl font-bold">
+              {posts.filter((post) => post.published).length}
+            </div>
+          </div>
+          <div className="p-4 border rounded-md">
+            <div className="text-sm text-muted-foreground">Drafts</div>
+            <div className="text-2xl font-bold">
+              {posts.filter((post) => !post.published).length}
+            </div>
+          </div>
+          <div className="p-4 border rounded-md">
+            <div className="text-sm text-muted-foreground">Authors</div>
+            <div className="text-2xl font-bold">
+              {getUniqueAuthors().length}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
