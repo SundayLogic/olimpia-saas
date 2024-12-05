@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-12-03 12:54:53
+Generated on: 2024-12-05 11:12:41
 
 ## Documented Directories:
 - app/
@@ -98,6 +98,7 @@ src/
             │   ├── select.tsx
             │   ├── switch.tsx
             │   ├── table.tsx
+            │   ├── textarea.tsx
             │   ├── toast.tsx
             │   ├── toaster.tsx
         ├── hooks/
@@ -1146,110 +1147,403 @@ export default async function BlogPage() {
 ```typescript
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { Loader2 } from "lucide-react";
 import slugify from "slugify";
-import { Button } from "@/components/ui/button";
+import { format } from "date-fns";
+
+import { useEditor, EditorContent, BubbleMenu } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Image from "@tiptap/extension-image";
+import Link from "@tiptap/extension-link";
+import type { JSONContent } from "@tiptap/react";
+import type { Editor } from "@tiptap/core";
+
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+  Loader2,
+  Save,
+  Eye,
+  EyeOff,
+  Settings,
+  Bold,
+  Italic,
+  Code,
+  Link as LinkIcon,
+  Image as ImageIcon,
+  Quote,
+  List,
+  Heading as HeadingIcon,
+} from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/core/layout";
 
+// Types
+type BlogStatus = "draft" | "published" | "scheduled";
+
+interface BlogFormData {
+  title: string;
+  content: JSONContent;
+  meta_description?: string;
+  featured_image?: string;
+  featured_image_alt?: string;
+  status: BlogStatus;
+  published_at?: string;
+  tags: string[];
+}
+
+interface AutoSaveState {
+  lastSaved: Date | null;
+  saving: boolean;
+  error: string | null;
+}
+
+interface EditorProps {
+  editor: Editor | null;
+}
+
+interface BlogToolbarProps {
+  onPreviewToggle: () => void;
+  isPreview: boolean;
+  onSidebarToggle: () => void;
+  lastSaved: Date | null;
+}
+
+interface BlogSidebarProps {
+  formData: Omit<BlogFormData, "content"> & { content?: JSONContent };
+  onChange: (data: Partial<BlogFormData>) => void;
+}
+
+// Form Schema
 const blogFormSchema = z.object({
   title: z.string().min(1, { message: "Title is required" }),
-  content: z.any(),
-  featured_image: z.string().optional(),
-  featured_image_alt: z.string().optional(),
-  published: z.boolean().default(false),
+  content: z.custom<JSONContent>((data) => !!data),
+  meta_description: z.string().optional(),
+  status: z.enum(["draft", "published", "scheduled"]),
+  published_at: z.string().optional(),
+  tags: z.array(z.string()).default([]),
 });
 
-type BlogFormValues = z.infer<typeof blogFormSchema>;
+type FormData = z.infer<typeof blogFormSchema>;
 
+// Editor Component
+function RichTextEditor({ editor }: EditorProps) {
+  if (!editor) return null;
+
+  return (
+    <div className="relative">
+      <EditorContent editor={editor} />
+
+      {editor && (
+        <BubbleMenu
+          editor={editor}
+          tippyOptions={{ duration: 100 }}
+          className="flex items-center space-x-1 rounded-lg bg-background shadow-lg border p-1"
+        >
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().toggleBold().run()}
+            className={editor.isActive("bold") ? "bg-accent" : ""}
+          >
+            <Bold className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+            className={editor.isActive("italic") ? "bg-accent" : ""}
+          >
+            <Italic className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().toggleCode().run()}
+            className={editor.isActive("code") ? "bg-accent" : ""}
+          >
+            <Code className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              editor.chain().focus().toggleHeading({ level: 2 }).run()
+            }
+            className={
+              editor.isActive("heading", { level: 2 }) ? "bg-accent" : ""
+            }
+          >
+            <HeadingIcon className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+            className={editor.isActive("blockquote") ? "bg-accent" : ""}
+          >
+            <Quote className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+            className={editor.isActive("bulletList") ? "bg-accent" : ""}
+          >
+            <List className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const url = window.prompt("Enter URL");
+              if (url) editor.chain().focus().setLink({ href: url }).run();
+            }}
+            className={editor.isActive("link") ? "bg-accent" : ""}
+          >
+            <LinkIcon className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const url = window.prompt("Enter image URL");
+              if (url) editor.chain().focus().setImage({ src: url }).run();
+            }}
+          >
+            <ImageIcon className="h-4 w-4" />
+          </Button>
+        </BubbleMenu>
+      )}
+    </div>
+  );
+}
+
+// Toolbar Component
+function BlogToolbar({
+  onPreviewToggle,
+  isPreview,
+  onSidebarToggle,
+  lastSaved,
+}: BlogToolbarProps) {
+  return (
+    <div className="border-b p-4 flex items-center justify-between bg-card">
+      <div className="flex items-center space-x-4">
+        {lastSaved && (
+          <span className="text-sm text-muted-foreground flex items-center">
+            <Save className="w-4 h-4 mr-1" />
+            Last saved {format(lastSaved, "h:mm a")}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center space-x-2">
+        <Button variant="ghost" size="sm" onClick={onPreviewToggle}>
+          {isPreview ? (
+            <>
+              <EyeOff className="w-4 h-4 mr-2" />
+              Edit
+            </>
+          ) : (
+            <>
+              <Eye className="w-4 h-4 mr-2" />
+              Preview
+            </>
+          )}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onSidebarToggle}>
+          <Settings className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Sidebar Component
+function BlogSidebar({ formData, onChange }: BlogSidebarProps) {
+  return (
+    <div className="w-80 border-l bg-card overflow-y-auto">
+      <div className="p-4 space-y-6">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Status</label>
+          <Select
+            value={formData.status}
+            onValueChange={(value: BlogStatus) => onChange({ status: value })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="published">Published</SelectItem>
+              <SelectItem value="scheduled">Scheduled</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {formData.status === "scheduled" && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Publish Date</label>
+            <Input
+              type="datetime-local"
+              value={formData.published_at || ""}
+              onChange={(e) => onChange({ published_at: e.target.value })}
+            />
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Meta Description</label>
+          <Textarea
+            value={formData.meta_description || ""}
+            onChange={(e) => onChange({ meta_description: e.target.value })}
+            placeholder="Enter SEO description..."
+            className="h-20"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Tags</label>
+          <Select
+            value={formData.tags.join(",")}
+            onValueChange={(value) =>
+              onChange({ tags: value.split(",").filter(Boolean) })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select tags" />
+            </SelectTrigger>
+            <SelectContent>
+              {["tech", "food", "travel", "lifestyle"].map((tag) => (
+                <SelectItem key={tag} value={tag}>
+                  {tag.charAt(0).toUpperCase() + tag.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Main Component
 export default function BlogPostPage() {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
   const supabase = createClientComponentClient();
+
   const [isLoading, setIsLoading] = useState(false);
+  const [isPreview, setIsPreview] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [autoSave, setAutoSave] = useState<AutoSaveState>({
+    lastSaved: null,
+    saving: false,
+    error: null,
+  });
 
   const isNewPost = params.id === "new";
 
-  const form = useForm<BlogFormValues>({
+  const form = useForm<FormData>({
     resolver: zodResolver(blogFormSchema),
     defaultValues: {
       title: "",
-      content: {
-        type: "doc",
-        content: [{ type: "paragraph" }],
-      },
-      featured_image: "",
-      featured_image_alt: "",
-      published: false,
+      content: { type: "doc", content: [{ type: "paragraph" }] },
+      meta_description: "",
+      status: "draft" as const,
+      tags: [],
     },
   });
 
   const editor = useEditor({
-    extensions: [StarterKit],
-    content: {
-      type: "doc",
-      content: [{ type: "paragraph" }],
-    },
+    extensions: [StarterKit, Image, Link],
+    content: form.watch("content"),
     onUpdate: ({ editor }) => {
-      const json = editor.getJSON();
-      console.log("Editor Update:", json);
-      form.setValue("content", json);
+      const content = editor.getJSON();
+      form.setValue("content", content);
+      void autoSavePost({ ...form.getValues(), content });
     },
   });
 
+  const autoSavePost = useCallback(
+    async (data: FormData) => {
+      if (!isNewPost) {
+        try {
+          setAutoSave((prev) => ({ ...prev, saving: true }));
+          const { error: saveError } = await supabase
+            .from("blog_posts")
+            .update({
+              content: data.content,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", params.id);
+
+          if (saveError) throw saveError;
+
+          setAutoSave({
+            lastSaved: new Date(),
+            saving: false,
+            error: null,
+          });
+        } catch {
+          setAutoSave((prev) => ({
+            ...prev,
+            saving: false,
+            error: "Failed to auto-save",
+          }));
+        }
+      }
+    },
+    [isNewPost, params.id, supabase]
+  );
   useEffect(() => {
     const fetchPost = async () => {
       if (isNewPost) return;
 
       try {
         setIsLoading(true);
-        const { data: post, error: supabaseError } = await supabase
+        const { data: post, error: fetchError } = await supabase
           .from("blog_posts")
           .select("*")
           .eq("id", params.id)
           .single();
 
-        if (supabaseError) {
-          toast({
-            title: "Error",
-            description: "Failed to load blog post",
-            variant: "destructive",
-          });
-          console.error("Error fetching post:", supabaseError);
-          return;
-        }
+        if (fetchError) throw fetchError;
 
         if (post && editor) {
-          console.log("Post Content:", post.content);
           form.reset({
-            ...post,
+            title: post.title,
             content: post.content,
+            meta_description: post.meta_description,
+            status: post.status as BlogStatus,
+            published_at: post.published_at,
+            tags: post.tags || [],
           });
-          editor.commands.setContent(
-            post.content || {
-              type: "doc",
-              content: [{ type: "paragraph" }],
-            }
-          );
+          editor.commands.setContent(post.content);
         }
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to load blog post";
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
@@ -1258,38 +1552,35 @@ export default function BlogPostPage() {
     fetchPost();
   }, [isNewPost, params.id, supabase, form, editor, toast]);
 
-  const onSubmit = async (values: BlogFormValues) => {
+  const onSubmit = async (values: FormData) => {
     try {
       setIsLoading(true);
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
 
-      if (!editor) return;
-
-      const editorContent = editor.getJSON();
-      console.log("Saving content:", editorContent);
+      if (userError) throw userError;
+      if (!user) throw new Error("No user found");
 
       const postData = {
         title: values.title,
         slug: slugify(values.title, { lower: true, strict: true }),
-        content: {
-          type: "doc",
-          content: editorContent.content,
-        },
-        featured_image: values.featured_image,
-        featured_image_alt: values.featured_image_alt,
-        published: values.published,
-        author_id: user?.id,
+        content: values.content,
+        meta_description: values.meta_description,
+        status: values.status,
+        published_at:
+          values.status === "scheduled" ? values.published_at : null,
+        published: values.status === "published",
+        tags: values.tags,
+        author_id: user.id,
         updated_at: new Date().toISOString(),
       };
 
       if (isNewPost) {
         const { error: createError } = await supabase
           .from("blog_posts")
-          .insert([{ ...postData, created_at: new Date().toISOString() }])
-          .select()
-          .single();
+          .insert([{ ...postData, created_at: new Date().toISOString() }]);
 
         if (createError) throw createError;
 
@@ -1313,10 +1604,12 @@ export default function BlogPostPage() {
 
       router.push("/dashboard/blog");
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to save blog post";
       console.error("Error saving post:", error);
       toast({
         title: "Error",
-        description: "Failed to save blog post",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -1325,7 +1618,7 @@ export default function BlogPostPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="h-screen flex flex-col overflow-hidden">
       <PageHeader
         heading={isNewPost ? "Create New Post" : "Edit Post"}
         text={
@@ -1333,140 +1626,124 @@ export default function BlogPostPage() {
         }
       />
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          <FormField
-            control={form.control}
-            name="title"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Title</FormLabel>
-                <FormControl>
-                  <Input {...field} placeholder="Post title" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+      <BlogToolbar
+        onPreviewToggle={() => setIsPreview(!isPreview)}
+        isPreview={isPreview}
+        onSidebarToggle={() => setShowSidebar(!showSidebar)}
+        lastSaved={autoSave.lastSaved}
+      />
 
-          <div className="prose prose-sm w-full max-w-none">
-            <FormField
-              control={form.control}
-              name="content"
-              render={() => (
-                <FormItem>
-                  <FormLabel>Content</FormLabel>
-                  <FormControl>
-                    <div className="bg-background rounded-md shadow-sm ring-1 ring-inset ring-input">
-                      <div className="border-b p-2 flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          type="button"
-                          onClick={() =>
-                            editor?.chain().focus().toggleBold().run()
-                          }
-                          className={
-                            editor?.isActive("bold") ? "bg-accent" : ""
-                          }
-                        >
-                          Bold
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          type="button"
-                          onClick={() =>
-                            editor?.chain().focus().toggleItalic().run()
-                          }
-                          className={
-                            editor?.isActive("italic") ? "bg-accent" : ""
-                          }
-                        >
-                          Italic
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          type="button"
-                          onClick={() =>
-                            editor
-                              ?.chain()
-                              .focus()
-                              .toggleHeading({ level: 2 })
-                              .run()
-                          }
-                          className={
-                            editor?.isActive("heading", { level: 2 })
-                              ? "bg-accent"
-                              : ""
-                          }
-                        >
-                          H2
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          type="button"
-                          onClick={() =>
-                            editor?.chain().focus().toggleBulletList().run()
-                          }
-                          className={
-                            editor?.isActive("bulletList") ? "bg-accent" : ""
-                          }
-                        >
-                          Bullet List
-                        </Button>
-                      </div>
-                      <div
-                        className="p-4 min-h-[400px] cursor-text focus-within:outline-none"
-                        onClick={() => editor?.chain().focus().run()}
-                      >
-                        <EditorContent
-                          className="[&_*]:outline-none prose-sm focus:outline-none"
-                          editor={editor}
-                        />
-                      </div>
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto p-6 space-y-8">
+            <Input
+              type="text"
+              placeholder="Post title"
+              className="text-3xl font-bold border-none bg-transparent focus-visible:ring-0 p-0"
+              {...form.register("title")}
             />
-          </div>
-          <FormField
-            control={form.control}
-            name="published"
-            render={({ field }) => (
-              <FormItem className="flex items-center space-x-2">
-                <FormControl>
-                  <input
-                    type="checkbox"
-                    checked={field.value}
-                    onChange={field.onChange}
-                  />
-                </FormControl>
-                <FormLabel className="!mt-0">Publish post</FormLabel>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
 
-          <div className="flex justify-end space-x-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.push("/dashboard/blog")}
+            {isPreview ? (
+              <div className="prose prose-lg max-w-none">
+                <h1>{form.watch("title")}</h1>
+                <div
+                  dangerouslySetInnerHTML={{ __html: editor?.getHTML() || "" }}
+                />
+              </div>
+            ) : (
+              <RichTextEditor editor={editor} />
+            )}
+          </div>
+        </div>
+
+        {showSidebar && (
+          <BlogSidebar
+            formData={{
+              title: form.watch("title"),
+              status: form.watch("status"),
+              meta_description: form.watch("meta_description"),
+              published_at: form.watch("published_at"),
+              tags: form.watch("tags"),
+            }}
+            onChange={(data) => {
+              Object.entries(data).forEach(([key, value]) => {
+                form.setValue(key as keyof FormData, value);
+              });
+            }}
+          />
+        )}
+      </div>
+
+      <div className="border-t bg-card p-4 flex justify-between items-center">
+        <div className="text-sm text-muted-foreground">
+          {autoSave.saving && (
+            <span className="flex items-center">
+              <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+              Saving...
+            </span>
+          )}
+          {autoSave.error && (
+            <span className="text-destructive">{autoSave.error}</span>
+          )}
+          {!autoSave.saving && !autoSave.error && autoSave.lastSaved && (
+            <span className="text-muted-foreground">All changes saved</span>
+          )}
+        </div>
+
+        <div className="flex items-center space-x-4">
+          <Button
+            variant="outline"
+            onClick={() => router.push("/dashboard/blog")}
+            disabled={isLoading || autoSave.saving}
+          >
+            Cancel
+          </Button>
+
+          <div className="flex items-center space-x-2">
+            <Select
+              value={form.watch("status")}
+              onValueChange={(value: BlogStatus) =>
+                form.setValue("status", value)
+              }
             >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isNewPost ? "Create Post" : "Update Post"}
+              <SelectTrigger className="w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Save Draft</SelectItem>
+                <SelectItem value="published">Publish</SelectItem>
+                <SelectItem value="scheduled">Schedule</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button
+              onClick={form.handleSubmit(onSubmit)}
+              disabled={isLoading || autoSave.saving}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : form.watch("status") === "published" ? (
+                "Publish"
+              ) : form.watch("status") === "scheduled" ? (
+                "Schedule"
+              ) : (
+                "Save Draft"
+              )}
             </Button>
           </div>
-        </form>
-      </Form>
+        </div>
+      </div>
+
+      {form.watch("status") === "scheduled" && !form.watch("published_at") && (
+        <div className="border-t bg-yellow-50 dark:bg-yellow-900/10 p-2 text-center">
+          <span className="text-sm text-yellow-800 dark:text-yellow-200">
+            Please select a publication date for scheduled posts
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -1480,100 +1757,520 @@ export default function BlogPostPage() {
 
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Plus } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Eye,
+  Trash2,
+  Calendar,
+} from "lucide-react";
+import { format } from "date-fns";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/core/layout";
 import { useRouter } from "next/navigation";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+type FilterOptions = {
+  status: "all" | "published" | "draft";
+  author: string;
+  sortBy: "newest" | "oldest" | "title";
+};
 
 type BlogPost = {
- id: string;
- title: string;
- slug: string;
- published: boolean;
- created_at: string;
- author_id: string;
+  id: string;
+  title: string;
+  slug: string;
+  published: boolean;
+  created_at: string;
+  updated_at: string | null;
+  content: {
+    type: string;
+    content: Array<{
+      type: string;
+      content?: Array<{
+        type: string;
+        text?: string;
+      }>;
+    }>;
+  } | null;
+  featured_image_url: string | null;
+  featured_image_alt: string | null;
+  author_id: string;
+  author_info?: Array<{
+    name: string | null;
+    email: string;
+  }>;
 };
 
 export default function BlogPage() {
- const [posts, setPosts] = useState<BlogPost[]>([]);
- const [isLoading, setIsLoading] = useState(true);
- const supabase = createClientComponentClient();
- const { toast } = useToast();
- const router = useRouter();
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [deletePost, setDeletePost] = useState<BlogPost | null>(null);
+  const [filters, setFilters] = useState<FilterOptions>({
+    status: "all",
+    author: "all",
+    sortBy: "newest",
+  });
 
- useEffect(() => {
-   const fetchPosts = async () => {
-     try {
-       setIsLoading(true);
-       const { data, error: supabaseError } = await supabase
-         .from('blog_posts')
-         .select('*')
-         .order('created_at', { ascending: false });
+  const supabase = createClientComponentClient();
+  const { toast } = useToast();
+  const router = useRouter();
 
-       if (supabaseError) {
-         toast({
-           title: "Error",
-           description: "Failed to load blog posts",
-           variant: "destructive",
-         });
-         console.error('Supabase error:', supabaseError);
-         return;
-       }
+  const getContentPreview = (content: BlogPost["content"]): string => {
+    if (!content?.content) return "";
 
-       setPosts(data || []);
-     } finally {
-       setIsLoading(false);
-     }
-   };
+    const textContent = content.content
+      .map((block) =>
+        block.content
+          ?.map((item) => item.text)
+          .filter(Boolean)
+          .join(" ")
+      )
+      .filter(Boolean)
+      .join(" ");
 
-   fetchPosts();
- }, [supabase, toast]);
+    return textContent.length > 150
+      ? `${textContent.substring(0, 150)}...`
+      : textContent;
+  };
 
- const handleNewPost = () => {
-   router.push('/dashboard/blog/new');
- };
+  // Get unique authors for filter
+  const getUniqueAuthors = () => {
+    const authors = new Set<string>();
+    posts.forEach((post) => {
+      if (post.author_info?.[0]) {
+        const identifier =
+          post.author_info[0].name || post.author_info[0].email;
+        authors.add(identifier);
+      }
+    });
+    return Array.from(authors);
+  };
 
- return (
-   <div className="p-6">
-     <PageHeader
-       heading="Blog Posts"
-       text="Create and manage your blog content"
-     >
-       <Button onClick={handleNewPost}>
-         <Plus className="mr-2 h-4 w-4" />
-         New Post
-       </Button>
-     </PageHeader>
+  useEffect(() => {
+    const fetchPosts = async () => {
+      try {
+        setIsLoading(true);
+        const { data: postsData, error: postsError } = await supabase
+          .from("blog_posts")
+          .select(
+            `
+            id,
+            title,
+            slug,
+            published,
+            created_at,
+            updated_at,
+            content,
+            featured_image_url,
+            featured_image_alt,
+            author_id
+          `
+          )
+          .order("created_at", { ascending: false });
 
-     {isLoading ? (
-       <div className="flex justify-center items-center h-64">
-         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-       </div>
-     ) : posts.length === 0 ? (
-       <div className="text-center py-12">
-         <p className="text-muted-foreground">No blog posts found. Create your first post!</p>
-       </div>
-     ) : (
-       <div className="grid gap-6">
-         {posts.map((post) => (
-           <div key={post.id} className="flex items-center justify-between p-4 bg-card border rounded-lg">
-             <div>
-               <h3 className="font-medium">{post.title}</h3>
-               <p className="text-sm text-muted-foreground">
-                 Created {new Date(post.created_at).toLocaleDateString()}
-               </p>
-             </div>
-             <Button variant="outline" onClick={() => router.push(`/dashboard/blog/${post.id}`)}>
-               Edit
-             </Button>
-           </div>
-         ))}
-       </div>
-     )}
-   </div>
- );
+        if (postsError) {
+          console.error("Posts fetch error:", postsError);
+          toast({
+            title: "Error",
+            description: "Failed to load blog posts",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (!postsData) {
+          setPosts([]);
+          return;
+        }
+
+        const authorIds = postsData
+          .map((post) => post.author_id)
+          .filter(Boolean);
+        if (authorIds.length > 0) {
+          const { data: authorsData, error: authorsError } = await supabase
+            .from("users")
+            .select("id, name, email")
+            .in("id", authorIds);
+
+          if (authorsError) {
+            console.error("Authors fetch error:", authorsError);
+          }
+
+          const postsWithAuthors = postsData.map((post) => ({
+            ...post,
+            author_info:
+              authorsData?.filter((author) => author.id === post.author_id) ||
+              [],
+          }));
+
+          setPosts(postsWithAuthors);
+        } else {
+          setPosts(postsData);
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        toast({
+          title: "Error",
+          description: "An error occurred while loading posts",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPosts();
+  }, [supabase, toast]);
+
+  const handleDeletePost = async () => {
+    if (!deletePost) return;
+
+    try {
+      const { error: deleteError } = await supabase
+        .from("blog_posts")
+        .delete()
+        .eq("id", deletePost.id);
+
+      if (deleteError) {
+        console.error("Delete error:", deleteError);
+        toast({
+          title: "Error",
+          description: "Failed to delete post",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Success",
+        description: "Post deleted successfully",
+      });
+
+      setPosts((current) =>
+        current.filter((post) => post.id !== deletePost.id)
+      );
+      setDeletePost(null);
+    } catch (error) {
+      console.error("Error:", error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Apply filters and sorting
+  const filteredPosts = posts
+    .filter((post) => {
+      const matchesSearch = post.title
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase());
+      const matchesStatus =
+        filters.status === "all"
+          ? true
+          : filters.status === "published"
+            ? post.published
+            : !post.published;
+      const matchesAuthor =
+        filters.author === "all"
+          ? true
+          : post.author_info?.[0] &&
+            (post.author_info[0].name === filters.author ||
+              post.author_info[0].email === filters.author);
+
+      return matchesSearch && matchesStatus && matchesAuthor;
+    })
+    .sort((a, b) => {
+      switch (filters.sortBy) {
+        case "newest":
+          return (
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+        case "oldest":
+          return (
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        case "title":
+          return a.title.localeCompare(b.title);
+        default:
+          return 0;
+      }
+    });
+
+  return (
+    <div className="p-6">
+      <PageHeader
+        heading="Blog Posts"
+        text="Create and manage your blog content"
+      >
+        <Button onClick={() => router.push("/dashboard/blog/new")}>
+          <Plus className="mr-2 h-4 w-4" />
+          New Post
+        </Button>
+      </PageHeader>
+
+      {/* Filter Controls */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search posts..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        <Select
+          value={filters.status}
+          onValueChange={(value: FilterOptions["status"]) =>
+            setFilters((prev) => ({ ...prev, status: value }))
+          }
+        >
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="published">Published</SelectItem>
+            <SelectItem value="draft">Drafts</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={filters.author}
+          onValueChange={(value) =>
+            setFilters((prev) => ({ ...prev, author: value }))
+          }
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by Author" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Authors</SelectItem>
+            {getUniqueAuthors().map((author) => (
+              <SelectItem key={author} value={author}>
+                {author}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={filters.sortBy}
+          onValueChange={(value: FilterOptions["sortBy"]) =>
+            setFilters((prev) => ({ ...prev, sortBy: value }))
+          }
+        >
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Sort by" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="newest">Newest First</SelectItem>
+            <SelectItem value="oldest">Oldest First</SelectItem>
+            <SelectItem value="title">Title A-Z</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Active Filters */}
+      {(filters.status !== "all" ||
+        filters.author !== "all" ||
+        searchQuery) && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {filters.status !== "all" && (
+            <Badge variant="secondary" className="capitalize">
+              {filters.status}
+            </Badge>
+          )}
+          {filters.author !== "all" && (
+            <Badge variant="secondary">Author: {filters.author}</Badge>
+          )}
+          {searchQuery && (
+            <Badge variant="secondary">Search: {searchQuery}</Badge>
+          )}
+        </div>
+      )}
+
+      {/* Posts List */}
+      {isLoading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      ) : filteredPosts.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">
+            {searchQuery || filters.status !== "all" || filters.author !== "all"
+              ? "No posts found matching your filters."
+              : "No blog posts found. Create your first post!"}
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-6">
+          {filteredPosts.map((post) => (
+            <div
+              key={post.id}
+              className="group relative flex gap-4 p-4 bg-card border rounded-lg hover:shadow-md transition-shadow"
+            >
+              {post.featured_image_url && (
+                <div className="relative h-32 w-32 rounded-md overflow-hidden bg-muted shrink-0">
+                  <Image
+                    src={post.featured_image_url}
+                    alt={post.featured_image_alt || post.title}
+                    fill
+                    className="object-cover"
+                    unoptimized
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-col flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="font-medium truncate">{post.title}</h3>
+                  <Badge variant={post.published ? "default" : "secondary"}>
+                    {post.published ? "Published" : "Draft"}
+                  </Badge>
+                </div>
+
+                <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
+                  <div className="flex items-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    {format(new Date(post.created_at), "MMM d, yyyy")}
+                  </div>
+                  {post.author_info?.[0] && (
+                    <>
+                      <span>•</span>
+                      <span>
+                        By{" "}
+                        {post.author_info[0].name || post.author_info[0].email}
+                      </span>
+                    </>
+                  )}
+                  {post.updated_at && post.updated_at !== post.created_at && (
+                    <>
+                      <span>•</span>
+                      <span>
+                        Updated{" "}
+                        {format(new Date(post.updated_at), "MMM d, yyyy")}
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                {post.content && (
+                  <p className="text-sm text-muted-foreground line-clamp-2">
+                    {getContentPreview(post.content)}
+                  </p>
+                )}
+
+                <div className="flex items-center gap-2 mt-4">
+                  {post.published && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push(`/blog/${post.slug}`)}
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      View
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push(`/dashboard/blog/${post.id}`)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive hover:text-destructive-foreground hover:bg-destructive"
+                    onClick={() => setDeletePost(post)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <AlertDialog open={!!deletePost} onOpenChange={() => setDeletePost(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Post</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete &quot;{deletePost?.title}&quot;?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeletePost}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* Stats Section */}
+      <div className="mt-8 p-4 border rounded-lg bg-card">
+        <h3 className="font-medium mb-4">Quick Stats</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="p-4 border rounded-md">
+            <div className="text-sm text-muted-foreground">Total Posts</div>
+            <div className="text-2xl font-bold">{posts.length}</div>
+          </div>
+          <div className="p-4 border rounded-md">
+            <div className="text-sm text-muted-foreground">Published</div>
+            <div className="text-2xl font-bold">
+              {posts.filter((post) => post.published).length}
+            </div>
+          </div>
+          <div className="p-4 border rounded-md">
+            <div className="text-sm text-muted-foreground">Drafts</div>
+            <div className="text-2xl font-bold">
+              {posts.filter((post) => !post.published).length}
+            </div>
+          </div>
+          <div className="p-4 border rounded-md">
+            <div className="text-sm text-muted-foreground">Authors</div>
+            <div className="text-2xl font-bold">
+              {getUniqueAuthors().length}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
+
 ```
 
 ### app/dashboard/images/page.tsx
@@ -9201,6 +9898,34 @@ export {
   TableCell,
   TableCaption,
 }
+
+```
+
+### src/components/ui/textarea.tsx
+
+```typescript
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+const Textarea = React.forwardRef<
+  HTMLTextAreaElement,
+  React.ComponentProps<"textarea">
+>(({ className, ...props }, ref) => {
+  return (
+    <textarea
+      className={cn(
+        "flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+        className
+      )}
+      ref={ref}
+      {...props}
+    />
+  )
+})
+Textarea.displayName = "Textarea"
+
+export { Textarea }
 
 ```
 
