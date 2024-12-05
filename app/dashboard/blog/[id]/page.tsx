@@ -67,28 +67,6 @@ const blogFormSchema = z.object({
 
 type FormData = z.infer<typeof blogFormSchema>;
 
-// Error Boundary Component (optional, can be kept)
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode; fallback: React.ReactNode },
-  { hasError: boolean }
-> {
-  constructor(props: { children: React.ReactNode; fallback: React.ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback;
-    }
-    return this.props.children;
-  }
-}
-
 export default function BlogPostPage() {
   const params = useParams();
   const router = useRouter();
@@ -118,11 +96,10 @@ export default function BlogPostPage() {
     },
   });
 
-  // Initialize the editor without editable toggle
+  // Initialize the editor
   const editor = useEditor({
     extensions: [StarterKit, Image, Link],
     content: form.watch("content"),
-    // Removed editable: !isPreview,
     editorProps: {
       attributes: {
         class: "prose prose-lg max-w-none focus:outline-none [&_*]:outline-none",
@@ -130,11 +107,9 @@ export default function BlogPostPage() {
       },
       handleDOMEvents: {
         focus: (view, event) => {
-          // Prevent default focus ring
           event.preventDefault();
           return false;
         },
-        // Removed other event handlers like blur, drop, paste
       },
     },
     onUpdate: ({ editor: editorInstance }) => {
@@ -145,6 +120,13 @@ export default function BlogPostPage() {
       }
     },
   });
+
+  // Toggle editable state on preview switch
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(!isPreview);
+    }
+  }, [isPreview, editor]);
 
   // Set editor ready state
   useEffect(() => {
@@ -167,7 +149,6 @@ export default function BlogPostPage() {
     };
   }, [editor]);
 
-  // Handle preview toggle without modifying editor's editability
   const handlePreviewToggle = useCallback(() => {
     setIsPreview((prev) => !prev);
   }, []);
@@ -267,8 +248,7 @@ export default function BlogPostPage() {
         content: values.content,
         meta_description: values.meta_description,
         status: values.status,
-        published_at:
-          values.status === "scheduled" ? values.published_at : null,
+        published_at: values.status === "scheduled" ? values.published_at : null,
         published: values.status === "published",
         tags: values.tags,
         author_id: user.id,
@@ -317,8 +297,6 @@ export default function BlogPostPage() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      {/* Removed PageHeader completely */}
-
       {/* Toolbar */}
       <div className="border-b p-4 flex items-center justify-between bg-card">
         <div className="flex items-center space-x-4">
@@ -372,277 +350,246 @@ export default function BlogPostPage() {
               placeholder="Post title"
               className="text-3xl font-bold border-none bg-transparent focus-visible:ring-0 p-0 placeholder:text-muted-foreground/60"
               {...form.register("title")}
+              disabled={isPreview}
             />
 
-            {/* Formatting Toolbar */}
-            <div className="flex items-center gap-2 py-2 mb-4 border-b">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  editor?.chain().focus().toggleHeading({ level: 1 }).run()
-                }
-                className={cn(
-                  "hover:bg-accent/50",
-                  editor?.isActive("heading", { level: 1 }) ? "bg-accent" : ""
-                )}
-                aria-label="Heading 1"
-              >
-                H1
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  editor?.chain().focus().toggleHeading({ level: 2 }).run()
-                }
-                className={cn(
-                  "hover:bg-accent/50",
-                  editor?.isActive("heading", { level: 2 }) ? "bg-accent" : ""
-                )}
-                aria-label="Heading 2"
-              >
-                H2
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => editor?.chain().focus().setParagraph().run()}
-                className={cn(
-                  "hover:bg-accent/50",
-                  editor?.isActive("paragraph") ? "bg-accent" : ""
-                )}
-                aria-label="Paragraph"
-              >
-                P
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => editor?.chain().focus().toggleBold().run()}
-                className={cn(
-                  "hover:bg-accent/50",
-                  editor?.isActive("bold") ? "bg-accent" : ""
-                )}
-                aria-label="Bold"
-              >
-                B
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => editor?.chain().focus().toggleBulletList().run()}
-                className={cn(
-                  "hover:bg-accent/50",
-                  editor?.isActive("bulletList") ? "bg-accent" : ""
-                )}
-                aria-label="Bullet List"
-              >
-                • List
-              </Button>
-            </div>
+            {/* Formatting Toolbar: only show when not in preview */}
+            {!isPreview && (
+              <div className="flex items-center gap-2 py-2 mb-4 border-b">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    editor?.chain().focus().toggleHeading({ level: 1 }).run()
+                  }
+                  className={cn(
+                    "hover:bg-accent/50",
+                    editor?.isActive("heading", { level: 1 }) ? "bg-accent" : ""
+                  )}
+                  aria-label="Heading 1"
+                >
+                  H1
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    editor?.chain().focus().toggleHeading({ level: 2 }).run()
+                  }
+                  className={cn(
+                    "hover:bg-accent/50",
+                    editor?.isActive("heading", { level: 2 }) ? "bg-accent" : ""
+                  )}
+                  aria-label="Heading 2"
+                >
+                  H2
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => editor?.chain().focus().setParagraph().run()}
+                  className={cn(
+                    "hover:bg-accent/50",
+                    editor?.isActive("paragraph") ? "bg-accent" : ""
+                  )}
+                  aria-label="Paragraph"
+                >
+                  P
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => editor?.chain().focus().toggleBold().run()}
+                  className={cn(
+                    "hover:bg-accent/50",
+                    editor?.isActive("bold") ? "bg-accent" : ""
+                  )}
+                  aria-label="Bold"
+                >
+                  B
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    editor?.chain().focus().toggleBulletList().run()
+                  }
+                  className={cn(
+                    "hover:bg-accent/50",
+                    editor?.isActive("bulletList") ? "bg-accent" : ""
+                  )}
+                  aria-label="Bullet List"
+                >
+                  • List
+                </Button>
+              </div>
+            )}
 
-            <ErrorBoundary
-              fallback={
-                <div className="min-h-[300px] flex items-center justify-center text-destructive">
-                  Something went wrong with the editor. Please refresh the page.
-                </div>
-              }
-            >
-              {!isEditorReady ? (
-                <div className="flex items-center justify-center min-h-[300px]">
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                </div>
-              ) : (
-                <div className="min-h-[300px]">
-                  <div className="relative">
-                    {isPreview ? (
-                      <div className="prose prose-lg max-w-none">
-                        <div
-                          dangerouslySetInnerHTML={{
-                            __html: editor?.getHTML() ?? "",
-                          }}
-                          className="prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl"
-                        />
-                      </div>
-                    ) : (
-                      <>
-                        <EditorContent
-                          editor={editor}
-                          className={cn(
-                            "prose prose-lg max-w-none",
-                            "[&_.ProseMirror]:min-h-[300px]",
-                            "[&_.ProseMirror]:outline-none",
-                            "[&_.ProseMirror]:focus:outline-none",
-                            "[&_.ProseMirror]:focus-visible:outline-none",
-                            "[&_.ProseMirror_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]",
-                            "[&_.ProseMirror_p.is-editor-empty:first-child]:before:text-muted-foreground/60",
-                            "[&_.ProseMirror_p.is-editor-empty:first-child]:before:float-left",
-                            "[&_.ProseMirror_p.is-editor-empty:first-child]:before:pointer-events-none",
-                            "[&_.ProseMirror_::selection]:bg-primary/10",
-                            "[&_.ProseMirror-selectednode]:outline-none",
-                            "[&_.ProseMirror_h1]:text-3xl",
-                            "[&_.ProseMirror_h2]:text-2xl",
-                            "[&_.ProseMirror_h3]:text-xl",
-                            "[&_.ProseMirror_h1,h2,h3,h4,h5,h6]:font-bold",
-                            "[&_.ProseMirror_blockquote]:border-l-4",
-                            "[&_.ProseMirror_blockquote]:border-muted",
-                            "[&_.ProseMirror_blockquote]:pl-4",
-                            "[&_.ProseMirror_blockquote]:italic",
-                            "[&_.ProseMirror_pre]:bg-muted",
-                            "[&_.ProseMirror_pre]:p-4",
-                            "[&_.ProseMirror_pre]:rounded-md",
-                            "[&_.ProseMirror_pre]:font-mono",
-                            "[&_.ProseMirror_pre]:text-sm",
-                            "[&_.ProseMirror_code]:bg-muted",
-                            "[&_.ProseMirror_code]:px-1.5",
-                            "[&_.ProseMirror_code]:py-0.5",
-                            "[&_.ProseMirror_code]:rounded-sm",
-                            "[&_.ProseMirror_code]:font-mono",
-                            "[&_.ProseMirror_code]:text-sm",
-                            "[&_.ProseMirror_img]:rounded-md",
-                            "[&_.ProseMirror_img]:max-w-full",
-                            "[&_.ProseMirror_img]:h-auto",
-                            "[&_.ProseMirror_a]:text-primary",
-                            "[&_.ProseMirror_a]:underline",
-                            "[&_.ProseMirror_a:hover]:text-primary/80"
-                          )}
-                        />
-
-                        {editor && (
-                          <BubbleMenu
-                            editor={editor}
-                            tippyOptions={{ duration: 100 }}
-                            className="flex items-center space-x-1 rounded-lg bg-background shadow-lg border p-1"
-                          >
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                editor.chain().focus().toggleBold().run()
-                              }
-                              className={cn(
-                                "hover:bg-accent/50",
-                                editor.isActive("bold") ? "bg-accent" : ""
-                              )}
-                              aria-label="Bold"
-                            >
-                              <Bold className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                editor.chain().focus().toggleItalic().run()
-                              }
-                              className={cn(
-                                "hover:bg-accent/50",
-                                editor.isActive("italic") ? "bg-accent" : ""
-                              )}
-                              aria-label="Italic"
-                            >
-                              <Italic className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                editor.chain().focus().toggleCode().run()
-                              }
-                              className={cn(
-                                "hover:bg-accent/50",
-                                editor.isActive("code") ? "bg-accent" : ""
-                              )}
-                              aria-label="Code"
-                            >
-                              <Code className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                editor
-                                  .chain()
-                                  .focus()
-                                  .toggleHeading({ level: 2 })
-                                  .run()
-                              }
-                              className={cn(
-                                "hover:bg-accent/50",
-                                editor.isActive("heading", { level: 2 }) ? "bg-accent" : ""
-                              )}
-                              aria-label="Heading"
-                            >
-                              <HeadingIcon className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                editor.chain().focus().toggleBlockquote().run()
-                              }
-                              className={cn(
-                                "hover:bg-accent/50",
-                                editor.isActive("blockquote") ? "bg-accent" : ""
-                              )}
-                              aria-label="Blockquote"
-                            >
-                              <Quote className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                editor.chain().focus().toggleBulletList().run()
-                              }
-                              className={cn(
-                                "hover:bg-accent/50",
-                                editor.isActive("bulletList") ? "bg-accent" : ""
-                              )}
-                              aria-label="Bullet List"
-                            >
-                              <List className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                const url = window.prompt("Enter URL");
-                                if (url)
-                                  editor.chain().focus().setLink({ href: url }).run();
-                              }}
-                              className={cn(
-                                "hover:bg-accent/50",
-                                editor.isActive("link") ? "bg-accent" : ""
-                              )}
-                              aria-label="Add Link"
-                            >
-                              <LinkIcon className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                const url = window.prompt("Enter image URL");
-                                if (url)
-                                  editor.chain().focus().setImage({ src: url }).run();
-                              }}
-                              className={cn(
-                                "hover:bg-accent/50",
-                                editor.isActive("image") ? "bg-accent" : ""
-                              )}
-                              aria-label="Add Image"
-                            >
-                              <ImageIcon className="h-4 w-4" />
-                            </Button>
-                          </BubbleMenu>
-                        )}
-                      </>
+            {!isEditorReady ? (
+              <div className="flex items-center justify-center min-h-[300px]">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            ) : (
+              <div className="min-h-[300px]">
+                <div className="relative">
+                  <EditorContent
+                    editor={editor}
+                    className={cn(
+                      "prose prose-lg max-w-none",
+                      "[&_.ProseMirror]:min-h-[300px]",
+                      "[&_.ProseMirror]:outline-none",
+                      "[&_.ProseMirror_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]",
+                      "[&_.ProseMirror_p.is-editor-empty:first-child]:before:text-muted-foreground/60",
+                      "[&_.ProseMirror_p.is-editor-empty:first-child]:before:float-left",
+                      "[&_.ProseMirror_p.is-editor-empty:first-child]:before:pointer-events-none",
+                      "[&_.ProseMirror_::selection]:bg-primary/10",
+                      "[&_.ProseMirror-selectednode]:outline-none",
+                      "[&_.ProseMirror_h1]:text-3xl",
+                      "[&_.ProseMirror_h2]:text-2xl",
+                      "[&_.ProseMirror_h3]:text-xl",
+                      "[&_.ProseMirror_h1,h2,h3,h4,h5,h6]:font-bold",
+                      "[&_.ProseMirror_blockquote]:border-l-4",
+                      "[&_.ProseMirror_blockquote]:border-muted",
+                      "[&_.ProseMirror_blockquote]:pl-4",
+                      "[&_.ProseMirror_blockquote]:italic",
+                      "[&_.ProseMirror_pre]:bg-muted",
+                      "[&_.ProseMirror_pre]:p-4",
+                      "[&_.ProseMirror_pre]:rounded-md",
+                      "[&_.ProseMirror_pre]:font-mono",
+                      "[&_.ProseMirror_pre]:text-sm",
+                      "[&_.ProseMirror_code]:bg-muted",
+                      "[&_.ProseMirror_code]:px-1.5",
+                      "[&_.ProseMirror_code]:py-0.5",
+                      "[&_.ProseMirror_code]:rounded-sm",
+                      "[&_.ProseMirror_code]:font-mono",
+                      "[&_.ProseMirror_code]:text-sm",
+                      "[&_.ProseMirror_img]:rounded-md",
+                      "[&_.ProseMirror_img]:max-w-full",
+                      "[&_.ProseMirror_img]:h-auto",
+                      "[&_.ProseMirror_a]:text-primary",
+                      "[&_.ProseMirror_a]:underline",
+                      "[&_.ProseMirror_a:hover]:text-primary/80",
+                      isPreview ? "pointer-events-none opacity-70" : ""
                     )}
-                  </div>
+                  />
+
+                  {editor && !isPreview && (
+                    <BubbleMenu
+                      editor={editor}
+                      tippyOptions={{ duration: 100 }}
+                      className="flex items-center space-x-1 rounded-lg bg-background shadow-lg border p-1"
+                    >
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => editor.chain().focus().toggleBold().run()}
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("bold") ? "bg-accent" : ""
+                        )}
+                        aria-label="Bold"
+                      >
+                        <Bold className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => editor.chain().focus().toggleItalic().run()}
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("italic") ? "bg-accent" : ""
+                        )}
+                        aria-label="Italic"
+                      >
+                        <Italic className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => editor.chain().focus().toggleCode().run()}
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("code") ? "bg-accent" : ""
+                        )}
+                        aria-label="Code"
+                      >
+                        <Code className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          editor.chain().focus().toggleHeading({ level: 2 }).run()
+                        }
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("heading", { level: 2 }) ? "bg-accent" : ""
+                        )}
+                        aria-label="Heading"
+                      >
+                        <HeadingIcon className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("blockquote") ? "bg-accent" : ""
+                        )}
+                        aria-label="Blockquote"
+                      >
+                        <Quote className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => editor.chain().focus().toggleBulletList().run()}
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("bulletList") ? "bg-accent" : ""
+                        )}
+                        aria-label="Bullet List"
+                      >
+                        <List className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const url = window.prompt("Enter URL");
+                          if (url)
+                            editor.chain().focus().setLink({ href: url }).run();
+                        }}
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("link") ? "bg-accent" : ""
+                        )}
+                        aria-label="Add Link"
+                      >
+                        <LinkIcon className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const url = window.prompt("Enter image URL");
+                          if (url)
+                            editor.chain().focus().setImage({ src: url }).run();
+                        }}
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("image") ? "bg-accent" : ""
+                        )}
+                        aria-label="Add Image"
+                      >
+                        <ImageIcon className="h-4 w-4" />
+                      </Button>
+                    </BubbleMenu>
+                  )}
                 </div>
-              )}
-            </ErrorBoundary>
+              </div>
+            )}
           </div>
         </div>
 
@@ -680,6 +627,7 @@ export default function BlogPostPage() {
                     onChange={(e) =>
                       form.setValue("published_at", e.target.value)
                     }
+                    disabled={isPreview}
                   />
                 </div>
               )}
@@ -689,11 +637,10 @@ export default function BlogPostPage() {
                 <label className="text-sm font-medium">Meta Description</label>
                 <Textarea
                   value={form.watch("meta_description") || ""}
-                  onChange={(e) =>
-                    form.setValue("meta_description", e.target.value)
-                  }
+                  onChange={(e) => form.setValue("meta_description", e.target.value)}
                   placeholder="Enter SEO description..."
                   className="h-20"
+                  disabled={isPreview}
                 />
               </div>
 
@@ -783,14 +730,12 @@ export default function BlogPostPage() {
       {/* Embedded Custom CSS */}
       <style jsx global>{`
         /* Styling for ProseMirror editor */
-        .ProseMirror {
-          > * + * {
-            margin-top: 0.75em;
-          }
+        .ProseMirror > * + * {
+          margin-top: 0.75em;
+        }
 
-          &:focus {
-            outline: none !important;
-          }
+        .ProseMirror:focus {
+          outline: none !important;
         }
 
         /* Placeholder styling for empty editor */

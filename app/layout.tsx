@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Toaster } from "@/components/ui/toaster";
 import "./global.css";
+import { Providers } from "./providers"; // <-- Import the Providers here
 
 const lato = Lato({
   subsets: ['latin'],
@@ -68,10 +69,12 @@ export default async function RootLayout({ children }: RootLayoutProps) {
     >
       <head />
       <body className="min-h-screen bg-background font-sans">
-        <main className="relative flex min-h-screen flex-col">
-          {children}
-        </main>
-        <Toaster />
+        <Providers>
+          <main className="relative flex min-h-screen flex-col">
+            {children}
+          </main>
+          <Toaster />
+        </Providers>
       </body>
     </html>
   );
