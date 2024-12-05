@@ -120,6 +120,74 @@ export type Database = {
           updated_at?: string;
         };
       };
+
+      // ===== New Tables for Wines =====
+      wines: {
+        Row: {
+          id: number;
+          name: string;
+          description: string;
+          bottle_price: number;
+          glass_price: number | null;
+          active: boolean;
+          created_at: string;
+          image_path: string | null;
+          image_url: string | null;
+        };
+        Insert: {
+          name: string;
+          description?: string;
+          bottle_price: number;
+          glass_price?: number | null;
+          active?: boolean;
+          created_at?: string;
+          image_path?: string | null;
+          image_url?: string | null;
+        };
+        Update: {
+          name?: string;
+          description?: string;
+          bottle_price?: number;
+          glass_price?: number | null;
+          active?: boolean;
+          image_path?: string | null;
+          image_url?: string | null;
+        };
+      };
+
+      wine_categories: {
+        Row: {
+          id: number;
+          name: string;
+          display_order: number;
+          created_at: string;
+        };
+        Insert: {
+          name: string;
+          display_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          display_order?: number;
+        };
+      };
+
+      wine_category_assignments: {
+        Row: {
+          wine_id: number;
+          category_id: number;
+        };
+        Insert: {
+          wine_id: number;
+          category_id: number;
+        };
+        Update: {
+          wine_id?: number;
+          category_id?: number;
+        };
+      };
+      // ===== End of New Tables =====
     };
     Views: {
       [_ in never]: never;
@@ -524,10 +592,7 @@ export type StatusCode = typeof STATUS_CODES[keyof typeof STATUS_CODES];
 
 // **Renamed ValidationError Class to ValidationException**
 export class ValidationException extends Error {
-  constructor(
-    message: string,
-    public errors: ValidationError[]
-  ) {
+  constructor(message: string, public errors: ValidationError[]) {
     super(message);
     this.name = 'ValidationException';
     Object.setPrototypeOf(this, ValidationException.prototype);
@@ -535,11 +600,7 @@ export class ValidationException extends Error {
 }
 
 export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-    public code?: string
-  ) {
+  constructor(message: string, public status: number, public code?: string) {
     super(message);
     this.name = 'ApiError';
     Object.setPrototypeOf(this, ApiError.prototype);
@@ -547,9 +608,7 @@ export class ApiError extends Error {
 }
 
 // Utility Functions
-export function createFormControl(
-  initialValue: unknown = '',
-): FormControl {
+export function createFormControl(initialValue: unknown = ''): FormControl {
   return {
     value: initialValue,
     error: null,
