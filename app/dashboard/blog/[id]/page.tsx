@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import slugify from "slugify";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 import { useEditor, EditorContent, BubbleMenu } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -44,9 +45,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/core/layout";
 
-// Types
 type BlogStatus = "draft" | "published" | "scheduled";
-
 
 interface AutoSaveState {
   lastSaved: Date | null;
@@ -54,7 +53,6 @@ interface AutoSaveState {
   error: string | null;
 }
 
-// Form Schema
 const blogFormSchema = z.object({
   title: z.string().min(1, { message: "Title is required" }),
   content: z.custom<JSONContent>((data) => !!data),
@@ -75,6 +73,7 @@ export default function BlogPostPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [isEditorReady, setIsEditorReady] = useState(false);
   const [autoSave, setAutoSave] = useState<AutoSaveState>({
     lastSaved: null,
     saving: false,
@@ -97,6 +96,7 @@ export default function BlogPostPage() {
   const editor = useEditor({
     extensions: [StarterKit, Image, Link],
     content: form.watch("content"),
+    editable: !isPreview,
     editorProps: {
       attributes: {
         class:
@@ -111,11 +111,31 @@ export default function BlogPostPage() {
       },
     },
     onUpdate: ({ editor }) => {
-      const content = editor.getJSON();
-      form.setValue("content", content);
-      void autoSavePost({ ...form.getValues(), content });
+      if (!isPreview) {
+        const content = editor.getJSON();
+        form.setValue("content", content);
+        void autoSavePost({ ...form.getValues(), content });
+      }
     },
   });
+
+  useEffect(() => {
+    if (editor) {
+      setIsEditorReady(true);
+    }
+    return () => {
+      if (editor) {
+        editor.destroy();
+      }
+    };
+  }, [editor]);
+
+  const handlePreviewToggle = useCallback(() => {
+    if (editor) {
+      editor.setEditable(!isPreview);
+      setIsPreview(!isPreview);
+    }
+  }, [editor, isPreview]);
 
   const autoSavePost = useCallback(
     async (data: FormData) => {
@@ -278,7 +298,8 @@ export default function BlogPostPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setIsPreview(!isPreview)}
+            onClick={handlePreviewToggle}
+            disabled={!isEditorReady}
           >
             {isPreview ? (
               <>
@@ -312,60 +333,57 @@ export default function BlogPostPage() {
               {...form.register("title")}
             />
 
-            <div className="min-h-[300px]">
-              {isPreview ? (
-                <div className="prose prose-lg max-w-none">
-                  <h1>{form.watch("title")}</h1>
-                  <div
-                    dangerouslySetInnerHTML={{
-                      __html: editor?.getHTML() || "",
-                    }}
-                    className="prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl"
-                  />
-                </div>
-              ) : (
+            {!isEditorReady ? (
+              <div className="flex items-center justify-center min-h-[300px]">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            ) : (
+              <div className="min-h-[300px]">
                 <div className="relative">
                   <EditorContent
                     editor={editor}
-                    className="prose prose-lg max-w-none 
-                      [&_.ProseMirror]:min-h-[300px] 
-                      [&_.ProseMirror]:outline-none 
-                      [&_.ProseMirror]:focus:outline-none
-                      [&_.ProseMirror]:focus-visible:outline-none
-                      [&_.ProseMirror_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]
-                      [&_.ProseMirror_p.is-editor-empty:first-child]:before:text-muted-foreground/60
-                      [&_.ProseMirror_p.is-editor-empty:first-child]:before:float-left
-                      [&_.ProseMirror_p.is-editor-empty:first-child]:before:pointer-events-none
-                      [&_.ProseMirror_::selection]:bg-primary/10
-                      [&_.ProseMirror-selectednode]:outline-none
-                      [&_.ProseMirror_h1]:text-3xl
-                      [&_.ProseMirror_h2]:text-2xl
-                      [&_.ProseMirror_h3]:text-xl
-                      [&_.ProseMirror_h1,h2,h3,h4,h5,h6]:font-bold
-                      [&_.ProseMirror_blockquote]:border-l-4
-                      [&_.ProseMirror_blockquote]:border-muted
-                      [&_.ProseMirror_blockquote]:pl-4
-                      [&_.ProseMirror_blockquote]:italic
-                      [&_.ProseMirror_pre]:bg-muted
-                      [&_.ProseMirror_pre]:p-4
-                      [&_.ProseMirror_pre]:rounded-md
-                      [&_.ProseMirror_pre]:font-mono
-                      [&_.ProseMirror_pre]:text-sm
-                      [&_.ProseMirror_code]:bg-muted
-                      [&_.ProseMirror_code]:px-1.5
-                      [&_.ProseMirror_code]:py-0.5
-                      [&_.ProseMirror_code]:rounded-sm
-                      [&_.ProseMirror_code]:font-mono
-                      [&_.ProseMirror_code]:text-sm
-                      [&_.ProseMirror_img]:rounded-md
-                      [&_.ProseMirror_img]:max-w-full
-                      [&_.ProseMirror_img]:h-auto
-                      [&_.ProseMirror_a]:text-primary
-                      [&_.ProseMirror_a]:underline
-                      [&_.ProseMirror_a:hover]:text-primary/80"
+                    className={cn(
+                      "prose prose-lg max-w-none",
+                      isPreview ? "pointer-events-none" : "",
+                      "[&_.ProseMirror]:min-h-[300px]",
+                      "[&_.ProseMirror]:outline-none",
+                      "[&_.ProseMirror]:focus:outline-none",
+                      "[&_.ProseMirror]:focus-visible:outline-none",
+                      "[&_.ProseMirror_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]",
+                      "[&_.ProseMirror_p.is-editor-empty:first-child]:before:text-muted-foreground/60",
+                      "[&_.ProseMirror_p.is-editor-empty:first-child]:before:float-left",
+                      "[&_.ProseMirror_p.is-editor-empty:first-child]:before:pointer-events-none",
+                      "[&_.ProseMirror_::selection]:bg-primary/10",
+                      "[&_.ProseMirror-selectednode]:outline-none",
+                      "[&_.ProseMirror_h1]:text-3xl",
+                      "[&_.ProseMirror_h2]:text-2xl",
+                      "[&_.ProseMirror_h3]:text-xl",
+                      "[&_.ProseMirror_h1,h2,h3,h4,h5,h6]:font-bold",
+                      "[&_.ProseMirror_blockquote]:border-l-4",
+                      "[&_.ProseMirror_blockquote]:border-muted",
+                      "[&_.ProseMirror_blockquote]:pl-4",
+                      "[&_.ProseMirror_blockquote]:italic",
+                      "[&_.ProseMirror_pre]:bg-muted",
+                      "[&_.ProseMirror_pre]:p-4",
+                      "[&_.ProseMirror_pre]:rounded-md",
+                      "[&_.ProseMirror_pre]:font-mono",
+                      "[&_.ProseMirror_pre]:text-sm",
+                      "[&_.ProseMirror_code]:bg-muted",
+                      "[&_.ProseMirror_code]:px-1.5",
+                      "[&_.ProseMirror_code]:py-0.5",
+                      "[&_.ProseMirror_code]:rounded-sm",
+                      "[&_.ProseMirror_code]:font-mono",
+                      "[&_.ProseMirror_code]:text-sm",
+                      "[&_.ProseMirror_img]:rounded-md",
+                      "[&_.ProseMirror_img]:max-w-full",
+                      "[&_.ProseMirror_img]:h-auto",
+                      "[&_.ProseMirror_a]:text-primary",
+                      "[&_.ProseMirror_a]:underline",
+                      "[&_.ProseMirror_a:hover]:text-primary/80"
+                    )}
                   />
 
-                  {editor && (
+                  {!isPreview && editor && (
                     <BubbleMenu
                       editor={editor}
                       tippyOptions={{ duration: 100 }}
@@ -469,8 +487,8 @@ export default function BlogPostPage() {
                     </BubbleMenu>
                   )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -572,22 +590,6 @@ export default function BlogPostPage() {
           </Button>
 
           <div className="flex items-center space-x-2">
-            <Select
-              value={form.watch("status")}
-              onValueChange={(value: BlogStatus) =>
-                form.setValue("status", value)
-              }
-            >
-              <SelectTrigger className="w-[120px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="draft">Save Draft</SelectItem>
-                <SelectItem value="published">Publish</SelectItem>
-                <SelectItem value="scheduled">Schedule</SelectItem>
-              </SelectContent>
-            </Select>
-
             <Button
               onClick={form.handleSubmit(onSubmit)}
               disabled={isLoading || autoSave.saving}
