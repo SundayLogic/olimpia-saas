@@ -1,18 +1,16 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import {
-  Upload,
-  Trash2,
-  FolderIcon,
-  AlertCircle,
-  Edit2,
-} from "lucide-react";
+import { SupabaseClient } from "@supabase/supabase-js";
+import { Upload, Trash2, FolderIcon, AlertCircle, Edit2 } from "lucide-react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Database } from "@/types";
+
 import {
   Dialog,
   DialogContent,
@@ -41,8 +39,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/core/layout";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-// Define available categories
 const CATEGORIES = [
   "arroces",
   "carnes",
@@ -53,13 +51,19 @@ const CATEGORIES = [
   "para-veganos",
   "postres",
   "wines",
-];
+] as const;
+
+type Category = (typeof CATEGORIES)[number];
+
+function isValidCategory(value: string): value is Category {
+  return CATEGORIES.includes(value as Category);
+}
 
 interface ImageInfo {
   name: string;
   url: string;
   category: string;
-  usageCount: number; // Changed from optional to required, will default to 0
+  usageCount: number;
 }
 
 interface MoveImageDialog {
@@ -72,16 +76,65 @@ interface RenameImageDialog {
   image: ImageInfo | null;
 }
 
+interface DeleteImageDialog {
+  open: boolean;
+  image: ImageInfo | null;
+}
+
+async function getImageUsageCount(
+  supabase: SupabaseClient<Database>,
+  imagePath: string
+): Promise<number> {
+  const { count } = await supabase
+    .from("wines")
+    .select("*", { count: "exact", head: true })
+    .eq("image_path", imagePath);
+
+  return count || 0;
+}
+
+async function fetchImages(
+  supabase: SupabaseClient<Database>,
+  category: string
+): Promise<ImageInfo[]> {
+  const { data: storageData, error: storageError } = await supabase.storage
+    .from("menu")
+    .list(category);
+
+  if (storageError) throw storageError;
+
+  const imageList: ImageInfo[] = [];
+
+  for (const file of storageData || []) {
+    const { data } = supabase.storage
+      .from("menu")
+      .getPublicUrl(`${category}/${file.name}`);
+
+    const usageCount = await getImageUsageCount(
+      supabase,
+      `${category}/${file.name}`
+    );
+
+    imageList.push({
+      name: file.name,
+      url: data.publicUrl,
+      category,
+      usageCount,
+    });
+  }
+
+  return imageList;
+}
+
 export default function ImagesPage() {
-  const [images, setImages] = useState<ImageInfo[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>(
+  const supabase = createClientComponentClient<Database>();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const [selectedCategory, setSelectedCategory] = useState<Category>(
     CATEGORIES[0]
   );
-  const [isUploading, setIsUploading] = useState(false);
-  const [deleteDialog, setDeleteDialog] = useState<{
-    open: boolean;
-    image: ImageInfo | null;
-  }>({
+  const [deleteDialog, setDeleteDialog] = useState<DeleteImageDialog>({
     open: false,
     image: null,
   });
@@ -94,85 +147,33 @@ export default function ImagesPage() {
     image: null,
   });
   const [newImageName, setNewImageName] = useState("");
-  const [targetCategory, setTargetCategory] = useState<string>(CATEGORIES[0]);
+  const [targetCategory, setTargetCategory] = useState<Category>(CATEGORIES[0]);
 
-  const supabase = createClientComponentClient();
-  const { toast } = useToast();
+  const handleCategoryChange = (value: string) => {
+    if (isValidCategory(value)) {
+      setSelectedCategory(value);
+    }
+  };
 
-  // Setup dropzone
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: {
-      "image/jpeg": [],
-      "image/png": [],
-      "image/webp": [],
-    },
-    onDrop: handleFileDrop,
+  const handleTargetCategoryChange = (value: string) => {
+    if (isValidCategory(value)) {
+      setTargetCategory(value);
+    }
+  };
+
+  const {
+    data: images = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ["images", selectedCategory],
+    queryFn: () => fetchImages(supabase, selectedCategory),
   });
 
-  // Memoize fetchImages to avoid dependency cycle and include debug logs
-  const fetchImages = React.useCallback(async () => {
-    try {
-      const { data: storageData, error: storageError } = await supabase
-        .storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .list(selectedCategory);
-
-      if (storageError) throw storageError;
-
-      console.log("Files in category:", storageData); // Debug log
-
-      const imageList = await Promise.all(
-        (storageData || []).map(async (file) => {
-          // Get public URL using the correct method
-          const { data } = supabase.storage
-            .from("menu")  // Changed from "menu-images" to "menu"
-            .getPublicUrl(`${selectedCategory}/${file.name}`);
-
-          // Log for debugging
-          console.log("Generated Public URL:", data.publicUrl);
-
-          // The URL should look like:
-          // https://your-supabase-url/storage/v1/object/public/menu/category/image.webp
-
-          const usageCount = await getImageUsageCount(
-            `${selectedCategory}/${file.name}`
-          );
-
-          return {
-            name: file.name,
-            url: data.publicUrl, // Use the publicUrl from the data object
-            category: selectedCategory,
-            usageCount,
-          };
-        })
-      );
-
-      setImages(imageList);
-
-      // Debug log the final image list
-      console.log("Final image list:", imageList);
-    } catch (error) {
-      console.error("Error fetching images:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to load images",
-        variant: "destructive",
-      });
-    }
-  }, [selectedCategory, supabase, toast]);
-
-  // Fetch images for selected category
-  useEffect(() => {
-    void fetchImages();
-  }, [selectedCategory, fetchImages]);
-
-  async function handleFileDrop(acceptedFiles: File[]) {
-    try {
-      setIsUploading(true);
-
-      for (const file of acceptedFiles) {
-        // Validate file size (2MB limit)
+  const uploadMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      const results = [];
+      for (const file of files) {
         if (file.size > 2 * 1024 * 1024) {
           toast({
             title: "Error",
@@ -183,9 +184,8 @@ export default function ImagesPage() {
         }
 
         const filePath = `${selectedCategory}/${file.name}`;
-
         const { error: uploadError } = await supabase.storage
-          .from("menu")  // Changed from "menu-images" to "menu"
+          .from("menu")
           .upload(filePath, file, {
             cacheControl: "3600",
             upsert: false,
@@ -204,174 +204,180 @@ export default function ImagesPage() {
           continue;
         }
 
+        results.push(file.name);
+      }
+      return results;
+    },
+    onSuccess: (fileNames) => {
+      if (fileNames.length > 0) {
         toast({
           title: "Success",
-          description: `Uploaded ${file.name}`,
+          description: `Uploaded ${fileNames.length} files`,
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["images", selectedCategory],
         });
       }
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "Failed to upload images";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
 
-      fetchImages();
-    } catch (error) {
-      console.error("Upload error:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to upload images",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUploading(false);
-    }
-  }
-
-  async function getImageUsageCount(imagePath: string): Promise<number> {
-    try {
-      // Check wines table
-      const { count } = await supabase
-        .from("wines")
-        .select("*", { count: "exact", head: true })
-        .eq("image_path", imagePath);
-
-      return count || 0;
-    } catch (error) {
-      console.error("Error checking image usage:", error);
-      return 0;
-    }
-  }
-
-  async function handleDeleteImage(image: ImageInfo) {
-    try {
-      const { error } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
+  const deleteMutation = useMutation({
+    mutationFn: async (image: ImageInfo) => {
+      const { error: deleteError } = await supabase.storage
+        .from("menu")
         .remove([`${image.category}/${image.name}`]);
 
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Image deleted successfully",
-      });
-
+      if (deleteError) throw deleteError;
+      return image.name;
+    },
+    onSuccess: (fileName) => {
+      toast({ title: "Success", description: `Deleted ${fileName}` });
       setDeleteDialog({ open: false, image: null });
-      fetchImages();
-    } catch (error) {
-      console.error("Error deleting image:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to delete image",
-        variant: "destructive",
-      });
-    }
-  }
+      queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "Failed to delete image";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
 
-  async function handleMoveImage() {
-    if (!moveDialog.image || targetCategory === moveDialog.image.category)
-      return;
+  const moveMutation = useMutation({
+    mutationFn: async ({
+      image,
+      targetCategory,
+    }: {
+      image: ImageInfo;
+      targetCategory: string;
+    }) => {
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from("menu")
+        .download(`${image.category}/${image.name}`);
+      if (downloadError || !fileData)
+        throw new Error("Failed to download file");
 
-    try {
-      // Copy to new location
-      const { data: fileData } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .download(`${moveDialog.image.category}/${moveDialog.image.name}`);
-
-      if (!fileData) throw new Error("Failed to download file");
-
-      const newFile = new File([fileData], moveDialog.image.name, {
-        type: fileData.type,
-      });
+      const newFile = new File([fileData], image.name, { type: fileData.type });
 
       const { error: uploadError } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .upload(`${targetCategory}/${moveDialog.image.name}`, newFile, {
+        .from("menu")
+        .upload(`${targetCategory}/${image.name}`, newFile, {
           cacheControl: "3600",
           upsert: false,
         });
-
       if (uploadError) throw uploadError;
 
-      // Delete from old location
-      const { error: deleteError } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .remove([`${moveDialog.image.category}/${moveDialog.image.name}`]);
+      const { error: removeError } = await supabase.storage
+        .from("menu")
+        .remove([`${image.category}/${image.name}`]);
+      if (removeError) throw removeError;
 
-      if (deleteError) throw deleteError;
-
-      toast({
-        title: "Success",
-        description: "Image moved successfully",
-      });
-
+      return image.name;
+    },
+    onSuccess: (fileName) => {
+      toast({ title: "Success", description: `Moved ${fileName}` });
       setMoveDialog({ open: false, image: null });
-      fetchImages();
-    } catch (error) {
-      console.error("Error moving image:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to move image",
-        variant: "destructive",
-      });
-    }
-  }
+      queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
+      queryClient.invalidateQueries({ queryKey: ["images", targetCategory] });
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "Failed to move image";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
 
-  async function handleRenameImage() {
-    if (!renameDialog.image || !newImageName) return;
+  const renameMutation = useMutation({
+    mutationFn: async ({
+      image,
+      newImageName,
+    }: {
+      image: ImageInfo;
+      newImageName: string;
+    }) => {
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from("menu")
+        .download(`${image.category}/${image.name}`);
 
-    try {
-      // Copy with new name
-      const { data: fileData } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .download(`${renameDialog.image.category}/${renameDialog.image.name}`);
-
-      if (!fileData) throw new Error("Failed to download file");
+      if (downloadError || !fileData)
+        throw new Error("Failed to download file");
 
       const newFile = new File([fileData], newImageName, {
         type: fileData.type,
       });
 
       const { error: uploadError } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .upload(`${renameDialog.image.category}/${newImageName}`, newFile, {
+        .from("menu")
+        .upload(`${image.category}/${newImageName}`, newFile, {
           cacheControl: "3600",
           upsert: false,
         });
 
       if (uploadError) throw uploadError;
 
-      // Delete old file
-      const { error: deleteError } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .remove([`${renameDialog.image.category}/${renameDialog.image.name}`]);
+      const { error: removeError } = await supabase.storage
+        .from("menu")
+        .remove([`${image.category}/${image.name}`]);
+      if (removeError) throw removeError;
 
-      if (deleteError) throw deleteError;
-
+      return { oldName: image.name, newName: newImageName };
+    },
+    onSuccess: ({ oldName, newName }) => {
       toast({
         title: "Success",
-        description: "Image renamed successfully",
+        description: `Renamed ${oldName} to ${newName}`,
       });
-
       setRenameDialog({ open: false, image: null });
       setNewImageName("");
-      fetchImages();
-    } catch (error) {
-      console.error("Error renaming image:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to rename image",
-        variant: "destructive",
-      });
-    }
+      queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "Failed to rename image";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: {
+      "image/jpeg": [],
+      "image/png": [],
+      "image/webp": [],
+    },
+    onDrop: (acceptedFiles) => uploadMutation.mutate(acceptedFiles),
+  });
+
+  const filteredImages = useMemo(() => images, [images]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[200px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
   }
 
-  return (
+  if (error) {
+    return (
+      <div className="container p-6">
+        <Alert variant="destructive">
+          <AlertDescription>Failed to load images.</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+ return (
     <div className="container p-6">
       <PageHeader
         heading="Image Management"
         text="Upload and manage images for menu items"
       >
-        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+        <Select value={selectedCategory} onValueChange={handleCategoryChange}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Select category" />
           </SelectTrigger>
@@ -385,14 +391,13 @@ export default function ImagesPage() {
         </Select>
       </PageHeader>
 
-      {/* Upload Section */}
       <div
         {...getRootProps()}
         className={`
-          mt-6 border-2 border-dashed rounded-lg p-8 transition-colors text-center
+          mt-6 border-2 border-dashed rounded-lg p-8 text-center
           ${isDragActive ? "border-primary" : "border-muted-foreground/25"}
           ${
-            isUploading
+            uploadMutation.isPending
               ? "pointer-events-none opacity-50"
               : "cursor-pointer hover:border-primary/50"
           }
@@ -404,13 +409,14 @@ export default function ImagesPage() {
           <p className="text-lg font-medium mb-2">
             {isDragActive ? "Drop files here" : "Drag & drop files here"}
           </p>
-          <p className="text-sm text-muted-foreground">or click to select files</p>
+          <p className="text-sm text-muted-foreground">
+            or click to select files
+          </p>
         </div>
       </div>
 
-      {/* Images Grid */}
       <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {images.map((image) => (
+        {filteredImages.map((image) => (
           <div
             key={image.name}
             className="group relative aspect-square rounded-lg overflow-hidden border bg-card"
@@ -421,13 +427,11 @@ export default function ImagesPage() {
               fill
               className="object-cover transition-all group-hover:scale-105"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              unoptimized // Add this line to bypass Next.js image optimization
+              unoptimized
             />
             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <p className="text-white text-sm mb-2 truncate">{image.name}</p>
-                {/* Debug URL */}
-                <p className="text-xs text-gray-300 break-all">{image.url}</p>
                 <div className="flex gap-2 mt-2">
                   <Button
                     size="sm"
@@ -457,7 +461,6 @@ export default function ImagesPage() {
         ))}
       </div>
 
-      {/* Delete Dialog */}
       <AlertDialog
         open={deleteDialog.open}
         onOpenChange={(open) => setDeleteDialog({ open, image: null })}
@@ -482,17 +485,16 @@ export default function ImagesPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
-                deleteDialog.image && handleDeleteImage(deleteDialog.image)
+                deleteDialog.image && deleteMutation.mutate(deleteDialog.image)
               }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Move Dialog */}
       <Dialog
         open={moveDialog.open}
         onOpenChange={(open) => setMoveDialog({ open, image: null })}
@@ -500,7 +502,9 @@ export default function ImagesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Move Image</DialogTitle>
-            <DialogDescription>Select a new category for this image</DialogDescription>
+            <DialogDescription>
+              Select a new category for this image
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
@@ -510,7 +514,7 @@ export default function ImagesPage() {
             </div>
             <div className="grid gap-2">
               <Label>Destination Category</Label>
-              <Select value={targetCategory} onValueChange={setTargetCategory}>
+              <Select value={targetCategory} onValueChange={handleTargetCategoryChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
@@ -543,19 +547,25 @@ export default function ImagesPage() {
               Cancel
             </Button>
             <Button
-              onClick={handleMoveImage}
+              onClick={() =>
+                moveDialog.image &&
+                moveMutation.mutate({
+                  image: moveDialog.image,
+                  targetCategory,
+                })
+              }
               disabled={
                 !targetCategory ||
-                targetCategory === moveDialog.image?.category
+                targetCategory === moveDialog.image?.category ||
+                moveMutation.isPending
               }
             >
-              Move Image
+              {moveMutation.isPending ? "Moving..." : "Move Image"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Rename Dialog */}
       <Dialog
         open={renameDialog.open}
         onOpenChange={(open) => {
@@ -566,7 +576,9 @@ export default function ImagesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Rename Image</DialogTitle>
-            <DialogDescription>Enter a new name for the image</DialogDescription>
+            <DialogDescription>
+              Enter a new name for the image
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
@@ -579,12 +591,12 @@ export default function ImagesPage() {
               <Input
                 value={newImageName}
                 onChange={(e) => setNewImageName(e.target.value)}
-                placeholder="Enter new name with extension (e.g., image.jpg)"
+                placeholder="image.jpg"
               />
               {!newImageName.includes(".") && newImageName && (
                 <p className="text-sm text-red-500 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
-                  Please include file extension (e.g., .jpg, .png, .webp)
+                  Please include a file extension (e.g., .jpg, .png, .webp)
                 </p>
               )}
               {renameDialog.image && renameDialog.image.usageCount > 0 && (
@@ -609,14 +621,21 @@ export default function ImagesPage() {
               Cancel
             </Button>
             <Button
-              onClick={handleRenameImage}
+              onClick={() =>
+                renameDialog.image &&
+                renameMutation.mutate({
+                  image: renameDialog.image,
+                  newImageName,
+                })
+              }
               disabled={
                 !newImageName ||
                 newImageName === renameDialog.image?.name ||
-                !newImageName.includes(".")
+                !newImageName.includes(".") ||
+                renameMutation.isPending
               }
             >
-              Rename Image
+              {renameMutation.isPending ? "Renaming..." : "Rename Image"}
             </Button>
           </DialogFooter>
         </DialogContent>
