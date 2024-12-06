@@ -1,21 +1,46 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Plus, ToggleLeft, Edit, Copy, Search, Calendar } from "lucide-react"; // Added 'Calendar' icon
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch"; // Imported Switch component
+import React, { useState, useMemo } from "react";
+import {
+  Plus,
+  ToggleLeft,
+  Edit,
+  Copy,
+  Search,
+  Calendar as CalendarIcon,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import type { Database } from '@/types'; // Import the Database type
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  addWeeks,
+  addMonths,
+  addDays,
+  format,
+  isSameDay,
+} from "date-fns";
+import { es } from "date-fns/locale";
+import { DateRange } from "react-day-picker";
+
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -23,32 +48,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar"; // Renamed to avoid conflict
+import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
-  PopoverContent,
   PopoverTrigger,
+  PopoverContent,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
-import {
-  addDays,
-  addWeeks,
-  addMonths,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  format,
-  isSameDay,
-} from "date-fns";
-import { es } from "date-fns/locale";
-import { DateRange } from "react-day-picker";
-
-// -----------------------------------
-// TypeScript Interfaces
-// -----------------------------------
 
 interface DailyMenuItem {
   id: string;
@@ -67,14 +72,6 @@ interface DailyMenu {
   daily_menu_items: DailyMenuItem[];
 }
 
-interface NewMenu {
-  dateRange: DateRange;
-  repeat_pattern: "none" | "weekly" | "monthly";
-  active: boolean;
-  firstCourse: string;
-  secondCourse: string;
-}
-
 interface FilterOptions {
   search: string;
   pattern: "all" | "none" | "weekly" | "monthly";
@@ -86,15 +83,30 @@ interface AdvancedFilterOptions extends FilterOptions {
   courseSearch: string;
 }
 
+interface NewMenu {
+  dateRange: DateRange;
+  repeat_pattern: "none" | "weekly" | "monthly";
+  active: boolean;
+  firstCourse: string;
+  secondCourse: string;
+}
+
 interface GroupedMenus {
   [key: string]: DailyMenu[];
 }
 
-// -----------------------------------
-// Utility Functions
-// -----------------------------------
 
-// Calculate date ranges for quick selection
+// Group menus by week start date
+function groupMenusByWeek(menus: DailyMenu[]): GroupedMenus {
+  return menus.reduce((acc, menu) => {
+    const weekStart = format(startOfWeek(new Date(menu.date), { locale: es }), 'yyyy-MM-dd');
+    if (!acc[weekStart]) acc[weekStart] = [];
+    acc[weekStart].push(menu);
+    return acc;
+  }, {} as GroupedMenus);
+}
+
+// Predefined ranges
 const getThisWeekRange = (): DateRange => ({
   from: startOfWeek(new Date(), { locale: es }),
   to: endOfWeek(new Date(), { locale: es }),
@@ -110,30 +122,31 @@ const getThisMonthRange = (): DateRange => ({
   to: endOfMonth(new Date()),
 });
 
-// Group menus by the start of their week
-function groupMenusByWeek(menus: DailyMenu[]): GroupedMenus {
-  return menus.reduce((acc, menu) => {
-    const weekStart = format(startOfWeek(new Date(menu.date), { locale: es }), 'yyyy-MM-dd');
-    if (!acc[weekStart]) acc[weekStart] = [];
-    acc[weekStart].push(menu);
-    return acc;
-  }, {} as GroupedMenus);
+// Fetch data function with proper typing
+async function fetchDailyMenus(
+  supabase: ReturnType<typeof createClientComponentClient<Database>>
+) {
+  const { data, error } = await supabase
+    .from("daily_menus")
+    .select(`
+      id,
+      date,
+      repeat_pattern,
+      active,
+      scheduled_for,
+      created_at,
+      daily_menu_items (
+        id,
+        course_name,
+        course_type,
+        display_order
+      )
+    `)
+    .order("date", { ascending: false });
+
+  if (error) throw error;
+  return data as DailyMenu[];
 }
-
-// -----------------------------------
-// Utility Classes
-// -----------------------------------
-const cardClasses =
-  "bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all p-6 rounded-sm relative group";
-const headingClasses = "text-2xl font-medium mb-1";
-const subheadingClasses =
-  "text-sm uppercase text-muted-foreground tracking-wide";
-const labelClasses =
-  "text-xs uppercase text-muted-foreground font-medium tracking-wide";
-
-// -----------------------------------
-// Sub-Components
-// -----------------------------------
 
 // AdvancedFilters Component
 const AdvancedFilters = ({
@@ -142,114 +155,98 @@ const AdvancedFilters = ({
 }: {
   filters: AdvancedFilterOptions;
   onFilterChange: (filters: AdvancedFilterOptions) => void;
-}) => {
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-4 flex-wrap">
-        {/* Search input */}
-        <div className="flex-1 min-w-[200px]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search menus..."
-              value={filters.search}
-              onChange={(e) =>
-                onFilterChange({
-                  ...filters,
-                  search: e.target.value,
-                })
-              }
-              className="pl-9"
-            />
-          </div>
-        </div>
-
-        {/* Course Search input */}
-        <div className="flex-1 min-w-[200px]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search courses..."
-              value={filters.courseSearch}
-              onChange={(e) =>
-                onFilterChange({
-                  ...filters,
-                  courseSearch: e.target.value,
-                })
-              }
-              className="pl-9"
-            />
-          </div>
-        </div>
-
-        {/* Pattern filter */}
-        <Select
-          value={filters.pattern}
-          onValueChange={(value: FilterOptions["pattern"]) =>
-            onFilterChange({ ...filters, pattern: value })
-          }
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by pattern" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Patterns</SelectItem>
-            <SelectItem value="none">Single</SelectItem>
-            <SelectItem value="weekly">Weekly</SelectItem>
-            <SelectItem value="monthly">Monthly</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Date range picker */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="min-w-[200px] justify-start">
-              <Calendar className="mr-2 h-4 w-4" />
-              {filters.dateRange?.from ? (
-                filters.dateRange.to ? (
-                  <>
-                    {format(filters.dateRange.from, "PPP", { locale: es })} -{" "}
-                    {format(filters.dateRange.to, "PPP", { locale: es })}
-                  </>
-                ) : (
-                  format(filters.dateRange.from, "PPP", { locale: es })
-                )
-              ) : (
-                <span>Pick a date range</span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0">
-            <CalendarComponent
-              mode="range"
-              selected={filters.dateRange}
-              onSelect={(range) =>
-                onFilterChange({ ...filters, dateRange: range })
-              }
-            />
-          </PopoverContent>
-        </Popover>
-
-        {/* Status filter */}
-        <Select
-          value={filters.status}
-          onValueChange={(value: FilterOptions["status"]) =>
-            onFilterChange({ ...filters, status: value })
-          }
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
+}) => (
+  <div className="space-y-4">
+    <div className="flex gap-4 flex-wrap">
+      {/* Menus Search */}
+      <div className="flex-1 min-w-[200px] relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search menus..."
+          value={filters.search}
+          onChange={(e) => onFilterChange({ ...filters, search: e.target.value })}
+          className="pl-9"
+        />
       </div>
+
+      {/* Courses Search */}
+      <div className="flex-1 min-w-[200px] relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search courses..."
+          value={filters.courseSearch}
+          onChange={(e) =>
+            onFilterChange({ ...filters, courseSearch: e.target.value })
+          }
+          className="pl-9"
+        />
+      </div>
+
+      {/* Pattern filter */}
+      <Select
+        value={filters.pattern}
+        onValueChange={(value: FilterOptions["pattern"]) =>
+          onFilterChange({ ...filters, pattern: value })
+        }
+      >
+        <SelectTrigger className="w-[180px]">
+          <SelectValue placeholder="Filter by pattern" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Patterns</SelectItem>
+          <SelectItem value="none">Single</SelectItem>
+          <SelectItem value="weekly">Weekly</SelectItem>
+          <SelectItem value="monthly">Monthly</SelectItem>
+        </SelectContent>
+      </Select>
+
+      {/* Date range picker */}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className="min-w-[200px] justify-start">
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {filters.dateRange?.from ? (
+              filters.dateRange.to ? (
+                <>
+                  {format(filters.dateRange.from, "PPP", { locale: es })} -{" "}
+                  {format(filters.dateRange.to, "PPP", { locale: es })}
+                </>
+              ) : (
+                format(filters.dateRange.from, "PPP", { locale: es })
+              )
+            ) : (
+              <span>Pick a date range</span>
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0">
+          <Calendar
+            mode="range"
+            selected={filters.dateRange}
+            onSelect={(range) => onFilterChange({ ...filters, dateRange: range })}
+          />
+        </PopoverContent>
+      </Popover>
+
+      {/* Status filter */}
+      <Select
+        value={filters.status}
+        onValueChange={(value: FilterOptions["status"]) =>
+          onFilterChange({ ...filters, status: value })
+        }
+      >
+        <SelectTrigger className="w-[180px]">
+          <SelectValue placeholder="Filter by status" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Status</SelectItem>
+          <SelectItem value="active">Active</SelectItem>
+          <SelectItem value="inactive">Inactive</SelectItem>
+        </SelectContent>
+      </Select>
     </div>
-  );
-};
+  </div>
+);
 
 // QuickActions Component
 const QuickActions = ({
@@ -258,57 +255,38 @@ const QuickActions = ({
 }: {
   onSelectDateRange: (range: DateRange) => void;
   onCreateMenu: () => void;
-}) => {
-  return (
-    <div className="flex items-center justify-between mb-6">
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onSelectDateRange(getThisWeekRange())}
-        >
-          This Week
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onSelectDateRange(getNextWeekRange())}
-        >
-          Next Week
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onSelectDateRange(getThisMonthRange())}
-        >
-          This Month
-        </Button>
-      </div>
-
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            onSelectDateRange({
-              from: new Date(),
-              to: new Date(),
-            })
-          }
-        >
-          <Calendar className="mr-2 h-4 w-4" />
-          Today
-        </Button>
-        <Button onClick={onCreateMenu}>
-          <Plus className="mr-2 h-4 w-4" />
-          Schedule Menu
-        </Button>
-      </div>
+}) => (
+  <div className="flex items-center justify-between mb-6">
+    <div className="flex gap-2">
+      <Button variant="outline" size="sm" onClick={() => onSelectDateRange(getThisWeekRange())}>
+        This Week
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => onSelectDateRange(getNextWeekRange())}>
+        Next Week
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => onSelectDateRange(getThisMonthRange())}>
+        This Month
+      </Button>
     </div>
-  );
-};
 
-// MenuCardProps Type Definition
+    <div className="flex gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onSelectDateRange({ from: new Date(), to: new Date() })}
+      >
+        <CalendarIcon className="mr-2 h-4 w-4" />
+        Today
+      </Button>
+      <Button onClick={onCreateMenu}>
+        <Plus className="mr-2 h-4 w-4" />
+        Schedule Menu
+      </Button>
+    </div>
+  </div>
+);
+
+// MenuCard Component
 type MenuCardProps = {
   menu: DailyMenu;
   onStatusToggle: (id: string, status: boolean) => void;
@@ -316,28 +294,23 @@ type MenuCardProps = {
   onDuplicate: (menu: DailyMenu) => void;
 };
 
-// MenuCard Component: Displays individual menu details with interactive buttons
-const MenuCard = ({
-  menu,
-  onStatusToggle,
-  onEdit,
-  onDuplicate,
-}: MenuCardProps) => (
-  <div className={cardClasses}>
+const MenuCard = ({ menu, onStatusToggle, onEdit, onDuplicate }: MenuCardProps) => (
+  <div className="bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all p-6 rounded-sm relative group">
     <div className="flex justify-between items-start mb-6">
       <div>
-        <div className={labelClasses}>DATE</div>
+        <div className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
+          DATE
+        </div>
         <div className="text-lg mt-1">
           {format(new Date(menu.date), "PPP", { locale: es })}
         </div>
       </div>
-
-      {/* Enhanced status toggle */}
       <Switch
         checked={menu.active}
         onCheckedChange={(checked) => onStatusToggle(menu.id, checked)}
+        aria-label={`Toggle ${format(new Date(menu.date), "PPP", { locale: es })} menu status`}
         className={cn(
-          "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black",
+          "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
           menu.active ? "bg-black" : "bg-gray-200"
         )}
       >
@@ -353,28 +326,29 @@ const MenuCard = ({
 
     <div className="space-y-4">
       <div>
-        <div className={labelClasses}>PATTERN</div>
+        <div className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
+          PATTERN
+        </div>
         <div className="mt-1 capitalize">{menu.repeat_pattern}</div>
       </div>
 
       <div>
-        <div className={labelClasses}>COURSES</div>
+        <div className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
+          COURSES
+        </div>
         <div className="grid gap-2 mt-2">
           {menu.daily_menu_items
             ?.sort((a, b) => a.display_order - b.display_order)
             .map((item) => (
-              <div key={item.id} className="flex justify-between items-center">
-                <div>
-                  <div className={labelClasses}>{item.course_type.toUpperCase()}</div>
-                  <div className="text-sm mt-1">{item.course_name}</div>
-                </div>
+              <div key={item.id} className="text-sm">
+                <span className="font-medium capitalize">{item.course_type}:</span>{" "}
+                {item.course_name}
               </div>
             ))}
         </div>
       </div>
     </div>
 
-    {/* Hover Actions */}
     <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity">
       <div className="absolute bottom-4 right-4 flex gap-2">
         <Button
@@ -382,7 +356,7 @@ const MenuCard = ({
           variant="ghost"
           onClick={() => onEdit(menu)}
           className="hover:bg-black hover:text-white"
-          aria-label={`Edit menu scheduled on ${format(new Date(menu.date), "PPP", { locale: es })}`}
+          aria-label="Edit menu"
         >
           <Edit className="h-4 w-4" />
         </Button>
@@ -391,7 +365,7 @@ const MenuCard = ({
           variant="ghost"
           onClick={() => onDuplicate(menu)}
           className="hover:bg-black hover:text-white"
-          aria-label={`Duplicate menu scheduled on ${format(new Date(menu.date), "PPP", { locale: es })}`}
+          aria-label="Duplicate menu"
         >
           <Copy className="h-4 w-4" />
         </Button>
@@ -400,7 +374,7 @@ const MenuCard = ({
           variant="ghost"
           onClick={() => onStatusToggle(menu.id, menu.active)}
           className="hover:bg-black hover:text-white"
-          aria-label={`Toggle status for menu scheduled on ${format(new Date(menu.date), "PPP", { locale: es })}`}
+          aria-label="Toggle menu status"
         >
           <ToggleLeft className="h-4 w-4" />
         </Button>
@@ -422,6 +396,14 @@ const MenuListSection = ({
   handleDuplicateMenu: (menu: DailyMenu) => void;
 }) => {
   const groupedMenus = useMemo(() => groupMenusByWeek(filteredMenus), [filteredMenus]);
+
+  if (filteredMenus.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">No menus found.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -447,20 +429,11 @@ const MenuListSection = ({
   );
 };
 
-// -----------------------------------
-// Main Component: DailyMenuPage
-// -----------------------------------
-
 export default function DailyMenuPage() {
-  // -----------------------------------
-  // State Management
-  // -----------------------------------
-  const [dailyMenus, setDailyMenus] = useState<DailyMenu[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
-  const [editingMenu, setEditingMenu] = useState<DailyMenu | null>(null);
+  const supabase = createClientComponentClient<Database>();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const [advancedFilter, setAdvancedFilter] = useState<AdvancedFilterOptions>({
     search: "",
     pattern: "all",
@@ -468,114 +441,54 @@ export default function DailyMenuPage() {
     dateRange: undefined,
     courseSearch: "",
   });
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingMenu, setEditingMenu] = useState<DailyMenu | null>(null);
   const [newMenu, setNewMenu] = useState<NewMenu>({
-    dateRange: {
-      from: new Date(),
-      to: new Date(),
-    },
+    dateRange: { from: new Date(), to: new Date() },
     repeat_pattern: "none",
     active: true,
     firstCourse: "",
     secondCourse: "",
   });
 
-  const supabase = createClientComponentClient();
-  const { toast } = useToast();
+  const {
+    data: dailyMenus = [],
+    isLoading,
+    error,
+  } = useQuery<DailyMenu[], Error>({
+    queryKey: ["dailyMenus"],
+    queryFn: () => fetchDailyMenus(supabase),
+  });
 
-  // -----------------------------------
-  // Data Fetching
-  // -----------------------------------
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
+  const queryInvalidate = () => queryClient.invalidateQueries({ queryKey: ["dailyMenus"] });
 
-        const { data: menusData, error: menusError } = await supabase
-          .from("daily_menus")
-          .select(`
-            id,
-            date,
-            repeat_pattern,
-            active,
-            scheduled_for,
-            created_at,
-            daily_menu_items (
-              id,
-              course_name,
-              course_type,
-              display_order
-            )
-          `)
-          .order("date", { ascending: false });
-
-        if (menusError) throw menusError;
-
-        setDailyMenus(menusData || []);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        setError("Failed to load daily menus");
-        toast({
-          title: "Error",
-          description: "Failed to load daily menus",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [supabase, toast]);
-
-  // -----------------------------------
-  // Event Handlers
-  // -----------------------------------
-
-  // Toggle the active status of a menu
-  const toggleMenuStatus = async (id: string, currentStatus: boolean) => {
-    try {
-      const { error } = await supabase
+  const toggleStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: boolean }) => {
+      const { error: toggleError } = await supabase
         .from("daily_menus")
-        .update({ active: !currentStatus })
+        .update({ active: status })
         .eq("id", id);
+      if (toggleError) throw toggleError;
+    },
+    onSuccess: () => {
+      queryInvalidate();
+      toast({ title: "Success", description: "Menu status updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update menu status", variant: "destructive" });
+    },
+  });
 
-      if (error) throw error;
+  // Define InsertedMenu type for inserted menus (no daily_menu_items yet)
+  type InsertedMenu = Pick<DailyMenu, 'id' | 'date' | 'repeat_pattern' | 'active' | 'scheduled_for' | 'created_at'>;
 
-      setDailyMenus((prevMenus) =>
-        prevMenus.map((menu) =>
-          menu.id === id ? { ...menu, active: !currentStatus } : menu
-        )
-      );
-
-      toast({
-        title: "Success",
-        description: "Menu status updated successfully",
-      });
-    } catch (error) {
-      console.error("Error toggling menu status:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update menu status",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Handle creating or updating a menu
-  const handleCreateMenu = async () => {
-    try {
+  const createMenuMutation = useMutation({
+    mutationFn: async () => {
       const { dateRange, firstCourse, secondCourse, repeat_pattern, active } = newMenu;
       if (!dateRange.from || !firstCourse || !secondCourse) {
-        toast({
-          title: "Error",
-          description: "Please fill in all required fields and select dates",
-          variant: "destructive",
-        });
-        return;
+        throw new Error("Please fill in all required fields and select dates");
       }
 
-      // Generate dates based on repeat pattern
       const datesToSchedule: Date[] = [];
       let currentDate = new Date(dateRange.from);
       const endDate = dateRange.to ? new Date(dateRange.to) : new Date(dateRange.from);
@@ -594,9 +507,8 @@ export default function DailyMenuPage() {
         }
       }
 
-      // Batch insert menus
       const menusToInsert = datesToSchedule
-        .filter((date) => !dailyMenus.some((menu) => isSameDay(new Date(menu.date), date)))
+        .filter((date) => !dailyMenus.some((m) => isSameDay(new Date(m.date), date)))
         .map((date) => ({
           date: format(date, "yyyy-MM-dd"),
           repeat_pattern,
@@ -605,11 +517,7 @@ export default function DailyMenuPage() {
         }));
 
       if (menusToInsert.length === 0) {
-        toast({
-          title: "Info",
-          description: "No new menus to schedule.",
-        });
-        return;
+        throw new Error("No new menus to schedule.");
       }
 
       const { data: insertedMenus, error: insertError } = await supabase
@@ -619,177 +527,113 @@ export default function DailyMenuPage() {
 
       if (insertError) throw insertError;
 
-      // Prepare daily_menu_items for all inserted menus
-      const allMenuItems = insertedMenus.flatMap((menu) => [
+      // Cast insertedMenus to InsertedMenu[]
+      const allMenuItems = (insertedMenus as InsertedMenu[]).flatMap((menu) => [
         {
           daily_menu_id: menu.id,
           course_name: firstCourse,
-          course_type: "first",
+          course_type: "first" as const,
           display_order: 1,
         },
         {
           daily_menu_id: menu.id,
           course_name: secondCourse,
-          course_type: "second",
+          course_type: "second" as const,
           display_order: 2,
         },
       ]);
 
-      // Batch insert daily_menu_items
       const { error: itemsError } = await supabase
         .from("daily_menu_items")
         .insert(allMenuItems);
 
       if (itemsError) throw itemsError;
-
-      // Refresh menus
-      const { data: updatedMenus, error: fetchError } = await supabase
-        .from("daily_menus")
-        .select(`
-          id,
-          date,
-          repeat_pattern,
-          active,
-          scheduled_for,
-          created_at,
-          daily_menu_items (
-            id,
-            course_name,
-            course_type,
-            display_order
-          )
-        `)
-        .order("date", { ascending: false });
-
-      if (fetchError) throw fetchError;
-      setDailyMenus(updatedMenus || []);
+    },
+    onSuccess: () => {
+      queryInvalidate();
       setIsDialogOpen(false);
       resetNewMenu();
+      toast({ title: "Success", description: "Menus scheduled successfully" });
+    },
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : "Failed to schedule menus";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
 
-      toast({
-        title: "Success",
-        description: "Menus scheduled successfully",
-      });
-    } catch (error) {
-      console.error("Error creating menus:", error);
-      toast({
-        title: "Error",
-        description: "Failed to schedule menus",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Handle duplicating a menu
   const handleDuplicateMenu = (menu: DailyMenu) => {
     setNewMenu({
-      dateRange: {
-        from: new Date(),
-        to: new Date(),
-      },
+      dateRange: { from: new Date(), to: new Date() },
       repeat_pattern: "none",
       active: true,
       firstCourse:
-        menu.daily_menu_items.find((item) => item.course_type === "first")
-          ?.course_name || "",
+        menu.daily_menu_items.find((i) => i.course_type === "first")?.course_name || "",
       secondCourse:
-        menu.daily_menu_items.find((item) => item.course_type === "second")
-          ?.course_name || "",
+        menu.daily_menu_items.find((i) => i.course_type === "second")?.course_name || "",
     });
     setIsDialogOpen(true);
   };
 
-  // Handle editing a menu
   const handleEditMenu = (menu: DailyMenu) => {
     setEditingMenu(menu);
     setNewMenu({
-      dateRange: {
-        from: new Date(menu.date),
-        to: new Date(menu.date),
-      },
+      dateRange: { from: new Date(menu.date), to: new Date(menu.date) },
       repeat_pattern: menu.repeat_pattern,
       active: menu.active,
       firstCourse:
-        menu.daily_menu_items.find((item) => item.course_type === "first")
-          ?.course_name || "",
+        menu.daily_menu_items.find((i) => i.course_type === "first")?.course_name || "",
       secondCourse:
-        menu.daily_menu_items.find((item) => item.course_type === "second")
-          ?.course_name || "",
+        menu.daily_menu_items.find((i) => i.course_type === "second")?.course_name || "",
     });
     setIsDialogOpen(true);
   };
 
-  // Reset newMenu state
   const resetNewMenu = () => {
+    setEditingMenu(null);
     setNewMenu({
-      dateRange: {
-        from: new Date(),
-        to: new Date(),
-      },
+      dateRange: { from: new Date(), to: new Date() },
       repeat_pattern: "none",
       active: true,
       firstCourse: "",
       secondCourse: "",
     });
-    setEditingMenu(null);
   };
 
-  // -----------------------------------
-  // Helper Functions
-  // -----------------------------------
-
-  // Get menu for a specific date
-  const getMenuForDate = useCallback(
-    (date: Date): DailyMenu | undefined => {
-      return dailyMenus.find((menu) => isSameDay(new Date(menu.date), date));
-    },
-    [dailyMenus]
-  );
-
-  // -----------------------------------
-  // Filtered Menus Calculation
-  // -----------------------------------
   const filteredMenus = useMemo(() => {
     let menus = [...dailyMenus];
 
-    // Apply search filter
     if (advancedFilter.search.trim()) {
       const searchLower = advancedFilter.search.toLowerCase();
-      menus = menus.filter((menu) =>
-        menu.daily_menu_items.some((item) =>
+      menus = menus.filter((menu: DailyMenu) =>
+        menu.daily_menu_items.some((item: DailyMenuItem) =>
           item.course_name.toLowerCase().includes(searchLower)
         )
       );
     }
 
-    // Apply course search filter
     if (advancedFilter.courseSearch.trim()) {
-      const courseSearchLower = advancedFilter.courseSearch.toLowerCase();
-      menus = menus.filter((menu) =>
-        menu.daily_menu_items.some((item) =>
-          item.course_name.toLowerCase().includes(courseSearchLower)
+      const courseLower = advancedFilter.courseSearch.toLowerCase();
+      menus = menus.filter((menu: DailyMenu) =>
+        menu.daily_menu_items.some((item: DailyMenuItem) =>
+          item.course_name.toLowerCase().includes(courseLower)
         )
       );
     }
 
-    // Apply pattern filter
     if (advancedFilter.pattern !== "all") {
       menus = menus.filter((menu) => menu.repeat_pattern === advancedFilter.pattern);
     }
 
-    // Apply status filter
     if (advancedFilter.status !== "all") {
       const isActive = advancedFilter.status === "active";
       menus = menus.filter((menu) => menu.active === isActive);
     }
 
-    // Apply date range filter
     if (advancedFilter.dateRange?.from && advancedFilter.dateRange?.to) {
-      const from = advancedFilter.dateRange.from;
-      const to = advancedFilter.dateRange.to;
+      const { from, to } = advancedFilter.dateRange;
       menus = menus.filter((menu) => {
-        const menuDate = new Date(menu.date);
-        return menuDate >= from && menuDate <= to;
+        const d = new Date(menu.date);
+        return d >= from && d <= to;
       });
     }
 
@@ -798,17 +642,15 @@ export default function DailyMenuPage() {
     );
   }, [dailyMenus, advancedFilter]);
 
-  // -----------------------------------
-  // Rendering
-  // -----------------------------------
   return (
     <div className="min-h-screen bg-background">
       <div className="container py-6 space-y-6">
-        {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className={headingClasses}>Daily Menus</h1>
-            <p className={subheadingClasses}>Menu Schedule Management</p>
+            <h1 className="text-2xl font-medium mb-1">Daily Menus</h1>
+            <p className="text-sm uppercase text-muted-foreground tracking-wide">
+              Menu Schedule Management
+            </p>
           </div>
           <Button
             onClick={() => {
@@ -822,14 +664,12 @@ export default function DailyMenuPage() {
           </Button>
         </div>
 
-        {/* Error Display */}
         {error && (
           <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{String(error)}</AlertDescription>
           </Alert>
         )}
 
-        {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Calendar Section */}
           <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
@@ -840,145 +680,33 @@ export default function DailyMenuPage() {
               </p>
             </div>
 
-            {/* Quick Actions Bar */}
             <QuickActions
-              onSelectDateRange={(range) =>
-                setNewMenu({ ...newMenu, dateRange: range })
-              }
+              onSelectDateRange={(range) => setNewMenu({ ...newMenu, dateRange: range })}
               onCreateMenu={() => {
                 resetNewMenu();
                 setIsDialogOpen(true);
               }}
             />
 
-            {/* Calendar Component with Visual Feedback */}
-            <CalendarComponent
-              mode="range"
-              selected={newMenu.dateRange}
-              onSelect={(range) =>
-                setNewMenu({
-                  ...newMenu,
-                  dateRange: range || { from: undefined, to: undefined },
-                })
-              }
-              numberOfMonths={1}
-              locale={es}
-              classNames={{
-                months: "space-y-4",
-                month: "space-y-4",
-                caption: "flex justify-center pt-1 relative items-center",
-                caption_label: "text-sm font-medium",
-                nav: "space-x-1 flex items-center",
-                nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
-                nav_button_previous: "absolute left-1",
-                nav_button_next: "absolute right-1",
-                table: "w-full border-collapse space-y-1",
-                head_row: "flex",
-                head_cell: "text-gray-500 rounded-md w-9 font-normal text-[0.8rem]",
-                row: "flex w-full mt-2",
-                cell: "text-center text-sm relative p-0 rounded-md hover:bg-gray-100 focus-within:relative focus-within:z-20",
-                day: "h-9 w-9 p-0 font-normal",
-                day_range_middle: "rounded-none",
-                day_selected:
-                  "bg-black text-white hover:bg-gray-800 hover:text-white focus:bg-gray-800 focus:text-white",
-                day_today: "bg-gray-50",
-                day_outside: "opacity-50",
-                day_disabled: "opacity-50",
-                day_hidden: "invisible",
-              }}
-              modifiers={{
-                booked: (date) =>
-                  dailyMenus.some((menu) => isSameDay(new Date(menu.date), date)),
-                weekly: (date) =>
-                  dailyMenus.some(
-                    (menu) =>
-                      isSameDay(new Date(menu.date), date) &&
-                      menu.repeat_pattern === "weekly"
-                  ),
-                monthly: (date) =>
-                  dailyMenus.some(
-                    (menu) =>
-                      isSameDay(new Date(menu.date), date) &&
-                      menu.repeat_pattern === "monthly"
-                  ),
-              }}
-              onDayMouseEnter={(date) => setHoveredDate(date)}
-              onDayMouseLeave={() => setHoveredDate(null)}
-              components={{
-                DayContent: ({ date }: { date: Date }) => {
-                  const menu = getMenuForDate(date);
-                  const isHovered = hoveredDate && isSameDay(hoveredDate, date);
+            {isLoading ? (
+              <div className="flex h-[200px] items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
+              </div>
+            ) : (
+              <Calendar
+                mode="range"
+                selected={newMenu.dateRange}
+                onSelect={(range) =>
+                  setNewMenu({
+                    ...newMenu,
+                    dateRange: range || { from: undefined, to: undefined },
+                  })
+                }
+                numberOfMonths={1}
+                locale={es}
+              />
+            )}
 
-                  return (
-                    <div className="relative w-full h-full">
-                      {/* Date number and indicators */}
-                      <div
-                        className={cn(
-                          "w-full h-full flex items-center justify-center",
-                          menu && "font-medium"
-                        )}
-                      >
-                        {date.getDate()}
-
-                        {/* Menu indicators */}
-                        {menu && (
-                          <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
-                            {menu.daily_menu_items.map((_, i) => (
-                              <div
-                                key={i}
-                                className={cn(
-                                  "w-1 h-1 rounded-full",
-                                  menu.repeat_pattern === "none" && "bg-black",
-                                  menu.repeat_pattern === "weekly" &&
-                                    "bg-[#2563eb]",
-                                  menu.repeat_pattern === "monthly" &&
-                                    "bg-[#7c3aed]"
-                                )}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Enhanced hover popup */}
-                      {isHovered && menu && (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <span />
-                          </PopoverTrigger>
-                          <PopoverContent className="w-80 p-0" align="center">
-                            <div className="p-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-medium">
-                                  {format(date, "PPP", { locale: es })}
-                                </span>
-                                <Badge
-                                  variant={menu.active ? "default" : "secondary"}
-                                >
-                                  {menu.active ? "Active" : "Inactive"}
-                                </Badge>
-                              </div>
-                              <div className="space-y-2">
-                                {menu.daily_menu_items.map((item) => (
-                                  <div key={item.id} className="text-sm">
-                                    <span className="font-medium capitalize">
-                                      {item.course_type}:
-                                    </span>{" "}
-                                    {item.course_name}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      )}
-                    </div>
-                  );
-                },
-              }}
-            />
-
-            {/* Legend */}
             <div className="mt-6 flex items-center justify-between px-2">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-black rounded-sm" />
@@ -998,39 +726,22 @@ export default function DailyMenuPage() {
           {/* Menu List Section */}
           <div className="space-y-6">
             <div>
-              <h2 className={headingClasses}>Scheduled Menus</h2>
-              <p className={subheadingClasses}>
+              <h2 className="text-2xl font-medium mb-1">Scheduled Menus</h2>
+              <p className="text-sm uppercase text-muted-foreground tracking-wide">
                 View and manage your daily menus
               </p>
             </div>
 
-            {/* Advanced Filters */}
-            <AdvancedFilters
-              filters={advancedFilter}
-              onFilterChange={setAdvancedFilter}
-            />
+            <AdvancedFilters filters={advancedFilter} onFilterChange={setAdvancedFilter} />
 
-            {/* Loading State */}
             {isLoading ? (
               <div className="flex h-[200px] items-center justify-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
               </div>
-            ) : filteredMenus.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">
-                  No menus found.{" "}
-                  {advancedFilter.search ||
-                  advancedFilter.pattern !== "all" ||
-                  advancedFilter.status !== "all" ||
-                  advancedFilter.courseSearch
-                    ? "Try adjusting your filters."
-                    : "Create one to get started."}
-                </p>
-              </div>
             ) : (
               <MenuListSection
                 filteredMenus={filteredMenus}
-                toggleMenuStatus={toggleMenuStatus}
+                toggleMenuStatus={(id, status) => toggleStatusMutation.mutate({ id, status: !status })}
                 handleEditMenu={handleEditMenu}
                 handleDuplicateMenu={handleDuplicateMenu}
               />
@@ -1048,9 +759,7 @@ export default function DailyMenuPage() {
         >
           <DialogContent className="max-w-xl">
             <DialogHeader>
-              <DialogTitle>
-                {editingMenu ? "Edit Menu" : "Schedule Menu"}
-              </DialogTitle>
+              <DialogTitle>{editingMenu ? "Edit Menu" : "Schedule Menu"}</DialogTitle>
               <DialogDescription>
                 {editingMenu
                   ? "Modify the menu details"
@@ -1061,13 +770,12 @@ export default function DailyMenuPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                handleCreateMenu();
+                createMenuMutation.mutate();
               }}
               className="grid gap-6 py-4"
             >
-              {/* Selected Dates Display */}
               <div className="grid gap-2">
-                <Label htmlFor="date-range" className={labelClasses}>
+                <Label className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
                   Selected Dates
                 </Label>
                 <div className="text-sm">
@@ -1079,20 +787,14 @@ export default function DailyMenuPage() {
                 </div>
               </div>
 
-              {/* Repeat Pattern Selection */}
               <div className="grid gap-2">
-                <Label htmlFor="repeat_pattern" className={labelClasses}>
+                <Label className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
                   Repeat Pattern
                 </Label>
                 <Select
                   value={newMenu.repeat_pattern}
-                  onValueChange={(
-                    value: "none" | "weekly" | "monthly"
-                  ) =>
-                    setNewMenu({
-                      ...newMenu,
-                      repeat_pattern: value,
-                    })
+                  onValueChange={(value: NewMenu["repeat_pattern"]) =>
+                    setNewMenu({ ...newMenu, repeat_pattern: value })
                   }
                 >
                   <SelectTrigger>
@@ -1106,13 +808,11 @@ export default function DailyMenuPage() {
                 </Select>
               </div>
 
-              {/* First Course Input */}
               <div className="grid gap-2">
-                <Label htmlFor="firstCourse" className={labelClasses}>
+                <Label className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
                   First Course
                 </Label>
                 <Input
-                  id="firstCourse"
                   value={newMenu.firstCourse}
                   onChange={(e) =>
                     setNewMenu({ ...newMenu, firstCourse: e.target.value })
@@ -1122,13 +822,11 @@ export default function DailyMenuPage() {
                 />
               </div>
 
-              {/* Second Course Input */}
               <div className="grid gap-2">
-                <Label htmlFor="secondCourse" className={labelClasses}>
+                <Label className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
                   Second Course
                 </Label>
                 <Input
-                  id="secondCourse"
                   value={newMenu.secondCourse}
                   onChange={(e) =>
                     setNewMenu({ ...newMenu, secondCourse: e.target.value })
@@ -1137,22 +835,22 @@ export default function DailyMenuPage() {
                   required
                 />
               </div>
-            </form>
 
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  resetNewMenu();
-                  setIsDialogOpen(false);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" onClick={handleCreateMenu}>
-                {editingMenu ? "Update Menu" : "Schedule Menu"}
-              </Button>
-            </DialogFooter>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    resetNewMenu();
+                    setIsDialogOpen(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit">
+                  {editingMenu ? "Update Menu" : "Schedule Menu"}
+                </Button>
+              </DialogFooter>
+            </form>
           </DialogContent>
         </Dialog>
       </div>

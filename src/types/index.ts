@@ -32,6 +32,7 @@ export type Database = {
           updated_at?: string;
         };
       };
+
       menu_items: {
         Row: {
           id: string;
@@ -67,6 +68,7 @@ export type Database = {
           updated_at?: string;
         };
       };
+
       menu_item_allergens: {
         Row: {
           menu_item_id: string;
@@ -83,6 +85,7 @@ export type Database = {
           allergen_id?: string;
         };
       };
+
       allergens: {
         Row: {
           id: string;
@@ -100,6 +103,7 @@ export type Database = {
           updated_at?: string;
         };
       };
+
       menu_categories: {
         Row: {
           id: string;
@@ -118,6 +122,60 @@ export type Database = {
           name?: string;
           display_order?: number;
           updated_at?: string;
+        };
+      };
+
+      // ===== Added daily_menus and daily_menu_items Tables =====
+      daily_menus: {
+  Row: {
+    id: string;
+    date: string;
+    repeat_pattern: "none" | "weekly" | "monthly";
+    active: boolean;
+    scheduled_for: string;
+    created_at: string;
+    daily_menu_items?: {
+      id: string;
+      course_name: string;
+      course_type: "first" | "second";
+      display_order: number;
+      daily_menu_id: string;
+    }[];
+  };
+  Insert: {
+    date: string;
+    repeat_pattern?: "none" | "weekly" | "monthly";
+    active?: boolean;
+    scheduled_for: string;
+    created_at?: string;
+  };
+  Update: {
+    date?: string;
+    repeat_pattern?: "none" | "weekly" | "monthly";
+    active?: boolean;
+    scheduled_for?: string;
+  };
+};
+
+      daily_menu_items: {
+        Row: {
+          id: string;
+          course_name: string;
+          course_type: "first" | "second";
+          display_order: number;
+          daily_menu_id: string;
+        };
+        Insert: {
+          course_name: string;
+          course_type: "first" | "second";
+          display_order: number;
+          daily_menu_id: string;
+        };
+        Update: {
+          course_name?: string;
+          course_type?: "first" | "second";
+          display_order?: number;
+          daily_menu_id?: string;
         };
       };
 
@@ -308,7 +366,6 @@ export type TableColumn<T> = {
   field: keyof T;
   render?: (value: T[keyof T], item: T) => ReactNode;
 };
-
 
 export type ImageUploadState = {
   file: File | null;
@@ -590,7 +647,6 @@ export const STATUS_CODES = {
 
 export type StatusCode = typeof STATUS_CODES[keyof typeof STATUS_CODES];
 
-// **Renamed ValidationError Class to ValidationException**
 export class ValidationException extends Error {
   constructor(message: string, public errors: ValidationError[]) {
     super(message);
