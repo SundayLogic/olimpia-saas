@@ -1,5 +1,3 @@
-// cspell:ignore supabase
-
 "use client";
 
 import React, { useState, useMemo, useRef } from "react";
@@ -90,14 +88,16 @@ async function fetchCategories(supabase: SupabaseClient<Database>) {
 async function fetchWines(supabase: SupabaseClient<Database>) {
   const { data, error } = await supabase
     .from("wines")
-    .select(`
+    .select(
+      `
       *,
       wine_category_assignments (
         wine_categories (
           id, name, display_order
         )
       )
-    `)
+    `
+    )
     .order("name");
 
   if (error) throw error;
@@ -111,7 +111,7 @@ async function fetchWines(supabase: SupabaseClient<Database>) {
     active: boolean;
     created_at: string;
     wine_category_assignments: {
-      wine_categories: WineCategory;
+      wine_categories: WineCategory[];
     }[];
     image_path?: string;
     image_url?: string;
@@ -126,7 +126,9 @@ async function fetchWines(supabase: SupabaseClient<Database>) {
     glass_price: wine.glass_price,
     active: wine.active,
     created_at: wine.created_at,
-    categories: wine.wine_category_assignments.map((a) => a.wine_categories),
+    categories: wine.wine_category_assignments.flatMap(
+      (a) => a.wine_categories
+    ),
     image_path: wine.image_path || "wines/wine.webp",
     image_url:
       wine.image_url ||
@@ -157,7 +159,11 @@ interface WineCardProps {
   handleEdit: (wine: Wine) => void;
 }
 
-const WineCard: React.FC<WineCardProps> = ({ wine, searchTerm, handleEdit }) => (
+const WineCard: React.FC<WineCardProps> = ({
+  wine,
+  searchTerm,
+  handleEdit,
+}) => (
   <div
     className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm 
                transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
@@ -282,7 +288,6 @@ export default function WinePage() {
   const isLoading = categoriesLoading || winesLoading;
   const error = categoriesError || winesError;
 
-  // Mutations
   const createWineMutation = useMutation<unknown, Error, NewWine>({
     mutationFn: async (data: NewWine) => {
       if (!data.name || !data.bottle_price) {
@@ -331,12 +336,17 @@ export default function WinePage() {
       toast({ title: "Success", description: "Wine added successfully" });
     },
     onError: (err) => {
-      const message = err instanceof Error ? err.message : "An unexpected error occurred";
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred";
       toast({ title: "Error", description: message, variant: "destructive" });
     },
   });
 
-  const updateWineMutation = useMutation<unknown, Error, { wineId: number; form: EditFormData }>({
+  const updateWineMutation = useMutation<
+    unknown,
+    Error,
+    { wineId: number; form: EditFormData }
+  >({
     mutationFn: async ({ wineId, form }) => {
       const { data: updatedWine, error: wineError } = await supabase
         .from("wines")
@@ -377,13 +387,18 @@ export default function WinePage() {
       setEditDialog({ open: false, wine: null });
     },
     onError: (err) => {
-      const message = err instanceof Error ? err.message : "An unexpected error occurred";
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred";
       toast({ title: "Warning", description: message, variant: "destructive" });
       setEditDialog({ open: false, wine: null });
     },
   });
 
-  const toggleWineStatusMutation = useMutation<unknown, Error, { wineId: number; currentStatus: boolean }>({
+  const toggleWineStatusMutation = useMutation<
+    unknown,
+    Error,
+    { wineId: number; currentStatus: boolean }
+  >({
     mutationFn: async ({ wineId, currentStatus }) => {
       const { error } = await supabase
         .from("wines")
@@ -395,12 +410,17 @@ export default function WinePage() {
       queryClient.invalidateQueries({ queryKey: ["wines"] });
     },
     onError: (err) => {
-      const message = err instanceof Error ? err.message : "An unexpected error occurred";
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred";
       toast({ title: "Error", description: message, variant: "destructive" });
     },
   });
 
-  const uploadImageMutation = useMutation<unknown, Error, { file: File; wineId: number }>({
+  const uploadImageMutation = useMutation<
+    unknown,
+    Error,
+    { file: File; wineId: number }
+  >({
     mutationFn: async ({ file, wineId }) => {
       const fileExtension = file.name.split(".").pop();
       const filePath = `wines/${wineId}.${fileExtension}`;
@@ -410,7 +430,9 @@ export default function WinePage() {
 
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage.from("menu").getPublicUrl(filePath);
+      const { data: urlData } = supabase.storage
+        .from("menu")
+        .getPublicUrl(filePath);
       if (!urlData.publicUrl) throw new Error("Failed to get public URL");
 
       const { error: updateError } = await supabase
@@ -427,7 +449,8 @@ export default function WinePage() {
       setSelectedWineId(null);
     },
     onError: (err) => {
-      const message = err instanceof Error ? err.message : "An unexpected error occurred";
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred";
       toast({ title: "Error", description: message, variant: "destructive" });
     },
   });
@@ -497,7 +520,11 @@ export default function WinePage() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedWineId) {
-      toast({ title: "Error", description: "No file selected", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "No file selected",
+        variant: "destructive",
+      });
       return;
     }
     uploadImageMutation.mutate({ file, wineId: selectedWineId });
@@ -515,7 +542,9 @@ export default function WinePage() {
     return (
       <div className="container p-6">
         <Alert variant="destructive">
-          <AlertDescription>Failed to load wines or categories.</AlertDescription>
+          <AlertDescription>
+            Failed to load wines or categories.
+          </AlertDescription>
         </Alert>
       </div>
     );
@@ -525,7 +554,9 @@ export default function WinePage() {
     return (
       <div className="container p-6">
         <Alert>
-          <AlertDescription>No wines found. Add one to get started.</AlertDescription>
+          <AlertDescription>
+            No wines found. Add one to get started.
+          </AlertDescription>
         </Alert>
         <div className="mt-4">
           <Button onClick={() => setIsDialogOpen(true)}>
@@ -539,7 +570,10 @@ export default function WinePage() {
 
   return (
     <div className="container p-6">
-      <PageHeader heading="Wine List" text="Manage your restaurant's wine selection">
+      <PageHeader
+        heading="Wine List"
+        text="Manage your restaurant's wine selection"
+      >
         <Button onClick={() => setIsDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Add Wine
@@ -573,7 +607,10 @@ export default function WinePage() {
             </SelectContent>
           </Select>
 
-          <Select value={sortBy} onValueChange={(value: "name" | "price") => setSortBy(value)}>
+          <Select
+            value={sortBy}
+            onValueChange={(value: "name" | "price") => setSortBy(value)}
+          >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
@@ -586,7 +623,9 @@ export default function WinePage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => setSortOrder((current) => (current === "asc" ? "desc" : "asc"))}
+            onClick={() =>
+              setSortOrder((current) => (current === "asc" ? "desc" : "asc"))
+            }
             aria-label={`Sort order: ${sortOrder === "asc" ? "Ascending" : "Descending"}`}
           >
             {sortOrder === "asc" ? "↑" : "↓"}
@@ -596,7 +635,12 @@ export default function WinePage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
         {filteredAndSortedWines.map((wine) => (
-          <WineCard key={wine.id} wine={wine} searchTerm={searchTerm} handleEdit={handleEdit} />
+          <WineCard
+            key={wine.id}
+            wine={wine}
+            searchTerm={searchTerm}
+            handleEdit={handleEdit}
+          />
         ))}
       </div>
 
@@ -616,7 +660,9 @@ export default function WinePage() {
               <Input
                 id="name"
                 value={newWine.name}
-                onChange={(e) => setNewWine({ ...newWine, name: e.target.value })}
+                onChange={(e) =>
+                  setNewWine({ ...newWine, name: e.target.value })
+                }
                 placeholder="Wine name"
               />
             </div>
@@ -625,7 +671,9 @@ export default function WinePage() {
               <Input
                 id="description"
                 value={newWine.description}
-                onChange={(e) => setNewWine({ ...newWine, description: e.target.value })}
+                onChange={(e) =>
+                  setNewWine({ ...newWine, description: e.target.value })
+                }
                 placeholder="Wine description"
               />
             </div>
@@ -721,7 +769,7 @@ export default function WinePage() {
               Cancel
             </Button>
             <Button onClick={handleCreateWine}>
-              {createWineMutation.isLoading ? "Creating..." : "Create Wine"}
+              {createWineMutation.isPending ? "Creating..." : "Create Wine"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -735,7 +783,9 @@ export default function WinePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Wine</DialogTitle>
-            <DialogDescription>Update the details of the wine.</DialogDescription>
+            <DialogDescription>
+              Update the details of the wine.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
@@ -744,7 +794,9 @@ export default function WinePage() {
               <Input
                 id="edit-name"
                 value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, name: e.target.value })
+                }
                 placeholder="Wine name"
               />
             </div>
@@ -754,7 +806,9 @@ export default function WinePage() {
               <Input
                 id="edit-description"
                 value={editForm.description}
-                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, description: e.target.value })
+                }
                 placeholder="Wine description"
               />
             </div>
@@ -767,7 +821,9 @@ export default function WinePage() {
                   type="number"
                   step="0.01"
                   value={editForm.bottle_price}
-                  onChange={(e) => setEditForm({ ...editForm, bottle_price: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, bottle_price: e.target.value })
+                  }
                   placeholder="0.00"
                 />
               </div>
@@ -778,7 +834,9 @@ export default function WinePage() {
                   type="number"
                   step="0.01"
                   value={editForm.glass_price}
-                  onChange={(e) => setEditForm({ ...editForm, glass_price: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, glass_price: e.target.value })
+                  }
                   placeholder="0.00"
                 />
               </div>
@@ -848,7 +906,8 @@ export default function WinePage() {
                 size="sm"
                 className="flex-1"
                 onClick={() =>
-                  editDialog.wine && toggleWineStatus(editDialog.wine.id, editDialog.wine.active)
+                  editDialog.wine &&
+                  toggleWineStatus(editDialog.wine.id, editDialog.wine.active)
                 }
               >
                 {editDialog.wine?.active ? "Set Unavailable" : "Set Available"}
@@ -856,7 +915,9 @@ export default function WinePage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => editDialog.wine && handleSelectImage(editDialog.wine.id)}
+                onClick={() =>
+                  editDialog.wine && handleSelectImage(editDialog.wine.id)
+                }
               >
                 <ImageIcon className="h-4 w-4 mr-2" />
                 Change Image
@@ -865,11 +926,14 @@ export default function WinePage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialog({ open: false, wine: null })}>
+            <Button
+              variant="outline"
+              onClick={() => setEditDialog({ open: false, wine: null })}
+            >
               Cancel
             </Button>
             <Button onClick={handleSaveEdit}>
-              {updateWineMutation.isLoading ? "Saving..." : "Save Changes"}
+              {updateWineMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -880,7 +944,9 @@ export default function WinePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Change Wine Image</DialogTitle>
-            <DialogDescription>Select a new image for the wine.</DialogDescription>
+            <DialogDescription>
+              Select a new image for the wine.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
@@ -898,14 +964,17 @@ export default function WinePage() {
                   fileInputRef.current.click();
                 }
               }}
-              disabled={uploadImageMutation.isLoading}
+              disabled={uploadImageMutation.isPending}
             >
-              {uploadImageMutation.isLoading ? "Uploading..." : "Select Image"}
+              {uploadImageMutation.isPending ? "Uploading..." : "Select Image"}
             </Button>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsImageDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsImageDialogOpen(false)}
+            >
               Cancel
             </Button>
           </DialogFooter>
