@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-12-05 17:52:03
+Generated on: 2024-12-18 20:56:01
 
 ## Documented Directories:
 - app/
@@ -57,6 +57,7 @@ app/
     │   ├── global.css
     │   ├── layout.tsx
     │   ├── page.tsx
+    │   ├── providers.tsx
 
 middleware.ts/
     ├── middleware.ts/
@@ -776,223 +777,227 @@ import { format } from "date-fns";
 
 // Types for blog content structure
 type ContentNode = {
-  type: string;
-  content?: Array<{
-    type: string;
-    text?: string;
-    content?: ContentNode[];
-  }>;
-  text?: string;
-  attrs?: Record<string, unknown>;
+ type: string;
+ content?: Array<{
+   type: string;
+   text?: string;
+   content?: ContentNode[];
+ }>;
+ text?: string;
+ attrs?: Record<string, unknown>;
 };
 
 type BlogContent = {
-  type: string;
-  content: ContentNode[];
+ type: string;
+ content: ContentNode[];
 };
 
 type MenuItem = {
-  id: number;
-  name: string;
-  price: number;
+ id: number;
+ name: string;
+ price: number;
 };
 
 type Wine = {
-  id: number;
-  name: string;
-  bottle_price: number;
+ id: number;
+ name: string;
+ bottle_price: number;
 };
 
 type BlogPostData = {
-  id: string;
-  title: string;
-  slug: string;
-  content: BlogContent;
-  featured_image: string | null;
-  featured_image_url: string | null;
-  featured_image_alt: string | null;
-  published: boolean;
-  created_at: string;
-  author_info: Array<{
-    name: string | null;
-    email: string;
-  }>;
-  menu_items: Array<{
-    menu_items: MenuItem;
-  }>;
-  wines: Array<{
-    wines: Wine;
-  }>;
+ id: string;
+ title: string;
+ slug: string;
+ content: BlogContent;
+ featured_image: string | null;
+ featured_image_url: string | null;
+ featured_image_alt: string | null;
+ published: boolean;
+ created_at: string;
+ author_info: Array<{
+   name: string | null;
+   email: string;
+ }>;
+ menu_items: Array<{
+   menu_items: MenuItem;
+ }>;
+ wines: Array<{
+   wines: Wine;
+ }>;
 };
 
 // Helper function to render content
 const renderContent = (content: BlogContent) => {
-  if (!content.content) return null;
+ if (!content.content) return null;
 
-  return content.content.map((node, index) => {
-    switch (node.type) {
-      case 'paragraph':
-        return (
-          <p key={index} className="mb-4 leading-relaxed">
-            {node.content?.map((child, childIndex) => (
-              <span key={childIndex}>{child.text}</span>
-            ))}
-          </p>
-        );
-      case 'heading':
-        const HeadingTag = `h${(node.attrs?.level || 1) as number}` as keyof JSX.IntrinsicElements;
-        return (
-          <HeadingTag key={index} className="mb-4 mt-6 font-bold">
-            {node.content?.map((child, childIndex) => (
-              <span key={childIndex}>{child.text}</span>
-            ))}
-          </HeadingTag>
-        );
-      case 'image':
-        return (
-          <div key={index} className="my-6">
-            <Image
-              src={node.attrs?.src as string}
-              alt={node.attrs?.alt as string || ''}
-              width={800}
-              height={400}
-              className="rounded-lg"
-              unoptimized
-            />
-          </div>
-        );
-      default:
-        return null;
-    }
-  });
+ return content.content.map((node, index) => {
+   switch (node.type) {
+     case 'paragraph':
+       return (
+         <p key={index} className="mb-4 leading-relaxed">
+           {node.content?.map((child, childIndex) => (
+             <span key={childIndex}>{child.text}</span>
+           ))}
+         </p>
+       );
+     case 'heading':
+       const HeadingTag = `h${(node.attrs?.level || 1) as number}` as keyof JSX.IntrinsicElements;
+       return (
+         <HeadingTag key={index} className="mb-4 mt-6 font-bold">
+           {node.content?.map((child, childIndex) => (
+             <span key={childIndex}>{child.text}</span>
+           ))}
+         </HeadingTag>
+       );
+     case 'image':
+       return (
+         <div key={index} className="my-6">
+           <Image
+             src={node.attrs?.src as string}
+             alt={node.attrs?.alt as string || ''}
+             width={800}
+             height={400}
+             className="rounded-lg"
+             unoptimized
+           />
+         </div>
+       );
+     default:
+       return null;
+   }
+ });
 };
 
-interface BlogPostPageProps {
-  params: {
-    slug: string;
-  };
-}
+type Props = {
+ params: Promise<{ slug: string }>;
+ searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
 
-export default async function BlogPostPage({ params }: BlogPostPageProps) {
-  const supabase = createServerComponentClient({ cookies });
+export default async function BlogPostPage({ params, searchParams }: Props) {
+ const [resolvedParams] = await Promise.all([
+   params,
+   searchParams
+ ]);
+ 
+ const supabase = createServerComponentClient({ cookies });
 
-  // Fetch blog post with related content
-  const { data: post } = await supabase
-    .from('blog_posts')
-    .select(`
-      *,
-      author_info:users(name, email),
-      menu_items:blog_menu_references(
-        menu_items(id, name, price)
-      ),
-      wines:blog_wine_references(
-        wines(id, name, bottle_price)
-      )
-    `)
-    .eq('slug', params.slug)
-    .eq('published', true)
-    .single();
+ // Fetch blog post with related content
+ const { data: post } = await supabase
+   .from('blog_posts')
+   .select(`
+     *,
+     author_info:users(name, email),
+     menu_items:blog_menu_references(
+       menu_items(id, name, price)
+     ),
+     wines:blog_wine_references(
+       wines(id, name, bottle_price)
+     )
+   `)
+   .eq('slug', resolvedParams.slug)
+   .eq('published', true)
+   .single();
 
-  if (!post) {
-    notFound();
-  }
+ if (!post) {
+   notFound();
+ }
 
-  const typedPost = post as unknown as BlogPostData;
+ const typedPost = post as unknown as BlogPostData;
 
-  return (
-    <article className="mx-auto max-w-3xl px-4 py-8">
-      {/* Header */}
-      <header className="mb-8">
-        <h1 className="mb-4 text-4xl font-bold tracking-tight">
-          {typedPost.title}
-        </h1>
-        <div className="flex items-center gap-4 text-muted-foreground">
-          <span>
-            By {typedPost.author_info[0]?.name || typedPost.author_info[0]?.email || 'Anonymous'}
-          </span>
-          <span>•</span>
-          <time dateTime={typedPost.created_at}>
-            {format(new Date(typedPost.created_at), 'MMMM d, yyyy')}
-          </time>
-        </div>
-      </header>
+ return (
+   <article className="mx-auto max-w-3xl px-4 py-8">
+     {/* Header */}
+     <header className="mb-8">
+       <h1 className="mb-4 text-4xl font-bold tracking-tight">
+         {typedPost.title}
+       </h1>
+       <div className="flex items-center gap-4 text-muted-foreground">
+         <span>
+           By {typedPost.author_info[0]?.name || typedPost.author_info[0]?.email || 'Anonymous'}
+         </span>
+         <span>•</span>
+         <time dateTime={typedPost.created_at}>
+           {format(new Date(typedPost.created_at), 'MMMM d, yyyy')}
+         </time>
+       </div>
+     </header>
 
-      {/* Featured Image */}
-      {typedPost.featured_image_url && (
-        <div className="mb-8 overflow-hidden rounded-lg">
-          <Image
-            src={typedPost.featured_image_url}
-            alt={typedPost.featured_image_alt || typedPost.title}
-            width={1200}
-            height={630}
-            className="w-full object-cover"
-            priority
-            unoptimized
-          />
-        </div>
-      )}
+     {/* Featured Image */}
+     {typedPost.featured_image_url && (
+       <div className="mb-8 overflow-hidden rounded-lg">
+         <Image
+           src={typedPost.featured_image_url}
+           alt={typedPost.featured_image_alt || typedPost.title}
+           width={1200}
+           height={630}
+           className="w-full object-cover"
+           priority
+           unoptimized
+         />
+       </div>
+     )}
 
-      {/* Content */}
-      <div className="prose prose-lg max-w-none">
-        {renderContent(typedPost.content)}
-      </div>
+     {/* Content */}
+     <div className="prose prose-lg max-w-none">
+       {renderContent(typedPost.content)}
+     </div>
 
-      {/* Related Items Section */}
-      {(typedPost.menu_items?.length > 0 || typedPost.wines?.length > 0) && (
-        <div className="mt-12 border-t pt-8">
-          <h2 className="mb-6 text-2xl font-bold">Featured Items</h2>
-          
-          {/* Menu Items */}
-          {typedPost.menu_items?.length > 0 && (
-            <div className="mb-8">
-              <h3 className="mb-4 text-xl font-semibold">Menu Items</h3>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {typedPost.menu_items.map(({ menu_items: item }) => (
-                  <div key={item.id} className="rounded-lg border p-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium">{item.name}</h4>
-                      <span className="text-muted-foreground">
-                        ${item.price.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+     {/* Related Items Section */}
+     {(typedPost.menu_items?.length > 0 || typedPost.wines?.length > 0) && (
+       <div className="mt-12 border-t pt-8">
+         <h2 className="mb-6 text-2xl font-bold">Featured Items</h2>
+         
+         {/* Menu Items */}
+         {typedPost.menu_items?.length > 0 && (
+           <div className="mb-8">
+             <h3 className="mb-4 text-xl font-semibold">Menu Items</h3>
+             <div className="grid gap-4 sm:grid-cols-2">
+               {typedPost.menu_items.map(({ menu_items: item }) => (
+                 <div key={item.id} className="rounded-lg border p-4">
+                   <div className="flex items-center justify-between">
+                     <h4 className="font-medium">{item.name}</h4>
+                     <span className="text-muted-foreground">
+                       ${item.price.toFixed(2)}
+                     </span>
+                   </div>
+                 </div>
+               ))}
+             </div>
+           </div>
+         )}
 
-          {/* Wines */}
-          {typedPost.wines?.length > 0 && (
-            <div>
-              <h3 className="mb-4 text-xl font-semibold">Featured Wines</h3>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {typedPost.wines.map(({ wines: wine }) => (
-                  <div key={wine.id} className="rounded-lg border p-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium">{wine.name}</h4>
-                      <span className="text-muted-foreground">
-                        ${wine.bottle_price.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+         {/* Wines */}
+         {typedPost.wines?.length > 0 && (
+           <div>
+             <h3 className="mb-4 text-xl font-semibold">Featured Wines</h3>
+             <div className="grid gap-4 sm:grid-cols-2">
+               {typedPost.wines.map(({ wines: wine }) => (
+                 <div key={wine.id} className="rounded-lg border p-4">
+                   <div className="flex items-center justify-between">
+                     <h4 className="font-medium">{wine.name}</h4>
+                     <span className="text-muted-foreground">
+                       ${wine.bottle_price.toFixed(2)}
+                     </span>
+                   </div>
+                 </div>
+               ))}
+             </div>
+           </div>
+         )}
+       </div>
+     )}
 
-      {/* Back Link */}
-      <div className="mt-12 border-t pt-8">
-        <Link
-          href="/blog"
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← Back to all posts
-        </Link>
-      </div>
-    </article>
-  );
+     {/* Back Link */}
+     <div className="mt-12 border-t pt-8">
+       <Link
+         href="/blog"
+         className="text-sm text-muted-foreground hover:text-foreground"
+       >
+         ← Back to all posts
+       </Link>
+     </div>
+   </article>
+ );
 }
 ```
 
@@ -1190,8 +1195,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { PageHeader } from "@/components/core/layout";
 
+// Types
 type BlogStatus = "draft" | "published" | "scheduled";
 
 interface AutoSaveState {
@@ -1200,9 +1205,12 @@ interface AutoSaveState {
   error: string | null;
 }
 
+// Form Schema
 const blogFormSchema = z.object({
   title: z.string().min(1, { message: "Title is required" }),
-  content: z.custom<JSONContent>((data) => !!data),
+  content: z.custom<JSONContent>((data) => !!data, {
+    message: "Content is required",
+  }),
   meta_description: z.string().optional(),
   status: z.enum(["draft", "published", "scheduled"]),
   published_at: z.string().optional(),
@@ -1240,14 +1248,13 @@ export default function BlogPostPage() {
     },
   });
 
+  // Initialize the editor
   const editor = useEditor({
     extensions: [StarterKit, Image, Link],
     content: form.watch("content"),
-    editable: !isPreview,
     editorProps: {
       attributes: {
-        class:
-          "prose prose-lg max-w-none focus:outline-none [&_*]:outline-none",
+        class: "prose prose-lg max-w-none focus:outline-none [&_*]:outline-none",
         spellcheck: "false",
       },
       handleDOMEvents: {
@@ -1257,36 +1264,50 @@ export default function BlogPostPage() {
         },
       },
     },
-    onUpdate: ({ editor }) => {
+    onUpdate: ({ editor: editorInstance }) => {
       if (!isPreview) {
-        const content = editor.getJSON();
+        const content = editorInstance.getJSON();
         form.setValue("content", content);
         void autoSavePost({ ...form.getValues(), content });
       }
     },
   });
 
+  // Toggle editable state on preview switch
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(!isPreview);
+    }
+  }, [isPreview, editor]);
+
+  // Set editor ready state
   useEffect(() => {
     if (editor) {
       setIsEditorReady(true);
     }
+  }, [editor]);
+
+  // Cleanup editor on unmount
+  useEffect(() => {
     return () => {
-      if (editor) {
-        editor.destroy();
+      if (editor && !editor.isDestroyed) {
+        try {
+          editor.commands.clearContent();
+          editor.destroy();
+        } catch (error) {
+          console.error("Editor cleanup error:", error);
+        }
       }
     };
   }, [editor]);
 
   const handlePreviewToggle = useCallback(() => {
-    if (editor) {
-      editor.setEditable(!isPreview);
-      setIsPreview(!isPreview);
-    }
-  }, [editor, isPreview]);
+    setIsPreview((prev) => !prev);
+  }, []);
 
   const autoSavePost = useCallback(
     async (data: FormData) => {
-      if (!isNewPost) {
+      if (!isNewPost && isEditorReady) {
         try {
           setAutoSave((prev) => ({ ...prev, saving: true }));
           const { error: saveError } = await supabase
@@ -1304,7 +1325,8 @@ export default function BlogPostPage() {
             saving: false,
             error: null,
           });
-        } catch {
+        } catch (error) {
+          console.error("Auto-save error:", error);
           setAutoSave((prev) => ({
             ...prev,
             saving: false,
@@ -1313,9 +1335,10 @@ export default function BlogPostPage() {
         }
       }
     },
-    [isNewPost, params.id, supabase]
+    [isNewPost, params.id, supabase, isEditorReady]
   );
 
+  // Fetch existing post data
   useEffect(() => {
     const fetchPost = async () => {
       if (isNewPost) return;
@@ -1330,7 +1353,7 @@ export default function BlogPostPage() {
 
         if (fetchError) throw fetchError;
 
-        if (post && editor) {
+        if (post && editor && !editor.isDestroyed) {
           form.reset({
             title: post.title,
             content: post.content,
@@ -1354,9 +1377,12 @@ export default function BlogPostPage() {
       }
     };
 
-    fetchPost();
-  }, [isNewPost, params.id, supabase, form, editor, toast]);
+    if (editor && isEditorReady) {
+      void fetchPost();
+    }
+  }, [isNewPost, params.id, supabase, form, editor, toast, isEditorReady]);
 
+  // Handle form submission
   const onSubmit = async (values: FormData) => {
     try {
       setIsLoading(true);
@@ -1374,8 +1400,7 @@ export default function BlogPostPage() {
         content: values.content,
         meta_description: values.meta_description,
         status: values.status,
-        published_at:
-          values.status === "scheduled" ? values.published_at : null,
+        published_at: values.status === "scheduled" ? values.published_at : null,
         published: values.status === "published",
         tags: values.tags,
         author_id: user.id,
@@ -1424,13 +1449,7 @@ export default function BlogPostPage() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      <PageHeader
-        heading={isNewPost ? "Create New Post" : "Edit Post"}
-        text={
-          isNewPost ? "Create a new blog post" : "Edit an existing blog post"
-        }
-      />
-
+      {/* Toolbar */}
       <div className="border-b p-4 flex items-center justify-between bg-card">
         <div className="flex items-center space-x-4">
           {autoSave.lastSaved && (
@@ -1447,6 +1466,7 @@ export default function BlogPostPage() {
             size="sm"
             onClick={handlePreviewToggle}
             disabled={!isEditorReady}
+            aria-label="Toggle Preview"
           >
             {isPreview ? (
               <>
@@ -1464,21 +1484,98 @@ export default function BlogPostPage() {
             variant="ghost"
             size="sm"
             onClick={() => setShowSidebar(!showSidebar)}
+            aria-label="Toggle Sidebar"
           >
             <Settings className="w-4 h-4" />
           </Button>
         </div>
       </div>
 
+      {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
+        {/* Editor Section */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-6 space-y-8">
+            {/* Title Input */}
             <Input
               type="text"
               placeholder="Post title"
               className="text-3xl font-bold border-none bg-transparent focus-visible:ring-0 p-0 placeholder:text-muted-foreground/60"
               {...form.register("title")}
+              disabled={isPreview}
             />
+
+            {/* Formatting Toolbar: only show when not in preview */}
+            {!isPreview && (
+              <div className="flex items-center gap-2 py-2 mb-4 border-b">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    editor?.chain().focus().toggleHeading({ level: 1 }).run()
+                  }
+                  className={cn(
+                    "hover:bg-accent/50",
+                    editor?.isActive("heading", { level: 1 }) ? "bg-accent" : ""
+                  )}
+                  aria-label="Heading 1"
+                >
+                  H1
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    editor?.chain().focus().toggleHeading({ level: 2 }).run()
+                  }
+                  className={cn(
+                    "hover:bg-accent/50",
+                    editor?.isActive("heading", { level: 2 }) ? "bg-accent" : ""
+                  )}
+                  aria-label="Heading 2"
+                >
+                  H2
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => editor?.chain().focus().setParagraph().run()}
+                  className={cn(
+                    "hover:bg-accent/50",
+                    editor?.isActive("paragraph") ? "bg-accent" : ""
+                  )}
+                  aria-label="Paragraph"
+                >
+                  P
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => editor?.chain().focus().toggleBold().run()}
+                  className={cn(
+                    "hover:bg-accent/50",
+                    editor?.isActive("bold") ? "bg-accent" : ""
+                  )}
+                  aria-label="Bold"
+                >
+                  B
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    editor?.chain().focus().toggleBulletList().run()
+                  }
+                  className={cn(
+                    "hover:bg-accent/50",
+                    editor?.isActive("bulletList") ? "bg-accent" : ""
+                  )}
+                  aria-label="Bullet List"
+                >
+                  • List
+                </Button>
+              </div>
+            )}
 
             {!isEditorReady ? (
               <div className="flex items-center justify-center min-h-[300px]">
@@ -1491,11 +1588,8 @@ export default function BlogPostPage() {
                     editor={editor}
                     className={cn(
                       "prose prose-lg max-w-none",
-                      isPreview ? "pointer-events-none" : "",
                       "[&_.ProseMirror]:min-h-[300px]",
                       "[&_.ProseMirror]:outline-none",
-                      "[&_.ProseMirror]:focus:outline-none",
-                      "[&_.ProseMirror]:focus-visible:outline-none",
                       "[&_.ProseMirror_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]",
                       "[&_.ProseMirror_p.is-editor-empty:first-child]:before:text-muted-foreground/60",
                       "[&_.ProseMirror_p.is-editor-empty:first-child]:before:float-left",
@@ -1526,11 +1620,12 @@ export default function BlogPostPage() {
                       "[&_.ProseMirror_img]:h-auto",
                       "[&_.ProseMirror_a]:text-primary",
                       "[&_.ProseMirror_a]:underline",
-                      "[&_.ProseMirror_a:hover]:text-primary/80"
+                      "[&_.ProseMirror_a:hover]:text-primary/80",
+                      isPreview ? "pointer-events-none opacity-70" : ""
                     )}
                   />
 
-                  {!isPreview && editor && (
+                  {editor && !isPreview && (
                     <BubbleMenu
                       editor={editor}
                       tippyOptions={{ duration: 100 }}
@@ -1539,30 +1634,36 @@ export default function BlogPostPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() =>
-                          editor.chain().focus().toggleBold().run()
-                        }
-                        className={editor.isActive("bold") ? "bg-accent" : ""}
+                        onClick={() => editor.chain().focus().toggleBold().run()}
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("bold") ? "bg-accent" : ""
+                        )}
+                        aria-label="Bold"
                       >
                         <Bold className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() =>
-                          editor.chain().focus().toggleItalic().run()
-                        }
-                        className={editor.isActive("italic") ? "bg-accent" : ""}
+                        onClick={() => editor.chain().focus().toggleItalic().run()}
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("italic") ? "bg-accent" : ""
+                        )}
+                        aria-label="Italic"
                       >
                         <Italic className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() =>
-                          editor.chain().focus().toggleCode().run()
-                        }
-                        className={editor.isActive("code") ? "bg-accent" : ""}
+                        onClick={() => editor.chain().focus().toggleCode().run()}
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("code") ? "bg-accent" : ""
+                        )}
+                        aria-label="Code"
                       >
                         <Code className="h-4 w-4" />
                       </Button>
@@ -1570,41 +1671,37 @@ export default function BlogPostPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() =>
-                          editor
-                            .chain()
-                            .focus()
-                            .toggleHeading({ level: 2 })
-                            .run()
+                          editor.chain().focus().toggleHeading({ level: 2 }).run()
                         }
-                        className={
-                          editor.isActive("heading", { level: 2 })
-                            ? "bg-accent"
-                            : ""
-                        }
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("heading", { level: 2 }) ? "bg-accent" : ""
+                        )}
+                        aria-label="Heading"
                       >
                         <HeadingIcon className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() =>
-                          editor.chain().focus().toggleBlockquote().run()
-                        }
-                        className={
+                        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+                        className={cn(
+                          "hover:bg-accent/50",
                           editor.isActive("blockquote") ? "bg-accent" : ""
-                        }
+                        )}
+                        aria-label="Blockquote"
                       >
                         <Quote className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() =>
-                          editor.chain().focus().toggleBulletList().run()
-                        }
-                        className={
+                        onClick={() => editor.chain().focus().toggleBulletList().run()}
+                        className={cn(
+                          "hover:bg-accent/50",
                           editor.isActive("bulletList") ? "bg-accent" : ""
-                        }
+                        )}
+                        aria-label="Bullet List"
                       >
                         <List className="h-4 w-4" />
                       </Button>
@@ -1616,7 +1713,11 @@ export default function BlogPostPage() {
                           if (url)
                             editor.chain().focus().setLink({ href: url }).run();
                         }}
-                        className={editor.isActive("link") ? "bg-accent" : ""}
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("link") ? "bg-accent" : ""
+                        )}
+                        aria-label="Add Link"
                       >
                         <LinkIcon className="h-4 w-4" />
                       </Button>
@@ -1628,6 +1729,11 @@ export default function BlogPostPage() {
                           if (url)
                             editor.chain().focus().setImage({ src: url }).run();
                         }}
+                        className={cn(
+                          "hover:bg-accent/50",
+                          editor.isActive("image") ? "bg-accent" : ""
+                        )}
+                        aria-label="Add Image"
                       >
                         <ImageIcon className="h-4 w-4" />
                       </Button>
@@ -1639,15 +1745,17 @@ export default function BlogPostPage() {
           </div>
         </div>
 
+        {/* Sidebar */}
         {showSidebar && (
           <div className="w-80 border-l bg-card overflow-y-auto">
             <div className="p-4 space-y-6">
+              {/* Status */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Status</label>
                 <Select
                   value={form.watch("status")}
-                  onValueChange={(value: BlogStatus) =>
-                    form.setValue("status", value)
+                  onValueChange={(value) =>
+                    form.setValue("status", value as BlogStatus)
                   }
                 >
                   <SelectTrigger>
@@ -1661,6 +1769,7 @@ export default function BlogPostPage() {
                 </Select>
               </div>
 
+              {/* Publish Date */}
               {form.watch("status") === "scheduled" && (
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Publish Date</label>
@@ -1670,22 +1779,24 @@ export default function BlogPostPage() {
                     onChange={(e) =>
                       form.setValue("published_at", e.target.value)
                     }
+                    disabled={isPreview}
                   />
                 </div>
               )}
 
+              {/* Meta Description */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Meta Description</label>
                 <Textarea
                   value={form.watch("meta_description") || ""}
-                  onChange={(e) =>
-                    form.setValue("meta_description", e.target.value)
-                  }
+                  onChange={(e) => form.setValue("meta_description", e.target.value)}
                   placeholder="Enter SEO description..."
                   className="h-20"
+                  disabled={isPreview}
                 />
               </div>
 
+              {/* Tags */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Tags</label>
                 <Select
@@ -1711,6 +1822,7 @@ export default function BlogPostPage() {
         )}
       </div>
 
+      {/* Footer */}
       <div className="border-t bg-card p-4 flex justify-between items-center">
         <div className="text-sm text-muted-foreground">
           {autoSave.saving && (
@@ -1758,6 +1870,7 @@ export default function BlogPostPage() {
         </div>
       </div>
 
+      {/* Warning for Scheduled Posts Without Publish Date */}
       {form.watch("status") === "scheduled" && !form.watch("published_at") && (
         <div className="border-t bg-yellow-50 dark:bg-yellow-900/10 p-2 text-center">
           <span className="text-sm text-yellow-800 dark:text-yellow-200">
@@ -1765,6 +1878,37 @@ export default function BlogPostPage() {
           </span>
         </div>
       )}
+
+      {/* Embedded Custom CSS */}
+      <style jsx global>{`
+        /* Styling for ProseMirror editor */
+        .ProseMirror > * + * {
+          margin-top: 0.75em;
+        }
+
+        .ProseMirror:focus {
+          outline: none !important;
+        }
+
+        /* Placeholder styling for empty editor */
+        .ProseMirror p.is-editor-empty:first-child::before {
+          color: #adb5bd;
+          content: attr(data-placeholder);
+          float: left;
+          height: 0;
+          pointer-events: none;
+        }
+
+        /* Remove outline on selected node */
+        .ProseMirror-selectednode {
+          outline: none !important;
+        }
+
+        /* Custom selection color */
+        .ProseMirror ::selection {
+          background: rgba(0, 0, 0, 0.1);
+        }
+      `}</style>
     </div>
   );
 }
@@ -2299,19 +2443,17 @@ export default function BlogPage() {
 ```typescript
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import {
-  Upload,
-  Trash2,
-  FolderIcon,
-  AlertCircle,
-  Edit2,
-} from "lucide-react";
+import { SupabaseClient } from "@supabase/supabase-js";
+import { Upload, Trash2, FolderIcon, AlertCircle, Edit2 } from "lucide-react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Database } from "@/types";
+
 import {
   Dialog,
   DialogContent,
@@ -2340,8 +2482,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/core/layout";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-// Define available categories
 const CATEGORIES = [
   "arroces",
   "carnes",
@@ -2352,13 +2494,19 @@ const CATEGORIES = [
   "para-veganos",
   "postres",
   "wines",
-];
+] as const;
+
+type Category = (typeof CATEGORIES)[number];
+
+function isValidCategory(value: string): value is Category {
+  return CATEGORIES.includes(value as Category);
+}
 
 interface ImageInfo {
   name: string;
   url: string;
   category: string;
-  usageCount: number; // Changed from optional to required, will default to 0
+  usageCount: number;
 }
 
 interface MoveImageDialog {
@@ -2371,16 +2519,65 @@ interface RenameImageDialog {
   image: ImageInfo | null;
 }
 
+interface DeleteImageDialog {
+  open: boolean;
+  image: ImageInfo | null;
+}
+
+async function getImageUsageCount(
+  supabase: SupabaseClient<Database>,
+  imagePath: string
+): Promise<number> {
+  const { count } = await supabase
+    .from("wines")
+    .select("*", { count: "exact", head: true })
+    .eq("image_path", imagePath);
+
+  return count || 0;
+}
+
+async function fetchImages(
+  supabase: SupabaseClient<Database>,
+  category: string
+): Promise<ImageInfo[]> {
+  const { data: storageData, error: storageError } = await supabase.storage
+    .from("menu")
+    .list(category);
+
+  if (storageError) throw storageError;
+
+  const imageList: ImageInfo[] = [];
+
+  for (const file of storageData || []) {
+    const { data } = supabase.storage
+      .from("menu")
+      .getPublicUrl(`${category}/${file.name}`);
+
+    const usageCount = await getImageUsageCount(
+      supabase,
+      `${category}/${file.name}`
+    );
+
+    imageList.push({
+      name: file.name,
+      url: data.publicUrl,
+      category,
+      usageCount,
+    });
+  }
+
+  return imageList;
+}
+
 export default function ImagesPage() {
-  const [images, setImages] = useState<ImageInfo[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>(
+  const supabase = createClientComponentClient<Database>();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const [selectedCategory, setSelectedCategory] = useState<Category>(
     CATEGORIES[0]
   );
-  const [isUploading, setIsUploading] = useState(false);
-  const [deleteDialog, setDeleteDialog] = useState<{
-    open: boolean;
-    image: ImageInfo | null;
-  }>({
+  const [deleteDialog, setDeleteDialog] = useState<DeleteImageDialog>({
     open: false,
     image: null,
   });
@@ -2393,85 +2590,33 @@ export default function ImagesPage() {
     image: null,
   });
   const [newImageName, setNewImageName] = useState("");
-  const [targetCategory, setTargetCategory] = useState<string>(CATEGORIES[0]);
+  const [targetCategory, setTargetCategory] = useState<Category>(CATEGORIES[0]);
 
-  const supabase = createClientComponentClient();
-  const { toast } = useToast();
+  const handleCategoryChange = (value: string) => {
+    if (isValidCategory(value)) {
+      setSelectedCategory(value);
+    }
+  };
 
-  // Setup dropzone
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: {
-      "image/jpeg": [],
-      "image/png": [],
-      "image/webp": [],
-    },
-    onDrop: handleFileDrop,
+  const handleTargetCategoryChange = (value: string) => {
+    if (isValidCategory(value)) {
+      setTargetCategory(value);
+    }
+  };
+
+  const {
+    data: images = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ["images", selectedCategory],
+    queryFn: () => fetchImages(supabase, selectedCategory),
   });
 
-  // Memoize fetchImages to avoid dependency cycle and include debug logs
-  const fetchImages = React.useCallback(async () => {
-    try {
-      const { data: storageData, error: storageError } = await supabase
-        .storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .list(selectedCategory);
-
-      if (storageError) throw storageError;
-
-      console.log("Files in category:", storageData); // Debug log
-
-      const imageList = await Promise.all(
-        (storageData || []).map(async (file) => {
-          // Get public URL using the correct method
-          const { data } = supabase.storage
-            .from("menu")  // Changed from "menu-images" to "menu"
-            .getPublicUrl(`${selectedCategory}/${file.name}`);
-
-          // Log for debugging
-          console.log("Generated Public URL:", data.publicUrl);
-
-          // The URL should look like:
-          // https://your-supabase-url/storage/v1/object/public/menu/category/image.webp
-
-          const usageCount = await getImageUsageCount(
-            `${selectedCategory}/${file.name}`
-          );
-
-          return {
-            name: file.name,
-            url: data.publicUrl, // Use the publicUrl from the data object
-            category: selectedCategory,
-            usageCount,
-          };
-        })
-      );
-
-      setImages(imageList);
-
-      // Debug log the final image list
-      console.log("Final image list:", imageList);
-    } catch (error) {
-      console.error("Error fetching images:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to load images",
-        variant: "destructive",
-      });
-    }
-  }, [selectedCategory, supabase, toast]);
-
-  // Fetch images for selected category
-  useEffect(() => {
-    void fetchImages();
-  }, [selectedCategory, fetchImages]);
-
-  async function handleFileDrop(acceptedFiles: File[]) {
-    try {
-      setIsUploading(true);
-
-      for (const file of acceptedFiles) {
-        // Validate file size (2MB limit)
+  const uploadMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      const results = [];
+      for (const file of files) {
         if (file.size > 2 * 1024 * 1024) {
           toast({
             title: "Error",
@@ -2482,9 +2627,8 @@ export default function ImagesPage() {
         }
 
         const filePath = `${selectedCategory}/${file.name}`;
-
         const { error: uploadError } = await supabase.storage
-          .from("menu")  // Changed from "menu-images" to "menu"
+          .from("menu")
           .upload(filePath, file, {
             cacheControl: "3600",
             upsert: false,
@@ -2503,174 +2647,180 @@ export default function ImagesPage() {
           continue;
         }
 
+        results.push(file.name);
+      }
+      return results;
+    },
+    onSuccess: (fileNames) => {
+      if (fileNames.length > 0) {
         toast({
           title: "Success",
-          description: `Uploaded ${file.name}`,
+          description: `Uploaded ${fileNames.length} files`,
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["images", selectedCategory],
         });
       }
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "Failed to upload images";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
 
-      fetchImages();
-    } catch (error) {
-      console.error("Upload error:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to upload images",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUploading(false);
-    }
-  }
-
-  async function getImageUsageCount(imagePath: string): Promise<number> {
-    try {
-      // Check wines table
-      const { count } = await supabase
-        .from("wines")
-        .select("*", { count: "exact", head: true })
-        .eq("image_path", imagePath);
-
-      return count || 0;
-    } catch (error) {
-      console.error("Error checking image usage:", error);
-      return 0;
-    }
-  }
-
-  async function handleDeleteImage(image: ImageInfo) {
-    try {
-      const { error } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
+  const deleteMutation = useMutation({
+    mutationFn: async (image: ImageInfo) => {
+      const { error: deleteError } = await supabase.storage
+        .from("menu")
         .remove([`${image.category}/${image.name}`]);
 
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Image deleted successfully",
-      });
-
+      if (deleteError) throw deleteError;
+      return image.name;
+    },
+    onSuccess: (fileName) => {
+      toast({ title: "Success", description: `Deleted ${fileName}` });
       setDeleteDialog({ open: false, image: null });
-      fetchImages();
-    } catch (error) {
-      console.error("Error deleting image:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to delete image",
-        variant: "destructive",
-      });
-    }
-  }
+      queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "Failed to delete image";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
 
-  async function handleMoveImage() {
-    if (!moveDialog.image || targetCategory === moveDialog.image.category)
-      return;
+  const moveMutation = useMutation({
+    mutationFn: async ({
+      image,
+      targetCategory,
+    }: {
+      image: ImageInfo;
+      targetCategory: string;
+    }) => {
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from("menu")
+        .download(`${image.category}/${image.name}`);
+      if (downloadError || !fileData)
+        throw new Error("Failed to download file");
 
-    try {
-      // Copy to new location
-      const { data: fileData } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .download(`${moveDialog.image.category}/${moveDialog.image.name}`);
-
-      if (!fileData) throw new Error("Failed to download file");
-
-      const newFile = new File([fileData], moveDialog.image.name, {
-        type: fileData.type,
-      });
+      const newFile = new File([fileData], image.name, { type: fileData.type });
 
       const { error: uploadError } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .upload(`${targetCategory}/${moveDialog.image.name}`, newFile, {
+        .from("menu")
+        .upload(`${targetCategory}/${image.name}`, newFile, {
           cacheControl: "3600",
           upsert: false,
         });
-
       if (uploadError) throw uploadError;
 
-      // Delete from old location
-      const { error: deleteError } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .remove([`${moveDialog.image.category}/${moveDialog.image.name}`]);
+      const { error: removeError } = await supabase.storage
+        .from("menu")
+        .remove([`${image.category}/${image.name}`]);
+      if (removeError) throw removeError;
 
-      if (deleteError) throw deleteError;
-
-      toast({
-        title: "Success",
-        description: "Image moved successfully",
-      });
-
+      return image.name;
+    },
+    onSuccess: (fileName) => {
+      toast({ title: "Success", description: `Moved ${fileName}` });
       setMoveDialog({ open: false, image: null });
-      fetchImages();
-    } catch (error) {
-      console.error("Error moving image:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to move image",
-        variant: "destructive",
-      });
-    }
-  }
+      queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
+      queryClient.invalidateQueries({ queryKey: ["images", targetCategory] });
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "Failed to move image";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
 
-  async function handleRenameImage() {
-    if (!renameDialog.image || !newImageName) return;
+  const renameMutation = useMutation({
+    mutationFn: async ({
+      image,
+      newImageName,
+    }: {
+      image: ImageInfo;
+      newImageName: string;
+    }) => {
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from("menu")
+        .download(`${image.category}/${image.name}`);
 
-    try {
-      // Copy with new name
-      const { data: fileData } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .download(`${renameDialog.image.category}/${renameDialog.image.name}`);
-
-      if (!fileData) throw new Error("Failed to download file");
+      if (downloadError || !fileData)
+        throw new Error("Failed to download file");
 
       const newFile = new File([fileData], newImageName, {
         type: fileData.type,
       });
 
       const { error: uploadError } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .upload(`${renameDialog.image.category}/${newImageName}`, newFile, {
+        .from("menu")
+        .upload(`${image.category}/${newImageName}`, newFile, {
           cacheControl: "3600",
           upsert: false,
         });
 
       if (uploadError) throw uploadError;
 
-      // Delete old file
-      const { error: deleteError } = await supabase.storage
-        .from("menu")  // Changed from "menu-images" to "menu"
-        .remove([`${renameDialog.image.category}/${renameDialog.image.name}`]);
+      const { error: removeError } = await supabase.storage
+        .from("menu")
+        .remove([`${image.category}/${image.name}`]);
+      if (removeError) throw removeError;
 
-      if (deleteError) throw deleteError;
-
+      return { oldName: image.name, newName: newImageName };
+    },
+    onSuccess: ({ oldName, newName }) => {
       toast({
         title: "Success",
-        description: "Image renamed successfully",
+        description: `Renamed ${oldName} to ${newName}`,
       });
-
       setRenameDialog({ open: false, image: null });
       setNewImageName("");
-      fetchImages();
-    } catch (error) {
-      console.error("Error renaming image:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to rename image",
-        variant: "destructive",
-      });
-    }
+      queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "Failed to rename image";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: {
+      "image/jpeg": [],
+      "image/png": [],
+      "image/webp": [],
+    },
+    onDrop: (acceptedFiles) => uploadMutation.mutate(acceptedFiles),
+  });
+
+  const filteredImages = useMemo(() => images, [images]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[200px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
   }
 
-  return (
+  if (error) {
+    return (
+      <div className="container p-6">
+        <Alert variant="destructive">
+          <AlertDescription>Failed to load images.</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+ return (
     <div className="container p-6">
       <PageHeader
         heading="Image Management"
         text="Upload and manage images for menu items"
       >
-        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+        <Select value={selectedCategory} onValueChange={handleCategoryChange}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Select category" />
           </SelectTrigger>
@@ -2684,14 +2834,13 @@ export default function ImagesPage() {
         </Select>
       </PageHeader>
 
-      {/* Upload Section */}
       <div
         {...getRootProps()}
         className={`
-          mt-6 border-2 border-dashed rounded-lg p-8 transition-colors text-center
+          mt-6 border-2 border-dashed rounded-lg p-8 text-center
           ${isDragActive ? "border-primary" : "border-muted-foreground/25"}
           ${
-            isUploading
+            uploadMutation.isPending
               ? "pointer-events-none opacity-50"
               : "cursor-pointer hover:border-primary/50"
           }
@@ -2703,13 +2852,14 @@ export default function ImagesPage() {
           <p className="text-lg font-medium mb-2">
             {isDragActive ? "Drop files here" : "Drag & drop files here"}
           </p>
-          <p className="text-sm text-muted-foreground">or click to select files</p>
+          <p className="text-sm text-muted-foreground">
+            or click to select files
+          </p>
         </div>
       </div>
 
-      {/* Images Grid */}
       <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {images.map((image) => (
+        {filteredImages.map((image) => (
           <div
             key={image.name}
             className="group relative aspect-square rounded-lg overflow-hidden border bg-card"
@@ -2720,13 +2870,11 @@ export default function ImagesPage() {
               fill
               className="object-cover transition-all group-hover:scale-105"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              unoptimized // Add this line to bypass Next.js image optimization
+              unoptimized
             />
             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <p className="text-white text-sm mb-2 truncate">{image.name}</p>
-                {/* Debug URL */}
-                <p className="text-xs text-gray-300 break-all">{image.url}</p>
                 <div className="flex gap-2 mt-2">
                   <Button
                     size="sm"
@@ -2756,7 +2904,6 @@ export default function ImagesPage() {
         ))}
       </div>
 
-      {/* Delete Dialog */}
       <AlertDialog
         open={deleteDialog.open}
         onOpenChange={(open) => setDeleteDialog({ open, image: null })}
@@ -2781,17 +2928,16 @@ export default function ImagesPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
-                deleteDialog.image && handleDeleteImage(deleteDialog.image)
+                deleteDialog.image && deleteMutation.mutate(deleteDialog.image)
               }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Move Dialog */}
       <Dialog
         open={moveDialog.open}
         onOpenChange={(open) => setMoveDialog({ open, image: null })}
@@ -2799,7 +2945,9 @@ export default function ImagesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Move Image</DialogTitle>
-            <DialogDescription>Select a new category for this image</DialogDescription>
+            <DialogDescription>
+              Select a new category for this image
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
@@ -2809,7 +2957,7 @@ export default function ImagesPage() {
             </div>
             <div className="grid gap-2">
               <Label>Destination Category</Label>
-              <Select value={targetCategory} onValueChange={setTargetCategory}>
+              <Select value={targetCategory} onValueChange={handleTargetCategoryChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
@@ -2842,19 +2990,25 @@ export default function ImagesPage() {
               Cancel
             </Button>
             <Button
-              onClick={handleMoveImage}
+              onClick={() =>
+                moveDialog.image &&
+                moveMutation.mutate({
+                  image: moveDialog.image,
+                  targetCategory,
+                })
+              }
               disabled={
                 !targetCategory ||
-                targetCategory === moveDialog.image?.category
+                targetCategory === moveDialog.image?.category ||
+                moveMutation.isPending
               }
             >
-              Move Image
+              {moveMutation.isPending ? "Moving..." : "Move Image"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Rename Dialog */}
       <Dialog
         open={renameDialog.open}
         onOpenChange={(open) => {
@@ -2865,7 +3019,9 @@ export default function ImagesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Rename Image</DialogTitle>
-            <DialogDescription>Enter a new name for the image</DialogDescription>
+            <DialogDescription>
+              Enter a new name for the image
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
@@ -2878,12 +3034,12 @@ export default function ImagesPage() {
               <Input
                 value={newImageName}
                 onChange={(e) => setNewImageName(e.target.value)}
-                placeholder="Enter new name with extension (e.g., image.jpg)"
+                placeholder="image.jpg"
               />
               {!newImageName.includes(".") && newImageName && (
                 <p className="text-sm text-red-500 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
-                  Please include file extension (e.g., .jpg, .png, .webp)
+                  Please include a file extension (e.g., .jpg, .png, .webp)
                 </p>
               )}
               {renameDialog.image && renameDialog.image.usageCount > 0 && (
@@ -2908,14 +3064,21 @@ export default function ImagesPage() {
               Cancel
             </Button>
             <Button
-              onClick={handleRenameImage}
+              onClick={() =>
+                renameDialog.image &&
+                renameMutation.mutate({
+                  image: renameDialog.image,
+                  newImageName,
+                })
+              }
               disabled={
                 !newImageName ||
                 newImageName === renameDialog.image?.name ||
-                !newImageName.includes(".")
+                !newImageName.includes(".") ||
+                renameMutation.isPending
               }
             >
-              Rename Image
+              {renameMutation.isPending ? "Renaming..." : "Rename Image"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2923,7 +3086,6 @@ export default function ImagesPage() {
     </div>
   );
 }
-
 ```
 
 ### app/dashboard/menu/daily/page.tsx
@@ -2931,22 +3093,47 @@ export default function ImagesPage() {
 ```typescript
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Plus, ToggleLeft, Edit, Copy, Search, Calendar } from "lucide-react"; // Added 'Calendar' icon
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch"; // Imported Switch component
+import React, { useState, useMemo } from "react";
+import {
+  Plus,
+  ToggleLeft,
+  Edit,
+  Copy,
+  Search,
+  Calendar as CalendarIcon,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import type { Database } from '@/types'; // Import the Database type
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  addWeeks,
+  addMonths,
+  addDays,
+  format,
+  isSameDay,
+} from "date-fns";
+import { es } from "date-fns/locale";
+import { DateRange } from "react-day-picker";
+
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -2954,32 +3141,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar"; // Renamed to avoid conflict
+import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
-  PopoverContent,
   PopoverTrigger,
+  PopoverContent,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
-import {
-  addDays,
-  addWeeks,
-  addMonths,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  format,
-  isSameDay,
-} from "date-fns";
-import { es } from "date-fns/locale";
-import { DateRange } from "react-day-picker";
-
-// -----------------------------------
-// TypeScript Interfaces
-// -----------------------------------
 
 interface DailyMenuItem {
   id: string;
@@ -2998,14 +3165,6 @@ interface DailyMenu {
   daily_menu_items: DailyMenuItem[];
 }
 
-interface NewMenu {
-  dateRange: DateRange;
-  repeat_pattern: "none" | "weekly" | "monthly";
-  active: boolean;
-  firstCourse: string;
-  secondCourse: string;
-}
-
 interface FilterOptions {
   search: string;
   pattern: "all" | "none" | "weekly" | "monthly";
@@ -3017,15 +3176,30 @@ interface AdvancedFilterOptions extends FilterOptions {
   courseSearch: string;
 }
 
+interface NewMenu {
+  dateRange: DateRange;
+  repeat_pattern: "none" | "weekly" | "monthly";
+  active: boolean;
+  firstCourse: string;
+  secondCourse: string;
+}
+
 interface GroupedMenus {
   [key: string]: DailyMenu[];
 }
 
-// -----------------------------------
-// Utility Functions
-// -----------------------------------
 
-// Calculate date ranges for quick selection
+// Group menus by week start date
+function groupMenusByWeek(menus: DailyMenu[]): GroupedMenus {
+  return menus.reduce((acc, menu) => {
+    const weekStart = format(startOfWeek(new Date(menu.date), { locale: es }), 'yyyy-MM-dd');
+    if (!acc[weekStart]) acc[weekStart] = [];
+    acc[weekStart].push(menu);
+    return acc;
+  }, {} as GroupedMenus);
+}
+
+// Predefined ranges
 const getThisWeekRange = (): DateRange => ({
   from: startOfWeek(new Date(), { locale: es }),
   to: endOfWeek(new Date(), { locale: es }),
@@ -3041,30 +3215,31 @@ const getThisMonthRange = (): DateRange => ({
   to: endOfMonth(new Date()),
 });
 
-// Group menus by the start of their week
-function groupMenusByWeek(menus: DailyMenu[]): GroupedMenus {
-  return menus.reduce((acc, menu) => {
-    const weekStart = format(startOfWeek(new Date(menu.date), { locale: es }), 'yyyy-MM-dd');
-    if (!acc[weekStart]) acc[weekStart] = [];
-    acc[weekStart].push(menu);
-    return acc;
-  }, {} as GroupedMenus);
+// Fetch data function with proper typing
+async function fetchDailyMenus(
+  supabase: ReturnType<typeof createClientComponentClient<Database>>
+) {
+  const { data, error } = await supabase
+    .from("daily_menus")
+    .select(`
+      id,
+      date,
+      repeat_pattern,
+      active,
+      scheduled_for,
+      created_at,
+      daily_menu_items (
+        id,
+        course_name,
+        course_type,
+        display_order
+      )
+    `)
+    .order("date", { ascending: false });
+
+  if (error) throw error;
+  return data as DailyMenu[];
 }
-
-// -----------------------------------
-// Utility Classes
-// -----------------------------------
-const cardClasses =
-  "bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all p-6 rounded-sm relative group";
-const headingClasses = "text-2xl font-medium mb-1";
-const subheadingClasses =
-  "text-sm uppercase text-muted-foreground tracking-wide";
-const labelClasses =
-  "text-xs uppercase text-muted-foreground font-medium tracking-wide";
-
-// -----------------------------------
-// Sub-Components
-// -----------------------------------
 
 // AdvancedFilters Component
 const AdvancedFilters = ({
@@ -3073,114 +3248,98 @@ const AdvancedFilters = ({
 }: {
   filters: AdvancedFilterOptions;
   onFilterChange: (filters: AdvancedFilterOptions) => void;
-}) => {
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-4 flex-wrap">
-        {/* Search input */}
-        <div className="flex-1 min-w-[200px]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search menus..."
-              value={filters.search}
-              onChange={(e) =>
-                onFilterChange({
-                  ...filters,
-                  search: e.target.value,
-                })
-              }
-              className="pl-9"
-            />
-          </div>
-        </div>
-
-        {/* Course Search input */}
-        <div className="flex-1 min-w-[200px]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search courses..."
-              value={filters.courseSearch}
-              onChange={(e) =>
-                onFilterChange({
-                  ...filters,
-                  courseSearch: e.target.value,
-                })
-              }
-              className="pl-9"
-            />
-          </div>
-        </div>
-
-        {/* Pattern filter */}
-        <Select
-          value={filters.pattern}
-          onValueChange={(value: FilterOptions["pattern"]) =>
-            onFilterChange({ ...filters, pattern: value })
-          }
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by pattern" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Patterns</SelectItem>
-            <SelectItem value="none">Single</SelectItem>
-            <SelectItem value="weekly">Weekly</SelectItem>
-            <SelectItem value="monthly">Monthly</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Date range picker */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="min-w-[200px] justify-start">
-              <Calendar className="mr-2 h-4 w-4" />
-              {filters.dateRange?.from ? (
-                filters.dateRange.to ? (
-                  <>
-                    {format(filters.dateRange.from, "PPP", { locale: es })} -{" "}
-                    {format(filters.dateRange.to, "PPP", { locale: es })}
-                  </>
-                ) : (
-                  format(filters.dateRange.from, "PPP", { locale: es })
-                )
-              ) : (
-                <span>Pick a date range</span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0">
-            <CalendarComponent
-              mode="range"
-              selected={filters.dateRange}
-              onSelect={(range) =>
-                onFilterChange({ ...filters, dateRange: range })
-              }
-            />
-          </PopoverContent>
-        </Popover>
-
-        {/* Status filter */}
-        <Select
-          value={filters.status}
-          onValueChange={(value: FilterOptions["status"]) =>
-            onFilterChange({ ...filters, status: value })
-          }
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
+}) => (
+  <div className="space-y-4">
+    <div className="flex gap-4 flex-wrap">
+      {/* Menus Search */}
+      <div className="flex-1 min-w-[200px] relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search menus..."
+          value={filters.search}
+          onChange={(e) => onFilterChange({ ...filters, search: e.target.value })}
+          className="pl-9"
+        />
       </div>
+
+      {/* Courses Search */}
+      <div className="flex-1 min-w-[200px] relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search courses..."
+          value={filters.courseSearch}
+          onChange={(e) =>
+            onFilterChange({ ...filters, courseSearch: e.target.value })
+          }
+          className="pl-9"
+        />
+      </div>
+
+      {/* Pattern filter */}
+      <Select
+        value={filters.pattern}
+        onValueChange={(value: FilterOptions["pattern"]) =>
+          onFilterChange({ ...filters, pattern: value })
+        }
+      >
+        <SelectTrigger className="w-[180px]">
+          <SelectValue placeholder="Filter by pattern" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Patterns</SelectItem>
+          <SelectItem value="none">Single</SelectItem>
+          <SelectItem value="weekly">Weekly</SelectItem>
+          <SelectItem value="monthly">Monthly</SelectItem>
+        </SelectContent>
+      </Select>
+
+      {/* Date range picker */}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className="min-w-[200px] justify-start">
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {filters.dateRange?.from ? (
+              filters.dateRange.to ? (
+                <>
+                  {format(filters.dateRange.from, "PPP", { locale: es })} -{" "}
+                  {format(filters.dateRange.to, "PPP", { locale: es })}
+                </>
+              ) : (
+                format(filters.dateRange.from, "PPP", { locale: es })
+              )
+            ) : (
+              <span>Pick a date range</span>
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0">
+          <Calendar
+            mode="range"
+            selected={filters.dateRange}
+            onSelect={(range) => onFilterChange({ ...filters, dateRange: range })}
+          />
+        </PopoverContent>
+      </Popover>
+
+      {/* Status filter */}
+      <Select
+        value={filters.status}
+        onValueChange={(value: FilterOptions["status"]) =>
+          onFilterChange({ ...filters, status: value })
+        }
+      >
+        <SelectTrigger className="w-[180px]">
+          <SelectValue placeholder="Filter by status" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Status</SelectItem>
+          <SelectItem value="active">Active</SelectItem>
+          <SelectItem value="inactive">Inactive</SelectItem>
+        </SelectContent>
+      </Select>
     </div>
-  );
-};
+  </div>
+);
 
 // QuickActions Component
 const QuickActions = ({
@@ -3189,57 +3348,38 @@ const QuickActions = ({
 }: {
   onSelectDateRange: (range: DateRange) => void;
   onCreateMenu: () => void;
-}) => {
-  return (
-    <div className="flex items-center justify-between mb-6">
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onSelectDateRange(getThisWeekRange())}
-        >
-          This Week
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onSelectDateRange(getNextWeekRange())}
-        >
-          Next Week
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onSelectDateRange(getThisMonthRange())}
-        >
-          This Month
-        </Button>
-      </div>
-
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            onSelectDateRange({
-              from: new Date(),
-              to: new Date(),
-            })
-          }
-        >
-          <Calendar className="mr-2 h-4 w-4" />
-          Today
-        </Button>
-        <Button onClick={onCreateMenu}>
-          <Plus className="mr-2 h-4 w-4" />
-          Schedule Menu
-        </Button>
-      </div>
+}) => (
+  <div className="flex items-center justify-between mb-6">
+    <div className="flex gap-2">
+      <Button variant="outline" size="sm" onClick={() => onSelectDateRange(getThisWeekRange())}>
+        This Week
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => onSelectDateRange(getNextWeekRange())}>
+        Next Week
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => onSelectDateRange(getThisMonthRange())}>
+        This Month
+      </Button>
     </div>
-  );
-};
 
-// MenuCardProps Type Definition
+    <div className="flex gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onSelectDateRange({ from: new Date(), to: new Date() })}
+      >
+        <CalendarIcon className="mr-2 h-4 w-4" />
+        Today
+      </Button>
+      <Button onClick={onCreateMenu}>
+        <Plus className="mr-2 h-4 w-4" />
+        Schedule Menu
+      </Button>
+    </div>
+  </div>
+);
+
+// MenuCard Component
 type MenuCardProps = {
   menu: DailyMenu;
   onStatusToggle: (id: string, status: boolean) => void;
@@ -3247,28 +3387,23 @@ type MenuCardProps = {
   onDuplicate: (menu: DailyMenu) => void;
 };
 
-// MenuCard Component: Displays individual menu details with interactive buttons
-const MenuCard = ({
-  menu,
-  onStatusToggle,
-  onEdit,
-  onDuplicate,
-}: MenuCardProps) => (
-  <div className={cardClasses}>
+const MenuCard = ({ menu, onStatusToggle, onEdit, onDuplicate }: MenuCardProps) => (
+  <div className="bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all p-6 rounded-sm relative group">
     <div className="flex justify-between items-start mb-6">
       <div>
-        <div className={labelClasses}>DATE</div>
+        <div className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
+          DATE
+        </div>
         <div className="text-lg mt-1">
           {format(new Date(menu.date), "PPP", { locale: es })}
         </div>
       </div>
-
-      {/* Enhanced status toggle */}
       <Switch
         checked={menu.active}
         onCheckedChange={(checked) => onStatusToggle(menu.id, checked)}
+        aria-label={`Toggle ${format(new Date(menu.date), "PPP", { locale: es })} menu status`}
         className={cn(
-          "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black",
+          "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
           menu.active ? "bg-black" : "bg-gray-200"
         )}
       >
@@ -3284,28 +3419,29 @@ const MenuCard = ({
 
     <div className="space-y-4">
       <div>
-        <div className={labelClasses}>PATTERN</div>
+        <div className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
+          PATTERN
+        </div>
         <div className="mt-1 capitalize">{menu.repeat_pattern}</div>
       </div>
 
       <div>
-        <div className={labelClasses}>COURSES</div>
+        <div className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
+          COURSES
+        </div>
         <div className="grid gap-2 mt-2">
           {menu.daily_menu_items
             ?.sort((a, b) => a.display_order - b.display_order)
             .map((item) => (
-              <div key={item.id} className="flex justify-between items-center">
-                <div>
-                  <div className={labelClasses}>{item.course_type.toUpperCase()}</div>
-                  <div className="text-sm mt-1">{item.course_name}</div>
-                </div>
+              <div key={item.id} className="text-sm">
+                <span className="font-medium capitalize">{item.course_type}:</span>{" "}
+                {item.course_name}
               </div>
             ))}
         </div>
       </div>
     </div>
 
-    {/* Hover Actions */}
     <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity">
       <div className="absolute bottom-4 right-4 flex gap-2">
         <Button
@@ -3313,7 +3449,7 @@ const MenuCard = ({
           variant="ghost"
           onClick={() => onEdit(menu)}
           className="hover:bg-black hover:text-white"
-          aria-label={`Edit menu scheduled on ${format(new Date(menu.date), "PPP", { locale: es })}`}
+          aria-label="Edit menu"
         >
           <Edit className="h-4 w-4" />
         </Button>
@@ -3322,7 +3458,7 @@ const MenuCard = ({
           variant="ghost"
           onClick={() => onDuplicate(menu)}
           className="hover:bg-black hover:text-white"
-          aria-label={`Duplicate menu scheduled on ${format(new Date(menu.date), "PPP", { locale: es })}`}
+          aria-label="Duplicate menu"
         >
           <Copy className="h-4 w-4" />
         </Button>
@@ -3331,7 +3467,7 @@ const MenuCard = ({
           variant="ghost"
           onClick={() => onStatusToggle(menu.id, menu.active)}
           className="hover:bg-black hover:text-white"
-          aria-label={`Toggle status for menu scheduled on ${format(new Date(menu.date), "PPP", { locale: es })}`}
+          aria-label="Toggle menu status"
         >
           <ToggleLeft className="h-4 w-4" />
         </Button>
@@ -3353,6 +3489,14 @@ const MenuListSection = ({
   handleDuplicateMenu: (menu: DailyMenu) => void;
 }) => {
   const groupedMenus = useMemo(() => groupMenusByWeek(filteredMenus), [filteredMenus]);
+
+  if (filteredMenus.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">No menus found.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -3378,20 +3522,11 @@ const MenuListSection = ({
   );
 };
 
-// -----------------------------------
-// Main Component: DailyMenuPage
-// -----------------------------------
-
 export default function DailyMenuPage() {
-  // -----------------------------------
-  // State Management
-  // -----------------------------------
-  const [dailyMenus, setDailyMenus] = useState<DailyMenu[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
-  const [editingMenu, setEditingMenu] = useState<DailyMenu | null>(null);
+  const supabase = createClientComponentClient<Database>();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const [advancedFilter, setAdvancedFilter] = useState<AdvancedFilterOptions>({
     search: "",
     pattern: "all",
@@ -3399,114 +3534,54 @@ export default function DailyMenuPage() {
     dateRange: undefined,
     courseSearch: "",
   });
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingMenu, setEditingMenu] = useState<DailyMenu | null>(null);
   const [newMenu, setNewMenu] = useState<NewMenu>({
-    dateRange: {
-      from: new Date(),
-      to: new Date(),
-    },
+    dateRange: { from: new Date(), to: new Date() },
     repeat_pattern: "none",
     active: true,
     firstCourse: "",
     secondCourse: "",
   });
 
-  const supabase = createClientComponentClient();
-  const { toast } = useToast();
+  const {
+    data: dailyMenus = [],
+    isLoading,
+    error,
+  } = useQuery<DailyMenu[], Error>({
+    queryKey: ["dailyMenus"],
+    queryFn: () => fetchDailyMenus(supabase),
+  });
 
-  // -----------------------------------
-  // Data Fetching
-  // -----------------------------------
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
+  const queryInvalidate = () => queryClient.invalidateQueries({ queryKey: ["dailyMenus"] });
 
-        const { data: menusData, error: menusError } = await supabase
-          .from("daily_menus")
-          .select(`
-            id,
-            date,
-            repeat_pattern,
-            active,
-            scheduled_for,
-            created_at,
-            daily_menu_items (
-              id,
-              course_name,
-              course_type,
-              display_order
-            )
-          `)
-          .order("date", { ascending: false });
-
-        if (menusError) throw menusError;
-
-        setDailyMenus(menusData || []);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        setError("Failed to load daily menus");
-        toast({
-          title: "Error",
-          description: "Failed to load daily menus",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [supabase, toast]);
-
-  // -----------------------------------
-  // Event Handlers
-  // -----------------------------------
-
-  // Toggle the active status of a menu
-  const toggleMenuStatus = async (id: string, currentStatus: boolean) => {
-    try {
-      const { error } = await supabase
+  const toggleStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: boolean }) => {
+      const { error: toggleError } = await supabase
         .from("daily_menus")
-        .update({ active: !currentStatus })
+        .update({ active: status })
         .eq("id", id);
+      if (toggleError) throw toggleError;
+    },
+    onSuccess: () => {
+      queryInvalidate();
+      toast({ title: "Success", description: "Menu status updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update menu status", variant: "destructive" });
+    },
+  });
 
-      if (error) throw error;
+  // Define InsertedMenu type for inserted menus (no daily_menu_items yet)
+  type InsertedMenu = Pick<DailyMenu, 'id' | 'date' | 'repeat_pattern' | 'active' | 'scheduled_for' | 'created_at'>;
 
-      setDailyMenus((prevMenus) =>
-        prevMenus.map((menu) =>
-          menu.id === id ? { ...menu, active: !currentStatus } : menu
-        )
-      );
-
-      toast({
-        title: "Success",
-        description: "Menu status updated successfully",
-      });
-    } catch (error) {
-      console.error("Error toggling menu status:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update menu status",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Handle creating or updating a menu
-  const handleCreateMenu = async () => {
-    try {
+  const createMenuMutation = useMutation({
+    mutationFn: async () => {
       const { dateRange, firstCourse, secondCourse, repeat_pattern, active } = newMenu;
       if (!dateRange.from || !firstCourse || !secondCourse) {
-        toast({
-          title: "Error",
-          description: "Please fill in all required fields and select dates",
-          variant: "destructive",
-        });
-        return;
+        throw new Error("Please fill in all required fields and select dates");
       }
 
-      // Generate dates based on repeat pattern
       const datesToSchedule: Date[] = [];
       let currentDate = new Date(dateRange.from);
       const endDate = dateRange.to ? new Date(dateRange.to) : new Date(dateRange.from);
@@ -3525,9 +3600,8 @@ export default function DailyMenuPage() {
         }
       }
 
-      // Batch insert menus
       const menusToInsert = datesToSchedule
-        .filter((date) => !dailyMenus.some((menu) => isSameDay(new Date(menu.date), date)))
+        .filter((date) => !dailyMenus.some((m) => isSameDay(new Date(m.date), date)))
         .map((date) => ({
           date: format(date, "yyyy-MM-dd"),
           repeat_pattern,
@@ -3536,11 +3610,7 @@ export default function DailyMenuPage() {
         }));
 
       if (menusToInsert.length === 0) {
-        toast({
-          title: "Info",
-          description: "No new menus to schedule.",
-        });
-        return;
+        throw new Error("No new menus to schedule.");
       }
 
       const { data: insertedMenus, error: insertError } = await supabase
@@ -3550,177 +3620,113 @@ export default function DailyMenuPage() {
 
       if (insertError) throw insertError;
 
-      // Prepare daily_menu_items for all inserted menus
-      const allMenuItems = insertedMenus.flatMap((menu) => [
+      // Cast insertedMenus to InsertedMenu[]
+      const allMenuItems = (insertedMenus as InsertedMenu[]).flatMap((menu) => [
         {
           daily_menu_id: menu.id,
           course_name: firstCourse,
-          course_type: "first",
+          course_type: "first" as const,
           display_order: 1,
         },
         {
           daily_menu_id: menu.id,
           course_name: secondCourse,
-          course_type: "second",
+          course_type: "second" as const,
           display_order: 2,
         },
       ]);
 
-      // Batch insert daily_menu_items
       const { error: itemsError } = await supabase
         .from("daily_menu_items")
         .insert(allMenuItems);
 
       if (itemsError) throw itemsError;
-
-      // Refresh menus
-      const { data: updatedMenus, error: fetchError } = await supabase
-        .from("daily_menus")
-        .select(`
-          id,
-          date,
-          repeat_pattern,
-          active,
-          scheduled_for,
-          created_at,
-          daily_menu_items (
-            id,
-            course_name,
-            course_type,
-            display_order
-          )
-        `)
-        .order("date", { ascending: false });
-
-      if (fetchError) throw fetchError;
-      setDailyMenus(updatedMenus || []);
+    },
+    onSuccess: () => {
+      queryInvalidate();
       setIsDialogOpen(false);
       resetNewMenu();
+      toast({ title: "Success", description: "Menus scheduled successfully" });
+    },
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : "Failed to schedule menus";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
 
-      toast({
-        title: "Success",
-        description: "Menus scheduled successfully",
-      });
-    } catch (error) {
-      console.error("Error creating menus:", error);
-      toast({
-        title: "Error",
-        description: "Failed to schedule menus",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Handle duplicating a menu
   const handleDuplicateMenu = (menu: DailyMenu) => {
     setNewMenu({
-      dateRange: {
-        from: new Date(),
-        to: new Date(),
-      },
+      dateRange: { from: new Date(), to: new Date() },
       repeat_pattern: "none",
       active: true,
       firstCourse:
-        menu.daily_menu_items.find((item) => item.course_type === "first")
-          ?.course_name || "",
+        menu.daily_menu_items.find((i) => i.course_type === "first")?.course_name || "",
       secondCourse:
-        menu.daily_menu_items.find((item) => item.course_type === "second")
-          ?.course_name || "",
+        menu.daily_menu_items.find((i) => i.course_type === "second")?.course_name || "",
     });
     setIsDialogOpen(true);
   };
 
-  // Handle editing a menu
   const handleEditMenu = (menu: DailyMenu) => {
     setEditingMenu(menu);
     setNewMenu({
-      dateRange: {
-        from: new Date(menu.date),
-        to: new Date(menu.date),
-      },
+      dateRange: { from: new Date(menu.date), to: new Date(menu.date) },
       repeat_pattern: menu.repeat_pattern,
       active: menu.active,
       firstCourse:
-        menu.daily_menu_items.find((item) => item.course_type === "first")
-          ?.course_name || "",
+        menu.daily_menu_items.find((i) => i.course_type === "first")?.course_name || "",
       secondCourse:
-        menu.daily_menu_items.find((item) => item.course_type === "second")
-          ?.course_name || "",
+        menu.daily_menu_items.find((i) => i.course_type === "second")?.course_name || "",
     });
     setIsDialogOpen(true);
   };
 
-  // Reset newMenu state
   const resetNewMenu = () => {
+    setEditingMenu(null);
     setNewMenu({
-      dateRange: {
-        from: new Date(),
-        to: new Date(),
-      },
+      dateRange: { from: new Date(), to: new Date() },
       repeat_pattern: "none",
       active: true,
       firstCourse: "",
       secondCourse: "",
     });
-    setEditingMenu(null);
   };
 
-  // -----------------------------------
-  // Helper Functions
-  // -----------------------------------
-
-  // Get menu for a specific date
-  const getMenuForDate = useCallback(
-    (date: Date): DailyMenu | undefined => {
-      return dailyMenus.find((menu) => isSameDay(new Date(menu.date), date));
-    },
-    [dailyMenus]
-  );
-
-  // -----------------------------------
-  // Filtered Menus Calculation
-  // -----------------------------------
   const filteredMenus = useMemo(() => {
     let menus = [...dailyMenus];
 
-    // Apply search filter
     if (advancedFilter.search.trim()) {
       const searchLower = advancedFilter.search.toLowerCase();
-      menus = menus.filter((menu) =>
-        menu.daily_menu_items.some((item) =>
+      menus = menus.filter((menu: DailyMenu) =>
+        menu.daily_menu_items.some((item: DailyMenuItem) =>
           item.course_name.toLowerCase().includes(searchLower)
         )
       );
     }
 
-    // Apply course search filter
     if (advancedFilter.courseSearch.trim()) {
-      const courseSearchLower = advancedFilter.courseSearch.toLowerCase();
-      menus = menus.filter((menu) =>
-        menu.daily_menu_items.some((item) =>
-          item.course_name.toLowerCase().includes(courseSearchLower)
+      const courseLower = advancedFilter.courseSearch.toLowerCase();
+      menus = menus.filter((menu: DailyMenu) =>
+        menu.daily_menu_items.some((item: DailyMenuItem) =>
+          item.course_name.toLowerCase().includes(courseLower)
         )
       );
     }
 
-    // Apply pattern filter
     if (advancedFilter.pattern !== "all") {
       menus = menus.filter((menu) => menu.repeat_pattern === advancedFilter.pattern);
     }
 
-    // Apply status filter
     if (advancedFilter.status !== "all") {
       const isActive = advancedFilter.status === "active";
       menus = menus.filter((menu) => menu.active === isActive);
     }
 
-    // Apply date range filter
     if (advancedFilter.dateRange?.from && advancedFilter.dateRange?.to) {
-      const from = advancedFilter.dateRange.from;
-      const to = advancedFilter.dateRange.to;
+      const { from, to } = advancedFilter.dateRange;
       menus = menus.filter((menu) => {
-        const menuDate = new Date(menu.date);
-        return menuDate >= from && menuDate <= to;
+        const d = new Date(menu.date);
+        return d >= from && d <= to;
       });
     }
 
@@ -3729,17 +3735,15 @@ export default function DailyMenuPage() {
     );
   }, [dailyMenus, advancedFilter]);
 
-  // -----------------------------------
-  // Rendering
-  // -----------------------------------
   return (
     <div className="min-h-screen bg-background">
       <div className="container py-6 space-y-6">
-        {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className={headingClasses}>Daily Menus</h1>
-            <p className={subheadingClasses}>Menu Schedule Management</p>
+            <h1 className="text-2xl font-medium mb-1">Daily Menus</h1>
+            <p className="text-sm uppercase text-muted-foreground tracking-wide">
+              Menu Schedule Management
+            </p>
           </div>
           <Button
             onClick={() => {
@@ -3753,14 +3757,12 @@ export default function DailyMenuPage() {
           </Button>
         </div>
 
-        {/* Error Display */}
         {error && (
           <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{String(error)}</AlertDescription>
           </Alert>
         )}
 
-        {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Calendar Section */}
           <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
@@ -3771,145 +3773,33 @@ export default function DailyMenuPage() {
               </p>
             </div>
 
-            {/* Quick Actions Bar */}
             <QuickActions
-              onSelectDateRange={(range) =>
-                setNewMenu({ ...newMenu, dateRange: range })
-              }
+              onSelectDateRange={(range) => setNewMenu({ ...newMenu, dateRange: range })}
               onCreateMenu={() => {
                 resetNewMenu();
                 setIsDialogOpen(true);
               }}
             />
 
-            {/* Calendar Component with Visual Feedback */}
-            <CalendarComponent
-              mode="range"
-              selected={newMenu.dateRange}
-              onSelect={(range) =>
-                setNewMenu({
-                  ...newMenu,
-                  dateRange: range || { from: undefined, to: undefined },
-                })
-              }
-              numberOfMonths={1}
-              locale={es}
-              classNames={{
-                months: "space-y-4",
-                month: "space-y-4",
-                caption: "flex justify-center pt-1 relative items-center",
-                caption_label: "text-sm font-medium",
-                nav: "space-x-1 flex items-center",
-                nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
-                nav_button_previous: "absolute left-1",
-                nav_button_next: "absolute right-1",
-                table: "w-full border-collapse space-y-1",
-                head_row: "flex",
-                head_cell: "text-gray-500 rounded-md w-9 font-normal text-[0.8rem]",
-                row: "flex w-full mt-2",
-                cell: "text-center text-sm relative p-0 rounded-md hover:bg-gray-100 focus-within:relative focus-within:z-20",
-                day: "h-9 w-9 p-0 font-normal",
-                day_range_middle: "rounded-none",
-                day_selected:
-                  "bg-black text-white hover:bg-gray-800 hover:text-white focus:bg-gray-800 focus:text-white",
-                day_today: "bg-gray-50",
-                day_outside: "opacity-50",
-                day_disabled: "opacity-50",
-                day_hidden: "invisible",
-              }}
-              modifiers={{
-                booked: (date) =>
-                  dailyMenus.some((menu) => isSameDay(new Date(menu.date), date)),
-                weekly: (date) =>
-                  dailyMenus.some(
-                    (menu) =>
-                      isSameDay(new Date(menu.date), date) &&
-                      menu.repeat_pattern === "weekly"
-                  ),
-                monthly: (date) =>
-                  dailyMenus.some(
-                    (menu) =>
-                      isSameDay(new Date(menu.date), date) &&
-                      menu.repeat_pattern === "monthly"
-                  ),
-              }}
-              onDayMouseEnter={(date) => setHoveredDate(date)}
-              onDayMouseLeave={() => setHoveredDate(null)}
-              components={{
-                DayContent: ({ date }: { date: Date }) => {
-                  const menu = getMenuForDate(date);
-                  const isHovered = hoveredDate && isSameDay(hoveredDate, date);
+            {isLoading ? (
+              <div className="flex h-[200px] items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
+              </div>
+            ) : (
+              <Calendar
+                mode="range"
+                selected={newMenu.dateRange}
+                onSelect={(range) =>
+                  setNewMenu({
+                    ...newMenu,
+                    dateRange: range || { from: undefined, to: undefined },
+                  })
+                }
+                numberOfMonths={1}
+                locale={es}
+              />
+            )}
 
-                  return (
-                    <div className="relative w-full h-full">
-                      {/* Date number and indicators */}
-                      <div
-                        className={cn(
-                          "w-full h-full flex items-center justify-center",
-                          menu && "font-medium"
-                        )}
-                      >
-                        {date.getDate()}
-
-                        {/* Menu indicators */}
-                        {menu && (
-                          <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
-                            {menu.daily_menu_items.map((_, i) => (
-                              <div
-                                key={i}
-                                className={cn(
-                                  "w-1 h-1 rounded-full",
-                                  menu.repeat_pattern === "none" && "bg-black",
-                                  menu.repeat_pattern === "weekly" &&
-                                    "bg-[#2563eb]",
-                                  menu.repeat_pattern === "monthly" &&
-                                    "bg-[#7c3aed]"
-                                )}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Enhanced hover popup */}
-                      {isHovered && menu && (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <span />
-                          </PopoverTrigger>
-                          <PopoverContent className="w-80 p-0" align="center">
-                            <div className="p-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-medium">
-                                  {format(date, "PPP", { locale: es })}
-                                </span>
-                                <Badge
-                                  variant={menu.active ? "default" : "secondary"}
-                                >
-                                  {menu.active ? "Active" : "Inactive"}
-                                </Badge>
-                              </div>
-                              <div className="space-y-2">
-                                {menu.daily_menu_items.map((item) => (
-                                  <div key={item.id} className="text-sm">
-                                    <span className="font-medium capitalize">
-                                      {item.course_type}:
-                                    </span>{" "}
-                                    {item.course_name}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      )}
-                    </div>
-                  );
-                },
-              }}
-            />
-
-            {/* Legend */}
             <div className="mt-6 flex items-center justify-between px-2">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-black rounded-sm" />
@@ -3929,39 +3819,22 @@ export default function DailyMenuPage() {
           {/* Menu List Section */}
           <div className="space-y-6">
             <div>
-              <h2 className={headingClasses}>Scheduled Menus</h2>
-              <p className={subheadingClasses}>
+              <h2 className="text-2xl font-medium mb-1">Scheduled Menus</h2>
+              <p className="text-sm uppercase text-muted-foreground tracking-wide">
                 View and manage your daily menus
               </p>
             </div>
 
-            {/* Advanced Filters */}
-            <AdvancedFilters
-              filters={advancedFilter}
-              onFilterChange={setAdvancedFilter}
-            />
+            <AdvancedFilters filters={advancedFilter} onFilterChange={setAdvancedFilter} />
 
-            {/* Loading State */}
             {isLoading ? (
               <div className="flex h-[200px] items-center justify-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
               </div>
-            ) : filteredMenus.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">
-                  No menus found.{" "}
-                  {advancedFilter.search ||
-                  advancedFilter.pattern !== "all" ||
-                  advancedFilter.status !== "all" ||
-                  advancedFilter.courseSearch
-                    ? "Try adjusting your filters."
-                    : "Create one to get started."}
-                </p>
-              </div>
             ) : (
               <MenuListSection
                 filteredMenus={filteredMenus}
-                toggleMenuStatus={toggleMenuStatus}
+                toggleMenuStatus={(id, status) => toggleStatusMutation.mutate({ id, status: !status })}
                 handleEditMenu={handleEditMenu}
                 handleDuplicateMenu={handleDuplicateMenu}
               />
@@ -3979,9 +3852,7 @@ export default function DailyMenuPage() {
         >
           <DialogContent className="max-w-xl">
             <DialogHeader>
-              <DialogTitle>
-                {editingMenu ? "Edit Menu" : "Schedule Menu"}
-              </DialogTitle>
+              <DialogTitle>{editingMenu ? "Edit Menu" : "Schedule Menu"}</DialogTitle>
               <DialogDescription>
                 {editingMenu
                   ? "Modify the menu details"
@@ -3992,13 +3863,12 @@ export default function DailyMenuPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                handleCreateMenu();
+                createMenuMutation.mutate();
               }}
               className="grid gap-6 py-4"
             >
-              {/* Selected Dates Display */}
               <div className="grid gap-2">
-                <Label htmlFor="date-range" className={labelClasses}>
+                <Label className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
                   Selected Dates
                 </Label>
                 <div className="text-sm">
@@ -4010,20 +3880,14 @@ export default function DailyMenuPage() {
                 </div>
               </div>
 
-              {/* Repeat Pattern Selection */}
               <div className="grid gap-2">
-                <Label htmlFor="repeat_pattern" className={labelClasses}>
+                <Label className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
                   Repeat Pattern
                 </Label>
                 <Select
                   value={newMenu.repeat_pattern}
-                  onValueChange={(
-                    value: "none" | "weekly" | "monthly"
-                  ) =>
-                    setNewMenu({
-                      ...newMenu,
-                      repeat_pattern: value,
-                    })
+                  onValueChange={(value: NewMenu["repeat_pattern"]) =>
+                    setNewMenu({ ...newMenu, repeat_pattern: value })
                   }
                 >
                   <SelectTrigger>
@@ -4037,13 +3901,11 @@ export default function DailyMenuPage() {
                 </Select>
               </div>
 
-              {/* First Course Input */}
               <div className="grid gap-2">
-                <Label htmlFor="firstCourse" className={labelClasses}>
+                <Label className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
                   First Course
                 </Label>
                 <Input
-                  id="firstCourse"
                   value={newMenu.firstCourse}
                   onChange={(e) =>
                     setNewMenu({ ...newMenu, firstCourse: e.target.value })
@@ -4053,13 +3915,11 @@ export default function DailyMenuPage() {
                 />
               </div>
 
-              {/* Second Course Input */}
               <div className="grid gap-2">
-                <Label htmlFor="secondCourse" className={labelClasses}>
+                <Label className="text-xs uppercase text-muted-foreground font-medium tracking-wide">
                   Second Course
                 </Label>
                 <Input
-                  id="secondCourse"
                   value={newMenu.secondCourse}
                   onChange={(e) =>
                     setNewMenu({ ...newMenu, secondCourse: e.target.value })
@@ -4068,22 +3928,22 @@ export default function DailyMenuPage() {
                   required
                 />
               </div>
-            </form>
 
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  resetNewMenu();
-                  setIsDialogOpen(false);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" onClick={handleCreateMenu}>
-                {editingMenu ? "Update Menu" : "Schedule Menu"}
-              </Button>
-            </DialogFooter>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    resetNewMenu();
+                    setIsDialogOpen(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit">
+                  {editingMenu ? "Update Menu" : "Schedule Menu"}
+                </Button>
+              </DialogFooter>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
@@ -4098,11 +3958,15 @@ export default function DailyMenuPage() {
 ```typescript
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Plus, Image as ImageIcon, Edit, Search } from "lucide-react"; // Added 'Search' icon
-import { Button } from "@/components/ui/button";
+import { SupabaseClient } from "@supabase/supabase-js";
+import Image from "next/image";
+import { Plus, Image as ImageIcon, Edit, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Database } from "@/types";
+
 import {
   Dialog,
   DialogContent,
@@ -4123,38 +3987,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
-import Image from "next/image";
-
-// ====== Custom Error Type ======
-interface SupabaseError {
-  message: string;
-  details?: string;
-  hint?: string;
-  code?: string;
-}
-// ===============================
-
-// Updated Interfaces
-interface WineCategoryAssignment {
-  wine_categories: {
-    id: number;
-    name: string;
-    display_order: number;
-  };
-}
-
-interface WineResponse {
-  id: number;
-  name: string;
-  description: string;
-  bottle_price: number;
-  glass_price: number;
-  active: boolean;
-  created_at: string;
-  wine_category_assignments: WineCategoryAssignment[];
-  image_path: string; // New field
-  image_url: string; // New field
-}
+import { Button } from "@/components/ui/button";
 
 interface WineCategory {
   id: number;
@@ -4171,8 +4004,8 @@ interface Wine {
   active: boolean;
   created_at: string;
   categories: WineCategory[];
-  image_path: string; // New field
-  image_url: string; // New field
+  image_path: string;
+  image_url: string;
 }
 
 interface NewWine {
@@ -4182,31 +4015,187 @@ interface NewWine {
   glass_price: string;
   category_ids: number[];
   active: boolean;
-  image_path: string; // New field
+  image_path: string;
 }
 
-// Define the structure for the edit dialog state
 interface EditWineDialog {
   open: boolean;
   wine: Wine | null;
 }
 
-// ====== WineCardProps Interface ======
-interface WineCardProps {
-  wine: Wine; // Using the Wine interface we already defined
-  searchTerm: string; // To pass the search term for highlighting
-  handleEdit: (wine: Wine) => void; // Handler to edit wine
+interface EditFormData {
+  name: string;
+  description: string;
+  bottle_price: string;
+  glass_price: string;
+  category_ids: number[];
 }
-// =====================================
+
+// Fetch functions
+async function fetchCategories(supabase: SupabaseClient<Database>) {
+  const { data, error } = await supabase
+    .from("wine_categories")
+    .select("*")
+    .order("display_order");
+
+  if (error) throw error;
+
+  return data as WineCategory[];
+}
+
+async function fetchWines(supabase: SupabaseClient<Database>) {
+  const { data, error } = await supabase
+    .from("wines")
+    .select(
+      `
+      *,
+      wine_category_assignments (
+        wine_categories (
+          id, name, display_order
+        )
+      )
+    `
+    )
+    .order("name");
+
+  if (error) throw error;
+
+  type WineResponse = {
+    id: number;
+    name: string;
+    description: string;
+    bottle_price: number;
+    glass_price: number;
+    active: boolean;
+    created_at: string;
+    wine_category_assignments: {
+      wine_categories: WineCategory[];
+    }[];
+    image_path?: string;
+    image_url?: string;
+  };
+
+  const rawWines = data as WineResponse[];
+  return rawWines.map((wine) => ({
+    id: wine.id,
+    name: wine.name,
+    description: wine.description,
+    bottle_price: wine.bottle_price,
+    glass_price: wine.glass_price,
+    active: wine.active,
+    created_at: wine.created_at,
+    categories: wine.wine_category_assignments.flatMap(
+      (a) => a.wine_categories
+    ),
+    image_path: wine.image_path || "wines/wine.webp",
+    image_url:
+      wine.image_url ||
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`,
+  })) as Wine[];
+}
+
+// Highlight function
+function highlightText(text: string, searchTerm: string) {
+  if (!searchTerm.trim()) return text;
+  const regex = new RegExp(`(${searchTerm})`, "gi");
+  const parts = text.split(regex);
+  return parts.map((part, index) =>
+    regex.test(part) ? (
+      <span key={index} className="bg-orange-500 text-white">
+        {part}
+      </span>
+    ) : (
+      part
+    )
+  );
+}
+
+// WineCard component
+interface WineCardProps {
+  wine: Wine;
+  searchTerm: string;
+  handleEdit: (wine: Wine) => void;
+}
+
+const WineCard: React.FC<WineCardProps> = ({
+  wine,
+  searchTerm,
+  handleEdit,
+}) => (
+  <div
+    className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm 
+               transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
+  >
+    <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => handleEdit(wine)}
+        className="h-8 w-8 p-0"
+        aria-label={`Edit ${wine.name}`}
+      >
+        <Edit className="h-4 w-4" />
+      </Button>
+    </div>
+
+    <div className="relative w-full pb-[150%] mb-4">
+      <Image
+        src={wine.image_url}
+        alt={wine.name}
+        fill
+        className="object-contain"
+        sizes="(max-width: 640px) 100vw, 
+               (max-width: 1024px) 50vw, 
+               (max-width: 1536px) 33vw,
+               25vw"
+        priority={false}
+        loading="lazy"
+        unoptimized
+        onError={(e) => {
+          const target = e.target as HTMLImageElement;
+          target.src = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`;
+        }}
+      />
+    </div>
+
+    <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
+      {wine.categories.map((c) => c.name).join(" · ")}
+    </div>
+
+    <h3 className="text-lg font-medium mb-2 line-clamp-2">
+      {highlightText(wine.name, searchTerm)}
+    </h3>
+
+    <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
+      {highlightText(wine.description, searchTerm)}
+    </p>
+
+    <div className="mt-auto grid grid-cols-2 gap-x-4 text-sm">
+      <div>
+        <div className="font-medium">${wine.bottle_price.toFixed(2)}</div>
+        <div className="text-neutral-500 uppercase text-xs">bottle</div>
+      </div>
+      {wine.glass_price && (
+        <div>
+          <div className="font-medium">${wine.glass_price.toFixed(2)}</div>
+          <div className="text-neutral-500 uppercase text-xs">glass</div>
+        </div>
+      )}
+    </div>
+  </div>
+);
 
 export default function WinePage() {
-  const [wines, setWines] = useState<Wine[]>([]);
-  const [categories, setCategories] = useState<WineCategory[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const supabase = createClientComponentClient<Database>();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // State for dialogs and forms
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isImageDialogOpen, setIsImageDialogOpen] = useState(false); // New state for image dialog
-  const [selectedWineId, setSelectedWineId] = useState<number | null>(null); // New state to track selected wine
+  const [isImageDialogOpen, setIsImageDialogOpen] = useState(false);
+  const [selectedWineId, setSelectedWineId] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [newWine, setNewWine] = useState<NewWine>({
     name: "",
     description: "",
@@ -4214,143 +4203,218 @@ export default function WinePage() {
     glass_price: "",
     category_ids: [],
     active: true,
-    image_path: "wines/wine.webp", // Updated initial state
+    image_path: "wines/wine.webp",
   });
 
-  // ====== New State Variables for Editing ======
   const [editDialog, setEditDialog] = useState<EditWineDialog>({
     open: false,
     wine: null,
   });
 
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<EditFormData>({
     name: "",
     description: "",
     bottle_price: "",
     glass_price: "",
-    category_ids: [] as number[],
+    category_ids: [],
   });
-  // ==============================================
 
-  // ====== New State for Search ======
   const [searchTerm, setSearchTerm] = useState("");
-  // =================================
-
-  // New state variables for filtering and sorting
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"name" | "price">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
-  const [isUploadingImage, setIsUploadingImage] = useState(false); // New loading state
+  // Queries
+  const {
+    data: categories = [],
+    isLoading: categoriesLoading,
+    error: categoriesError,
+  } = useQuery<WineCategory[]>({
+    queryKey: ["wineCategories"],
+    queryFn: () => fetchCategories(supabase),
+  });
 
-  const supabase = createClientComponentClient();
-  const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement | null>(null); // Ref for file input
+  const {
+    data: wines = [],
+    isLoading: winesLoading,
+    error: winesError,
+  } = useQuery<Wine[]>({
+    queryKey: ["wines"],
+    queryFn: () => fetchWines(supabase),
+  });
 
-  // ====== Helper Function to Highlight Matching Text ======
-  const highlightText = (text: string, searchTerm: string) => {
-    if (!searchTerm.trim()) return text;
+  const isLoading = categoriesLoading || winesLoading;
+  const error = categoriesError || winesError;
 
-    const regex = new RegExp(`(${searchTerm})`, 'gi');
-    const parts = text.split(regex);
+  const createWineMutation = useMutation<unknown, Error, NewWine>({
+    mutationFn: async (data: NewWine) => {
+      if (!data.name || !data.bottle_price) {
+        throw new Error("Please fill in all required fields");
+      }
 
-    return parts.map((part, index) =>
-      regex.test(part) ? (
-        <span key={index} className="bg-orange-500 text-white">
-          {part}
-        </span>
-      ) : (
-        part
-      )
-    );
-  };
-  // ========================================================
-
-  // ====== fetchData Function with useCallback ======
-  const fetchData = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Fetch wine categories
-      const { data: categoriesData, error: categoriesError } = await supabase
-        .from("wine_categories")
-        .select("*")
-        .order("display_order");
-
-      if (categoriesError) throw categoriesError;
-
-      // Fetch wines with their categories
-      const { data: winesData, error: winesError } = await supabase
+      const { data: wine, error: wineError } = await supabase
         .from("wines")
-        .select(`
-          *,
-          wine_category_assignments (
-            wine_categories (
-              id,
-              name,
-              display_order
-            )
-          )
-        `)
-        .order("name");
-
-      if (winesError) throw winesError;
-
-      // Transform the data to match our interface
-      const transformedWines: Wine[] = (winesData as WineResponse[])?.map(
-        (wine) => ({
-          id: wine.id,
-          name: wine.name,
-          description: wine.description,
-          bottle_price: wine.bottle_price,
-          glass_price: wine.glass_price,
-          active: wine.active,
-          created_at: wine.created_at,
-          categories: wine.wine_category_assignments.map(
-            (assignment) => assignment.wine_categories
-          ),
-          image_path: wine.image_path || "wines/wine.webp", // Updated path
-          image_url:
-            wine.image_url ||
-            `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`, // Updated URL
+        .insert({
+          name: data.name,
+          description: data.description,
+          bottle_price: parseFloat(data.bottle_price),
+          glass_price: data.glass_price ? parseFloat(data.glass_price) : null,
+          active: data.active,
+          image_path: data.image_path,
         })
-      );
+        .select()
+        .single();
 
-      setCategories(categoriesData || []);
-      setWines(transformedWines || []);
-    } catch (error: unknown) {
-      const supabaseError = error as SupabaseError;
-      console.error("Complete error details:", {
-        error: supabaseError,
-        message: supabaseError.message,
-        details: supabaseError.details,
-        hint: supabaseError.hint,
-        code: supabaseError.code,
+      if (wineError) throw wineError;
+
+      if (data.category_ids.length > 0) {
+        const categoryAssignments = data.category_ids.map((categoryId) => ({
+          wine_id: wine.id,
+          category_id: categoryId,
+        }));
+        const { error: assignmentError } = await supabase
+          .from("wine_category_assignments")
+          .insert(categoryAssignments);
+        if (assignmentError) throw assignmentError;
+      }
+      return wine;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wines"] });
+      setIsDialogOpen(false);
+      setNewWine({
+        name: "",
+        description: "",
+        bottle_price: "",
+        glass_price: "",
+        category_ids: [],
+        active: true,
+        image_path: "wines/wine.webp",
       });
+      toast({ title: "Success", description: "Wine added successfully" });
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
 
-      setError("Failed to load wines");
-      toast({
-        title: "Error",
-        description: "Failed to load wines",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [supabase, toast]);
-  // ================================================
+  const updateWineMutation = useMutation<
+    unknown,
+    Error,
+    { wineId: number; form: EditFormData }
+  >({
+    mutationFn: async ({ wineId, form }) => {
+      const { data: updatedWine, error: wineError } = await supabase
+        .from("wines")
+        .update({
+          name: form.name,
+          description: form.description,
+          bottle_price: parseFloat(form.bottle_price),
+          glass_price: form.glass_price ? parseFloat(form.glass_price) : null,
+        })
+        .eq("id", wineId)
+        .select("*")
+        .single();
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]); // Added fetchData to dependencies
+      if (wineError) throw wineError;
 
-  // ====== Filter and Sort Wines ======
-  // Filter and sort wines using useMemo for performance optimization
+      const { error: deleteError } = await supabase
+        .from("wine_category_assignments")
+        .delete()
+        .eq("wine_id", wineId);
+
+      if (deleteError) throw deleteError;
+
+      if (form.category_ids.length > 0) {
+        const assignments = form.category_ids.map((categoryId) => ({
+          wine_id: wineId,
+          category_id: categoryId,
+        }));
+        const { error: assignmentError } = await supabase
+          .from("wine_category_assignments")
+          .insert(assignments);
+        if (assignmentError) throw assignmentError;
+      }
+      return updatedWine;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wines"] });
+      toast({ title: "Success", description: "Wine updated successfully" });
+      setEditDialog({ open: false, wine: null });
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred";
+      toast({ title: "Warning", description: message, variant: "destructive" });
+      setEditDialog({ open: false, wine: null });
+    },
+  });
+
+  const toggleWineStatusMutation = useMutation<
+    unknown,
+    Error,
+    { wineId: number; currentStatus: boolean }
+  >({
+    mutationFn: async ({ wineId, currentStatus }) => {
+      const { error } = await supabase
+        .from("wines")
+        .update({ active: !currentStatus })
+        .eq("id", wineId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wines"] });
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
+
+  const uploadImageMutation = useMutation<
+    unknown,
+    Error,
+    { file: File; wineId: number }
+  >({
+    mutationFn: async ({ file, wineId }) => {
+      const fileExtension = file.name.split(".").pop();
+      const filePath = `wines/${wineId}.${fileExtension}`;
+      const { error: uploadError } = await supabase.storage
+        .from("menu")
+        .upload(filePath, file, { cacheControl: "3600", upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("menu")
+        .getPublicUrl(filePath);
+      if (!urlData.publicUrl) throw new Error("Failed to get public URL");
+
+      const { error: updateError } = await supabase
+        .from("wines")
+        .update({ image_path: filePath, image_url: urlData.publicUrl })
+        .eq("id", wineId);
+
+      if (updateError) throw updateError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wines"] });
+      toast({ title: "Success", description: "Image updated successfully" });
+      setIsImageDialogOpen(false);
+      setSelectedWineId(null);
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
+
   const filteredAndSortedWines = useMemo(() => {
     let filtered = wines;
-
-    // First apply search filter if there's a search term
     if (searchTerm.trim()) {
       const lowerSearchTerm = searchTerm.toLowerCase();
       filtered = filtered.filter(
@@ -4360,14 +4424,12 @@ export default function WinePage() {
       );
     }
 
-    // Then apply category filter
     if (selectedFilter !== "all") {
       filtered = filtered.filter((wine) =>
         wine.categories.some((cat) => cat.id.toString() === selectedFilter)
       );
     }
 
-    // Then sort
     return [...filtered].sort((a, b) => {
       if (sortBy === "name") {
         return sortOrder === "asc"
@@ -4380,209 +4442,11 @@ export default function WinePage() {
       }
     });
   }, [wines, selectedFilter, sortBy, sortOrder, searchTerm]);
-  // ====================================
 
-  const handleCreateWine = async () => {
-    try {
-      // Validation
-      if (!newWine.name || !newWine.bottle_price) {
-        toast({
-          title: "Error",
-          description: "Please fill in all required fields",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Create the wine with default image_path
-      const { data: wine, error: wineError } = await supabase
-        .from("wines")
-        .insert({
-          name: newWine.name,
-          description: newWine.description,
-          bottle_price: parseFloat(newWine.bottle_price),
-          glass_price: newWine.glass_price
-            ? parseFloat(newWine.glass_price)
-            : null,
-          active: newWine.active,
-          image_path: newWine.image_path, // Updated image_path
-        })
-        .select()
-        .single();
-
-      if (wineError) throw wineError;
-
-      // Create category assignments if any
-      if (newWine.category_ids.length > 0) {
-        const categoryAssignments = newWine.category_ids.map(
-          (categoryId) => ({
-            wine_id: wine.id,
-            category_id: categoryId,
-          })
-        );
-
-        const { error: assignmentError } = await supabase
-          .from("wine_category_assignments")
-          .insert(categoryAssignments);
-
-        if (assignmentError) throw assignmentError;
-      }
-
-      await fetchData(); // Refresh data
-      setIsDialogOpen(false);
-      setNewWine({
-        name: "",
-        description: "",
-        bottle_price: "",
-        glass_price: "",
-        category_ids: [],
-        active: true,
-        image_path: "wines/wine.webp", // Reset to default
-      });
-
-      toast({
-        title: "Success",
-        description: "Wine added successfully",
-      });
-    } catch (error: unknown) {
-      console.error("Error:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "An unexpected error occurred";
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    }
+  const handleCreateWine = () => {
+    createWineMutation.mutate(newWine);
   };
 
-  const toggleWineStatus = async (id: number, currentStatus: boolean) => {
-    try {
-      const { error: updateError } = await supabase
-        .from("wines")
-        .update({ active: !currentStatus })
-        .eq("id", id);
-
-      if (updateError) throw updateError;
-
-      setWines((prev) =>
-        prev.map((wine) =>
-          wine.id === id ? { ...wine, active: !currentStatus } : wine
-        )
-      );
-
-      toast({
-        title: "Success",
-        description: `Wine ${
-          !currentStatus ? "activated" : "deactivated"
-        } successfully`,
-      });
-    } catch (error: unknown) {
-      console.error("Error:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "An unexpected error occurred";
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Handle selecting a new image for a wine
-  const handleSelectImage = (wineId: number) => {
-    setSelectedWineId(wineId);
-    setIsImageDialogOpen(true);
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
-  // Handle image upload
-  const handleImageUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setIsUploadingImage(true); // Start uploading
-    const file = e.target.files?.[0];
-    if (!file || !selectedWineId) {
-      toast({
-        title: "Error",
-        description: "No file selected",
-        variant: "destructive",
-      });
-      setIsUploadingImage(false); // End uploading
-      return;
-    }
-
-    try {
-      // Define the file path in Supabase storage
-      const fileExtension = file.name.split(".").pop();
-      const filePath = `wines/${selectedWineId}.${fileExtension}`;
-
-      // ======== Updated Image Upload Section Start ========
-      const { error: uploadError } = await supabase.storage
-        .from("menu")
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: true,
-        });
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from("menu")
-        .getPublicUrl(filePath);
-
-      if (!urlData.publicUrl) {
-        throw new Error("Failed to get public URL");
-      }
-
-      // Update the wine's image_path and image_url in the database
-      const { error: updateError } = await supabase
-        .from("wines")
-        .update({
-          image_path: filePath,
-          image_url: urlData.publicUrl,
-        })
-        .eq("id", selectedWineId);
-
-      if (updateError) throw updateError;
-      // ======== Updated Image Upload Section End ========
-
-      // Update the local state
-      setWines((prevWines) =>
-        prevWines.map((wine) =>
-          wine.id === selectedWineId
-            ? { ...wine, image_path: filePath, image_url: urlData.publicUrl }
-            : wine
-        )
-      );
-
-      toast({
-        title: "Success",
-        description: "Image updated successfully",
-      });
-
-      // Close the image dialog
-      setIsImageDialogOpen(false);
-      setSelectedWineId(null);
-    } catch (error: unknown) {
-      console.error("Error:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "An unexpected error occurred";
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setIsUploadingImage(false); // End uploading
-    }
-  };
-
-  // ====== New Handlers for Editing ======
-  // Handler to open the edit dialog with the selected wine's data
   const handleEdit = (wine: Wine) => {
     setEditForm({
       name: wine.name,
@@ -4594,206 +4458,88 @@ export default function WinePage() {
     setEditDialog({ open: true, wine });
   };
 
-  // Updated handleSaveEdit with your changes
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = () => {
     if (!editDialog.wine) return;
+    updateWineMutation.mutate({ wineId: editDialog.wine.id, form: editForm });
+  };
 
-    try {
-      // Add this check at the start of category assignment
-      console.log("Category IDs before processing:", {
-        rawIds: editForm.category_ids,
-        processedIds: editForm.category_ids.map((id) => Number(id)),
-      });
+  const toggleWineStatus = (id: number, currentStatus: boolean) => {
+    toggleWineStatusMutation.mutate({ wineId: id, currentStatus });
+  };
 
-      // Log update data
-      console.log("Update data:", {
-        wineId: editDialog.wine.id,
-        updates: {
-          name: editForm.name,
-          description: editForm.description,
-          bottle_price: parseFloat(editForm.bottle_price),
-          glass_price: editForm.glass_price
-            ? parseFloat(editForm.glass_price)
-            : null,
-        },
-        categories: editForm.category_ids,
-      });
-
-      // First update the wine details
-      const { data: wineData, error: wineError } = await supabase
-        .from("wines")
-        .update({
-          name: editForm.name,
-          description: editForm.description,
-          bottle_price: parseFloat(editForm.bottle_price),
-          glass_price: editForm.glass_price
-            ? parseFloat(editForm.glass_price)
-            : null,
-        })
-        .eq("id", editDialog.wine.id)
-        .select("*")
-        .single(); // Make sure to return the updated data
-
-      if (wineError) {
-        console.error("Wine update error:", wineError);
-        throw wineError;
-      }
-
-      console.log("Wine updated successfully:", wineData);
-
-      // Always delete existing assignments first
-      console.log(
-        "Deleting existing category assignments for wine:",
-        editDialog.wine.id
-      );
-      const { error: deleteError } = await supabase
-        .from("wine_category_assignments")
-        .delete()
-        .eq("wine_id", editDialog.wine.id);
-
-      if (deleteError) {
-        console.error("Delete categories error:", deleteError);
-        throw deleteError;
-      }
-
-      // Only attempt category assignments if we have categories
-      if (editForm.category_ids && editForm.category_ids.length > 0) {
-        // Create all assignments at once
-        const assignments = editForm.category_ids.map((categoryId) => ({
-          wine_id: Number(editDialog.wine!.id), // Ensure it's a number
-          category_id: Number(categoryId), // Ensure it's a number
-        }));
-
-        console.log("Attempting to insert assignments:", assignments);
-
-        // Insert all assignments in one operation
-        const { error: assignmentError } = await supabase
-          .from("wine_category_assignments")
-          .insert(assignments)
-          .select();
-
-        if (assignmentError) {
-          console.error("Assignment error:", assignmentError);
-          throw assignmentError;
-        }
-      }
-
-      // Refresh data
-      await fetchData();
-      toast({
-        title: "Success",
-        description: "Wine updated successfully",
-      });
-      setEditDialog({ open: false, wine: null });
-    } catch (error: unknown) {
-      const supabaseError = error as SupabaseError;
-      console.error("Complete error details:", {
-        error: supabaseError,
-        message: supabaseError.message,
-        details: supabaseError.details,
-        hint: supabaseError.hint,
-        code: supabaseError.code,
-      });
-
-      // Still refresh data to ensure UI is in sync
-      await fetchData();
-
-      // More specific error message
-      toast({
-        title: "Warning",
-        description:
-          supabaseError.message ||
-          "Wine details updated but categories could not be assigned",
-        variant: "destructive",
-      });
-      setEditDialog({ open: false, wine: null });
+  const handleSelectImage = (wineId: number) => {
+    setSelectedWineId(wineId);
+    setIsImageDialogOpen(true);
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
-  // ==========================================
 
-  // ====== WineCard Component ======
-  const WineCard: React.FC<WineCardProps> = ({ wine, searchTerm, handleEdit }) => (
-    <div
-      className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm 
-                 transition-all duration-300 ease-in-out p-6 hover:shadow-sm"
-    >
-      {/* Edit button in top-right corner */}
-      <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-        <Button
-          variant="secondary" // Changed to secondary to be visible on white
-          size="sm"
-          onClick={() => handleEdit(wine)}
-          className="h-8 w-8 p-0"
-          aria-label={`Edit ${wine.name}`} // Enhanced ARIA label for accessibility
-        >
-          <Edit className="h-4 w-4" />
-        </Button>
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedWineId) {
+      toast({
+        title: "Error",
+        description: "No file selected",
+        variant: "destructive",
+      });
+      return;
+    }
+    uploadImageMutation.mutate({ file, wineId: selectedWineId });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[200px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
+    );
+  }
 
-      {/* Image Container */}
-      <div className="relative w-full pb-[150%] mb-4">
-        <Image
-          src={wine.image_url}
-          alt={wine.name}
-          fill
-          className="object-contain"
-          sizes="(max-width: 640px) 100vw, 
-                 (max-width: 1024px) 50vw, 
-                 (max-width: 1536px) 33vw,
-                 25vw"
-          priority={false}
-          loading="lazy"
-          unoptimized
-          onError={(e) => {
-            const target = e.target as HTMLImageElement;
-            target.src = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`;
-          }}
-        />
+  if (error) {
+    return (
+      <div className="container p-6">
+        <Alert variant="destructive">
+          <AlertDescription>
+            Failed to load wines or categories.
+          </AlertDescription>
+        </Alert>
       </div>
+    );
+  }
 
-      {/* Wine Details */}
-      <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
-        {wine.categories.map((category) => category.name).join(" · ")}
-      </div>
-
-      <h3 className="text-lg font-medium mb-2 line-clamp-2">
-        {highlightText(wine.name, searchTerm)}
-      </h3>
-
-      <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
-        {highlightText(wine.description, searchTerm)}
-      </p>
-
-      {/* Prices */}
-      <div className="mt-auto grid grid-cols-2 gap-x-4 text-sm">
-        <div>
-          <div className="font-medium">${wine.bottle_price.toFixed(2)}</div>
-          <div className="text-neutral-500 uppercase text-xs">bottle</div>
+  if (wines.length === 0) {
+    return (
+      <div className="container p-6">
+        <Alert>
+          <AlertDescription>
+            No wines found. Add one to get started.
+          </AlertDescription>
+        </Alert>
+        <div className="mt-4">
+          <Button onClick={() => setIsDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Wine
+          </Button>
         </div>
-        {wine.glass_price && (
-          <div>
-            <div className="font-medium">${wine.glass_price.toFixed(2)}</div>
-            <div className="text-neutral-500 uppercase text-xs">glass</div>
-          </div>
-        )}
       </div>
-    </div>
-  );
-  // =================================
+    );
+  }
 
   return (
     <div className="container p-6">
-      <PageHeader heading="Wine List" text="Manage your restaurant's wine selection">
+      <PageHeader
+        heading="Wine List"
+        text="Manage your restaurant's wine selection"
+      >
         <Button onClick={() => setIsDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Add Wine
         </Button>
       </PageHeader>
 
-      {/* Filter, Sort, and Search Controls */}
       <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
-          {/* Search input */}
           <div className="relative w-full md:w-[300px]">
             <Input
               type="text"
@@ -4805,7 +4551,6 @@ export default function WinePage() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           </div>
 
-          {/* Filter by Category */}
           <Select value={selectedFilter} onValueChange={setSelectedFilter}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Filter by Category" />
@@ -4820,7 +4565,6 @@ export default function WinePage() {
             </SelectContent>
           </Select>
 
-          {/* Sort By */}
           <Select
             value={sortBy}
             onValueChange={(value: "name" | "price") => setSortBy(value)}
@@ -4834,7 +4578,6 @@ export default function WinePage() {
             </SelectContent>
           </Select>
 
-          {/* Sort Order Toggle */}
           <Button
             variant="outline"
             size="icon"
@@ -4848,31 +4591,16 @@ export default function WinePage() {
         </div>
       </div>
 
-      {/* Wine Grid with fixed image proportions */}
-      {isLoading ? (
-        <div className="flex h-[200px] items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-        </div>
-      ) : error ? (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : wines.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">No wines found. Add one to get started.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
-          {filteredAndSortedWines.map((wine) => (
-            <WineCard
-              key={wine.id}
-              wine={wine}
-              searchTerm={searchTerm}
-              handleEdit={handleEdit}
-            />
-          ))}
-        </div>
-      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
+        {filteredAndSortedWines.map((wine) => (
+          <WineCard
+            key={wine.id}
+            wine={wine}
+            searchTerm={searchTerm}
+            handleEdit={handleEdit}
+          />
+        ))}
+      </div>
 
       {/* Add Wine Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -4935,7 +4663,6 @@ export default function WinePage() {
                 />
               </div>
             </div>
-            {/* ======== Updated Categories Select Start ======== */}
             <div className="grid gap-2">
               <Label>Categories</Label>
               <Select
@@ -4963,7 +4690,6 @@ export default function WinePage() {
                 </SelectContent>
               </Select>
 
-              {/* Display selected categories as badges */}
               <div className="flex flex-wrap gap-2 mt-2">
                 {newWine.category_ids.map((categoryId) => {
                   const category = categories.find((c) => c.id === categoryId);
@@ -4985,7 +4711,7 @@ export default function WinePage() {
                           })
                         }
                         className="ml-1 hover:text-destructive"
-                        aria-label={`Remove category ${category.name}`} // Added ARIA label
+                        aria-label={`Remove category ${category.name}`}
                       >
                         ×
                       </button>
@@ -4994,19 +4720,20 @@ export default function WinePage() {
                 })}
               </div>
             </div>
-            {/* ======== Updated Categories Select End ======== */}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateWine}>Create Wine</Button>
+            <Button onClick={handleCreateWine}>
+              {createWineMutation.isPending ? "Creating..." : "Create Wine"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ======== Edit Wine Dialog Start ======== */}
+      {/* Edit Wine Dialog */}
       <Dialog
         open={editDialog.open}
         onOpenChange={(open) => !open && setEditDialog({ open, wine: null })}
@@ -5014,7 +4741,9 @@ export default function WinePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Wine</DialogTitle>
-            <DialogDescription>Update the details of the wine.</DialogDescription>
+            <DialogDescription>
+              Update the details of the wine.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
@@ -5071,7 +4800,6 @@ export default function WinePage() {
               </div>
             </div>
 
-            {/* Categories selection - similar to your add form */}
             <div className="grid gap-2">
               <Label>Categories</Label>
               <Select
@@ -5099,7 +4827,6 @@ export default function WinePage() {
                 </SelectContent>
               </Select>
 
-              {/* Display selected categories as badges */}
               <div className="flex flex-wrap gap-2 mt-2">
                 {editForm.category_ids.map((categoryId) => {
                   const category = categories.find((c) => c.id === categoryId);
@@ -5121,7 +4848,7 @@ export default function WinePage() {
                           })
                         }
                         className="ml-1 hover:text-destructive"
-                        aria-label={`Remove category ${category.name}`} // Added ARIA label
+                        aria-label={`Remove category ${category.name}`}
                       >
                         ×
                       </button>
@@ -5131,7 +4858,6 @@ export default function WinePage() {
               </div>
             </div>
 
-            {/* Add Controls Section */}
             <div className="flex gap-4 pt-4 border-t">
               <Button
                 variant="outline"
@@ -5164,13 +4890,14 @@ export default function WinePage() {
             >
               Cancel
             </Button>
-            <Button onClick={handleSaveEdit}>Save Changes</Button>
+            <Button onClick={handleSaveEdit}>
+              {updateWineMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* ======== Edit Wine Dialog End ======== */}
 
-      {/* ======== Image Upload Dialog Start ======== */}
+      {/* Image Upload Dialog */}
       <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -5195,11 +4922,10 @@ export default function WinePage() {
                   fileInputRef.current.click();
                 }
               }}
-              disabled={isUploadingImage} // Disable button while uploading
+              disabled={uploadImageMutation.isPending}
             >
-              {isUploadingImage ? "Uploading..." : "Select Image"} {/* Update button text */}
+              {uploadImageMutation.isPending ? "Uploading..." : "Select Image"}
             </Button>
-            {/* Optionally, display a preview of the selected image */}
           </div>
 
           <DialogFooter>
@@ -5212,7 +4938,6 @@ export default function WinePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* ======== Image Upload Dialog End ======== */}
     </div>
   );
 }
@@ -5224,10 +4949,16 @@ export default function WinePage() {
 ```typescript
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useTransition,
+  useEffect,
+} from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Image from "next/image";
-import { Plus, Search, Edit } from "lucide-react"; // Added 'Edit' icon
+import { Plus, Search, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -5250,10 +4981,10 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
-import type { PostgrestError } from "@supabase/postgrest-js"; // Added type import
-import { MultiSelect } from "@/components/ui/multi-select"; // Imported MultiSelect
+import { MultiSelect } from "@/components/ui/multi-select";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-// Basic types
+// Types
 type Allergen = {
   id: string;
   name: string;
@@ -5264,34 +4995,32 @@ type Category = {
   name: string;
 };
 
-// Raw response types from Supabase
 type RawMenuItemResponse = {
   id: string;
   name: string;
   description: string;
   price: number;
-  category_id: number; // Changed to number to match Database type
+  category_id: number;
   image_path: string | null;
   active: boolean;
-  menu_categories: Array<{
+  menu_categories: {
     id: string;
     name: string;
-  }>;
-  menu_item_allergens: Array<{
+  }[];
+  menu_item_allergens: {
     allergens: {
       id: string;
       name: string;
-    };
-  }>;
+    }[];
+  }[];
 };
 
-// Transformed MenuItem type for the application
 type MenuItem = {
   id: string;
   name: string;
   description: string;
   price: number;
-  category_id: number; // Changed to number
+  category_id: number;
   image_url: string | null;
   image_path: string | null;
   active: boolean;
@@ -5302,7 +5031,6 @@ type MenuItem = {
   allergens?: Allergen[];
 };
 
-// Type for new menu item form
 type NewMenuItem = {
   name: string;
   description: string;
@@ -5312,7 +5040,6 @@ type NewMenuItem = {
   allergen_ids: string[];
 };
 
-// Updated Types for Edit Functionality
 interface EditDialogState {
   open: boolean;
   item: MenuItem | null;
@@ -5327,14 +5054,11 @@ interface EditFormData {
 }
 
 export default function MenuPage() {
-  // State declarations
-  const [items, setItems] = useState<MenuItem[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [allergens, setAllergens] = useState<Allergen[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const supabase = createClientComponentClient();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<string>("all");
   const [newItem, setNewItem] = useState<NewMenuItem>({
     name: "",
     description: "",
@@ -5344,10 +5068,6 @@ export default function MenuPage() {
     allergen_ids: [],
   });
 
-  // Add search state
-  const [searchTerm, setSearchTerm] = useState("");
-
-  // Add state for Edit Functionality
   const [editDialog, setEditDialog] = useState<EditDialogState>({
     open: false,
     item: null,
@@ -5361,23 +5081,29 @@ export default function MenuPage() {
     allergen_ids: [],
   });
 
-  // Initialize Supabase client and toast
-  const supabase = createClientComponentClient();
-  const { toast } = useToast();
+  const [, startSearchTransition] = useTransition();
+  const [selectedFilter, setSelectedFilter] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
 
-  // Helper function for image URL construction
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      startSearchTransition(() => {
+        setSearchTerm(localSearchTerm);
+      });
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [localSearchTerm, startSearchTransition]);
+
   const getImageUrl = (imagePath: string | null): string | null => {
     if (!imagePath) return null;
     return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/${imagePath}`;
   };
 
-  // Add highlight text function
-  const highlightText = (text: string, searchTerm: string) => {
-    if (!searchTerm.trim()) return text;
-
-    const regex = new RegExp(`(${searchTerm})`, "gi");
+  const highlightText = useCallback((text: string, term: string) => {
+    if (!term.trim()) return text;
+    const regex = new RegExp(`(${term})`, "gi");
     const parts = text.split(regex);
-
     return parts.map((part, index) =>
       regex.test(part) ? (
         <span key={index} className="bg-orange-500 text-white">
@@ -5387,108 +5113,89 @@ export default function MenuPage() {
         part
       )
     );
+  }, []);
+
+  const fetchAllergens = async (): Promise<Allergen[]> => {
+    const { data, error } = await supabase.from("allergens").select("*").order("name");
+    if (error) throw error;
+    return data as Allergen[];
   };
 
-  // Consolidate fetchData function with useCallback
-  const fetchData = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const [allergensResponse, categoriesResponse, itemsResponse] = await Promise.all([
-        supabase.from("allergens").select("*").order("name"),
-        supabase.from("menu_categories").select("*").order("name"),
-        supabase
-          .from("menu_items")
-          .select(`
-            id,
-            name,
-            description,
-            price,
-            category_id,
-            image_path,
-            active,
-            menu_categories (id, name),
-            menu_item_allergens (
-              allergens (id, name)
-            )
-          `)
-          .order("name"),
-      ]);
+  const fetchCategories = async (): Promise<Category[]> => {
+    const { data, error } = await supabase.from("menu_categories").select("*").order("name");
+    if (error) throw error;
+    return data as Category[];
+  };
 
-      // Add error handling
-      if (allergensResponse.error) throw allergensResponse.error;
-      if (categoriesResponse.error) throw categoriesResponse.error;
-      if (itemsResponse.error) throw itemsResponse.error;
+  const fetchItems = async (): Promise<MenuItem[]> => {
+    const { data, error } = await supabase
+      .from("menu_items")
+      .select(`
+        id,
+        name,
+        description,
+        price,
+        category_id,
+        image_path,
+        active,
+        menu_categories (id, name),
+        menu_item_allergens ( allergens (id, name) )
+      `)
+      .order("name");
+    if (error) throw error;
 
-      // Set basic data
-      setAllergens(allergensResponse.data || []);
-      setCategories(categoriesResponse.data || []);
+    const rawItems = data as RawMenuItemResponse[];
 
-      // Transform and type menu items
-      const rawItems = itemsResponse.data as unknown as RawMenuItemResponse[];
-      const transformedItems = rawItems.map((item) => ({
-        id: item.id,
-        name: item.name,
-        description: item.description,
-        price: item.price,
-        category_id: item.category_id,
-        image_url: getImageUrl(item.image_path),
-        image_path: item.image_path,
-        active: item.active,
-        category: item.menu_categories[0] || null,
-        allergens: item.menu_item_allergens.map(
-          (relation) => relation.allergens
-        ),
-      }));
+    return rawItems.map((item) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      price: item.price,
+      category_id: item.category_id,
+      image_url: getImageUrl(item.image_path),
+      image_path: item.image_path,
+      active: item.active,
+      category: item.menu_categories[0] || null,
+      allergens: item.menu_item_allergens.flatMap((relation) => relation.allergens),
+    }));
+  };
 
-      setItems(transformedItems);
-    } catch (error) {
-      // Define the type guard
-      const isPostgrestError = (error: unknown): error is PostgrestError =>
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        "message" in error;
+  const {
+    data: allergens = [],
+    isLoading: allergensLoading,
+    error: allergensError,
+  } = useQuery<Allergen[]>({
+    queryKey: ["allergens"],
+    queryFn: fetchAllergens,
+  });
 
-      if (isPostgrestError(error)) {
-        console.error("Database error:", error);
-        toast({
-          title: "Database Error",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else if (error instanceof Error) {
-        console.error("Application error:", error);
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        console.error("Unknown error:", error);
-        toast({
-          title: "Error",
-          description: "An unexpected error occurred",
-          variant: "destructive",
-        });
-      }
-      setError("Failed to load menu items");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [supabase, toast]);
+  const {
+    data: categories = [],
+    isLoading: categoriesLoading,
+    error: categoriesError,
+  } = useQuery<Category[]>({
+    queryKey: ["categories"],
+    queryFn: fetchCategories,
+  });
 
-  // Call fetchData inside useEffect
-  useEffect(() => {
-    void fetchData();
-  }, [fetchData]);
+  const {
+    data: items = [],
+    isLoading: itemsLoading,
+    error: itemsError,
+  } = useQuery<MenuItem[]>({
+    queryKey: ["items"],
+    queryFn: fetchItems,
+  });
 
-  // Filter items with search and category filter
+  const isLoading = allergensLoading || categoriesLoading || itemsLoading;
+  const error = allergensError || categoriesError || itemsError;
+
   const filteredItems = useMemo(() => {
+    if (!items) return [];
     let filtered = items;
 
-    // Apply search filter
-    if (searchTerm.trim()) {
-      const lowerSearchTerm = searchTerm.toLowerCase();
+    const lowerSearchTerm = searchTerm.toLowerCase().trim();
+    if (lowerSearchTerm) {
       filtered = filtered.filter(
         (item) =>
           item.name.toLowerCase().includes(lowerSearchTerm) ||
@@ -5496,12 +5203,11 @@ export default function MenuPage() {
       );
     }
 
-    // Apply category filter
     if (selectedFilter !== "all") {
-      const parsedFilter = parseInt(selectedFilter);
+      const parsedFilter = parseInt(selectedFilter, 10);
       filtered = filtered.filter(
         (item) =>
-          item.category?.id === selectedFilter ||
+          (item.category?.id === selectedFilter) ||
           item.category_id === parsedFilter
       );
     }
@@ -5509,7 +5215,6 @@ export default function MenuPage() {
     return filtered;
   }, [items, selectedFilter, searchTerm]);
 
-  // Create new item handler
   const handleCreateItem = async () => {
     try {
       if (!newItem.name || !newItem.category_id || !newItem.price) {
@@ -5521,7 +5226,6 @@ export default function MenuPage() {
         return;
       }
 
-      // Validate price
       const priceValue = parseFloat(newItem.price);
       if (isNaN(priceValue) || priceValue < 0) {
         toast({
@@ -5532,14 +5236,13 @@ export default function MenuPage() {
         return;
       }
 
-      // Create menu item
-      const { data: item, error: itemError } = await supabase
+      const { data: insertedItem, error: itemError } = await supabase
         .from("menu_items")
         .insert({
           name: newItem.name,
           description: newItem.description,
           price: priceValue,
-          category_id: parseInt(newItem.category_id), // Convert to number
+          category_id: parseInt(newItem.category_id, 10),
           active: newItem.active,
         })
         .select()
@@ -5547,10 +5250,9 @@ export default function MenuPage() {
 
       if (itemError) throw itemError;
 
-      // Create allergen assignments if any
       if (newItem.allergen_ids.length > 0) {
         const allergenAssignments = newItem.allergen_ids.map((allergenId) => ({
-          menu_item_id: item.id,
+          menu_item_id: insertedItem.id as string,
           allergen_id: allergenId,
         }));
 
@@ -5561,28 +5263,8 @@ export default function MenuPage() {
         if (assignmentError) throw assignmentError;
       }
 
-      // Find category for the new item
-      const category = categories.find((c) => c.id === newItem.category_id);
-      const itemAllergens = allergens.filter((a) =>
-        newItem.allergen_ids.includes(a.id)
-      );
+      await queryClient.invalidateQueries({ queryKey: ["items"] });
 
-      // Create new menu item for state
-      const newMenuItem: MenuItem = {
-        id: item.id,
-        name: newItem.name,
-        description: newItem.description,
-        price: priceValue,
-        category_id: parseInt(newItem.category_id), // Convert to number
-        image_url: null,
-        image_path: null,
-        active: newItem.active,
-        category: category || null,
-        allergens: itemAllergens,
-      };
-
-      // Update state and cleanup
-      setItems((prev) => [...prev, newMenuItem]);
       setIsDialogOpen(false);
       setNewItem({
         name: "",
@@ -5597,42 +5279,17 @@ export default function MenuPage() {
         title: "Success",
         description: "Menu item created successfully",
       });
-    } catch (error) {
-      // Define the type guard
-      const isPostgrestError = (error: unknown): error is PostgrestError =>
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        "message" in error;
-
-      if (isPostgrestError(error)) {
-        console.error("Database error:", error);
-        toast({
-          title: "Database Error",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else if (error instanceof Error) {
-        console.error("Application error:", error);
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        console.error("Unknown error:", error);
-        toast({
-          title: "Error",
-          description: "An unexpected error occurred",
-          variant: "destructive",
-        });
-      }
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : "Failed to create menu item";
       console.error("Error creating item:", error);
-      setError("Failed to create menu item");
+      toast({
+        title: "Error",
+        description: errMsg,
+        variant: "destructive",
+      });
     }
   };
 
-  // Handler to open the edit dialog with the selected menu item's data
   const handleEdit = useCallback((item: MenuItem) => {
     setEditForm({
       name: item.name,
@@ -5644,12 +5301,10 @@ export default function MenuPage() {
     setEditDialog({ open: true, item });
   }, []);
 
-  // Handler to save the edited menu item
   const handleSaveEdit = useCallback(async () => {
     if (!editDialog.item) return;
 
     try {
-      // Validation
       if (!editForm.name || !editForm.category_id || !editForm.price) {
         toast({
           title: "Error",
@@ -5669,7 +5324,7 @@ export default function MenuPage() {
         return;
       }
 
-      const categoryId = parseInt(editForm.category_id);
+      const categoryId = parseInt(editForm.category_id, 10);
       if (isNaN(categoryId)) {
         toast({
           title: "Error",
@@ -5679,7 +5334,6 @@ export default function MenuPage() {
         return;
       }
 
-      // Update menu item details
       const { error: itemError } = await supabase
         .from("menu_items")
         .update({
@@ -5692,8 +5346,7 @@ export default function MenuPage() {
 
       if (itemError) throw itemError;
 
-      // Update allergen assignments
-      // First, delete existing assignments
+      // Update allergens: first delete existing
       const { error: deleteError } = await supabase
         .from("menu_item_allergens")
         .delete()
@@ -5701,7 +5354,6 @@ export default function MenuPage() {
 
       if (deleteError) throw deleteError;
 
-      // Then, insert new assignments if any
       if (editForm.allergen_ids.length > 0) {
         const allergenAssignments = editForm.allergen_ids.map((allergenId) => ({
           menu_item_id: editDialog.item!.id,
@@ -5715,49 +5367,24 @@ export default function MenuPage() {
         if (assignmentError) throw assignmentError;
       }
 
-      // Refresh data
-      await fetchData();
+      await queryClient.invalidateQueries({ queryKey: ["items"] });
+
       toast({
         title: "Success",
         description: "Menu item updated successfully.",
       });
       setEditDialog({ open: false, item: null });
-    } catch (error) {
-      // Define the type guard
-      const isPostgrestError = (error: unknown): error is PostgrestError =>
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        "message" in error;
-
-      if (isPostgrestError(error)) {
-        console.error("Database error:", error);
-        toast({
-          title: "Database Error",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else if (error instanceof Error) {
-        console.error("Application error:", error);
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        console.error("Unknown error:", error);
-        toast({
-          title: "Error",
-          description: "An unexpected error occurred",
-          variant: "destructive",
-        });
-      }
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : "Failed to update menu item";
       console.error("Error updating menu item:", error);
-      setError("Failed to update menu item");
+      toast({
+        title: "Error",
+        description: errMsg,
+        variant: "destructive",
+      });
     }
-  }, [editDialog.item, editForm, supabase, toast, fetchData]);
+  }, [editDialog.item, editForm, supabase, toast, queryClient]);
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -5766,19 +5393,17 @@ export default function MenuPage() {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="container p-6">
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>Failed to load data.</AlertDescription>
         </Alert>
       </div>
     );
   }
 
-  // Empty state
-  if (!items.length) {
+  if (!items || items.length === 0) {
     return (
       <div className="container p-6">
         <Alert>
@@ -5793,37 +5418,35 @@ export default function MenuPage() {
     );
   }
 
-  // Main render
   return (
     <div className="container p-6">
-      {/* Page Header */}
-      <PageHeader
-        heading="Menu Items"
-        text="Manage your restaurant's menu selection"
-      >
+      <PageHeader heading="Menu Items" text="Manage your restaurant's menu selection">
         <Button onClick={() => setIsDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Add Item
         </Button>
       </PageHeader>
 
-      {/* Search and Filter Controls */}
       <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
-          {/* Search input */}
           <div className="relative w-full md:w-[300px]">
             <Input
               type="text"
               placeholder="Search menu items..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={localSearchTerm}
+              onChange={(e) => setLocalSearchTerm(e.target.value)}
               className="w-full pl-10"
             />
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           </div>
-
-          {/* Category filter */}
-          <Select value={selectedFilter} onValueChange={setSelectedFilter}>
+          <Select
+            value={selectedFilter}
+            onValueChange={(value) => {
+              startSearchTransition(() => {
+                setSelectedFilter(value);
+              });
+            }}
+          >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Filter by Category" />
             </SelectTrigger>
@@ -5839,14 +5462,12 @@ export default function MenuPage() {
         </div>
       </div>
 
-      {/* Menu Items Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8 relative">
         {filteredItems.map((item) => (
           <div
             key={item.id}
-            className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm"
+            className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm transition-shadow"
           >
-            {/* Add Edit Button */}
             <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
               <Button
                 variant="secondary"
@@ -5859,7 +5480,6 @@ export default function MenuPage() {
               </Button>
             </div>
 
-            {/* Image */}
             <div className="relative w-full pb-[100%] mb-4">
               {item.image_url ? (
                 <Image
@@ -5880,27 +5500,19 @@ export default function MenuPage() {
                 </div>
               )}
             </div>
-
-            {/* Category */}
             <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
               {item.category?.name}
             </div>
-
-            {/* Name */}
             {item.name && (
               <h3 className="text-lg font-medium mb-2">
                 {highlightText(item.name, searchTerm)}
               </h3>
             )}
-
-            {/* Description */}
             {item.description && (
               <p className="text-sm text-neutral-600 mb-4">
                 {highlightText(item.description, searchTerm)}
               </p>
             )}
-
-            {/* Allergens */}
             <div className="flex flex-wrap gap-1 mb-4">
               {item.allergens?.map((allergen) => (
                 <Badge
@@ -5912,16 +5524,11 @@ export default function MenuPage() {
                 </Badge>
               ))}
             </div>
-
-            {/* Price */}
-            <div className="mt-auto font-medium text-lg">
-              ${item.price.toFixed(2)}
-            </div>
+            <div className="mt-auto font-medium text-lg">${item.price.toFixed(2)}</div>
           </div>
         ))}
       </div>
 
-      {/* Add Menu Item Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -5929,19 +5536,15 @@ export default function MenuPage() {
             <DialogDescription>Create a new menu item with details</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            {/* Name Field */}
             <div className="grid gap-2">
               <Label htmlFor="name">Name</Label>
               <Input
                 id="name"
                 value={newItem.name}
-                onChange={(e) =>
-                  setNewItem({ ...newItem, name: e.target.value })
-                }
+                onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
                 placeholder="Menu item name"
               />
             </div>
-            {/* Price Field */}
             <div className="grid gap-2">
               <Label htmlFor="price">Price</Label>
               <Input
@@ -5949,13 +5552,10 @@ export default function MenuPage() {
                 type="number"
                 step="0.01"
                 value={newItem.price}
-                onChange={(e) =>
-                  setNewItem({ ...newItem, price: e.target.value })
-                }
+                onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
                 placeholder="0.00"
               />
             </div>
-            {/* Category Selection */}
             <div className="grid gap-2">
               <Label>Category</Label>
               <Select
@@ -5976,7 +5576,6 @@ export default function MenuPage() {
                 </SelectContent>
               </Select>
             </div>
-            {/* Description Field */}
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
               <Input
@@ -5988,7 +5587,6 @@ export default function MenuPage() {
                 placeholder="Menu item description"
               />
             </div>
-            {/* Allergen Selection */}
             <div className="grid gap-2">
               <Label>Allergens</Label>
               <MultiSelect
@@ -6010,7 +5608,6 @@ export default function MenuPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Menu Item Dialog */}
       <Dialog
         open={editDialog.open}
         onOpenChange={(open) => !open && setEditDialog({ open: false, item: null })}
@@ -6023,31 +5620,24 @@ export default function MenuPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            {/* Name Field */}
             <div className="grid gap-2">
               <Label htmlFor="edit-name">Name</Label>
               <Input
                 id="edit-name"
                 value={editForm.name}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, name: e.target.value })
-                }
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                 placeholder="Menu item name"
               />
             </div>
-            {/* Description Field */}
             <div className="grid gap-2">
               <Label htmlFor="edit-description">Description</Label>
               <Input
                 id="edit-description"
                 value={editForm.description}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, description: e.target.value })
-                }
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                 placeholder="Menu item description"
               />
             </div>
-            {/* Price Field */}
             <div className="grid gap-2">
               <Label htmlFor="edit-price">Price</Label>
               <Input
@@ -6055,13 +5645,10 @@ export default function MenuPage() {
                 type="number"
                 step="0.01"
                 value={editForm.price}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, price: e.target.value })
-                }
+                onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
                 placeholder="0.00"
               />
             </div>
-            {/* Category Selection */}
             <div className="grid gap-2">
               <Label>Category</Label>
               <Select
@@ -6075,18 +5662,13 @@ export default function MenuPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((category) => (
-                    <SelectItem
-                      key={category.id}
-                      value={category.id}
-                      disabled={editForm.category_id === category.id}
-                    >
+                    <SelectItem key={category.id} value={category.id}>
                       {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            {/* Allergen Selection */}
             <div className="grid gap-2">
               <Label>Allergens</Label>
               <MultiSelect
@@ -6806,6 +6388,7 @@ import { cookies } from "next/headers";
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Toaster } from "@/components/ui/toaster";
 import "./global.css";
+import { Providers } from "./providers"; // <-- Import the Providers here
 
 const lato = Lato({
   subsets: ['latin'],
@@ -6870,14 +6453,17 @@ export default async function RootLayout({ children }: RootLayoutProps) {
     >
       <head />
       <body className="min-h-screen bg-background font-sans">
-        <main className="relative flex min-h-screen flex-col">
-          {children}
-        </main>
-        <Toaster />
+        <Providers>
+          <main className="relative flex min-h-screen flex-col">
+            {children}
+          </main>
+          <Toaster />
+        </Providers>
       </body>
     </html>
   );
 }
+
 ```
 
 ### app/page.tsx
@@ -6929,6 +6515,26 @@ export default async function HomePage() {
   // This return is technically unreachable but satisfies TypeScript
   return null;
 }
+```
+
+### app/providers.tsx
+
+```typescript
+"use client";
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React from "react";
+
+const queryClient = new QueryClient();
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  );
+}
+
 ```
 
 ### src/components/core/forms.tsx
@@ -10746,6 +10352,7 @@ export type Database = {
           updated_at?: string;
         };
       };
+
       menu_items: {
         Row: {
           id: string;
@@ -10781,6 +10388,7 @@ export type Database = {
           updated_at?: string;
         };
       };
+
       menu_item_allergens: {
         Row: {
           menu_item_id: string;
@@ -10797,6 +10405,7 @@ export type Database = {
           allergen_id?: string;
         };
       };
+
       allergens: {
         Row: {
           id: string;
@@ -10814,6 +10423,7 @@ export type Database = {
           updated_at?: string;
         };
       };
+
       menu_categories: {
         Row: {
           id: string;
@@ -10834,6 +10444,128 @@ export type Database = {
           updated_at?: string;
         };
       };
+
+      // ===== Added daily_menus and daily_menu_items Tables =====
+      daily_menus: {
+  Row: {
+    id: string;
+    date: string;
+    repeat_pattern: "none" | "weekly" | "monthly";
+    active: boolean;
+    scheduled_for: string;
+    created_at: string;
+    daily_menu_items?: {
+      id: string;
+      course_name: string;
+      course_type: "first" | "second";
+      display_order: number;
+      daily_menu_id: string;
+    }[];
+  };
+  Insert: {
+    date: string;
+    repeat_pattern?: "none" | "weekly" | "monthly";
+    active?: boolean;
+    scheduled_for: string;
+    created_at?: string;
+  };
+  Update: {
+    date?: string;
+    repeat_pattern?: "none" | "weekly" | "monthly";
+    active?: boolean;
+    scheduled_for?: string;
+  };
+};
+
+      daily_menu_items: {
+        Row: {
+          id: string;
+          course_name: string;
+          course_type: "first" | "second";
+          display_order: number;
+          daily_menu_id: string;
+        };
+        Insert: {
+          course_name: string;
+          course_type: "first" | "second";
+          display_order: number;
+          daily_menu_id: string;
+        };
+        Update: {
+          course_name?: string;
+          course_type?: "first" | "second";
+          display_order?: number;
+          daily_menu_id?: string;
+        };
+      };
+
+      // ===== New Tables for Wines =====
+      wines: {
+        Row: {
+          id: number;
+          name: string;
+          description: string;
+          bottle_price: number;
+          glass_price: number | null;
+          active: boolean;
+          created_at: string;
+          image_path: string | null;
+          image_url: string | null;
+        };
+        Insert: {
+          name: string;
+          description?: string;
+          bottle_price: number;
+          glass_price?: number | null;
+          active?: boolean;
+          created_at?: string;
+          image_path?: string | null;
+          image_url?: string | null;
+        };
+        Update: {
+          name?: string;
+          description?: string;
+          bottle_price?: number;
+          glass_price?: number | null;
+          active?: boolean;
+          image_path?: string | null;
+          image_url?: string | null;
+        };
+      };
+
+      wine_categories: {
+        Row: {
+          id: number;
+          name: string;
+          display_order: number;
+          created_at: string;
+        };
+        Insert: {
+          name: string;
+          display_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          display_order?: number;
+        };
+      };
+
+      wine_category_assignments: {
+        Row: {
+          wine_id: number;
+          category_id: number;
+        };
+        Insert: {
+          wine_id: number;
+          category_id: number;
+        };
+        Update: {
+          wine_id?: number;
+          category_id?: number;
+        };
+      };
+      // ===== End of New Tables =====
     };
     Views: {
       [_ in never]: never;
@@ -10954,7 +10686,6 @@ export type TableColumn<T> = {
   field: keyof T;
   render?: (value: T[keyof T], item: T) => ReactNode;
 };
-
 
 export type ImageUploadState = {
   file: File | null;
@@ -11236,12 +10967,8 @@ export const STATUS_CODES = {
 
 export type StatusCode = typeof STATUS_CODES[keyof typeof STATUS_CODES];
 
-// **Renamed ValidationError Class to ValidationException**
 export class ValidationException extends Error {
-  constructor(
-    message: string,
-    public errors: ValidationError[]
-  ) {
+  constructor(message: string, public errors: ValidationError[]) {
     super(message);
     this.name = 'ValidationException';
     Object.setPrototypeOf(this, ValidationException.prototype);
@@ -11249,11 +10976,7 @@ export class ValidationException extends Error {
 }
 
 export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-    public code?: string
-  ) {
+  constructor(message: string, public status: number, public code?: string) {
     super(message);
     this.name = 'ApiError';
     Object.setPrototypeOf(this, ApiError.prototype);
@@ -11261,9 +10984,7 @@ export class ApiError extends Error {
 }
 
 // Utility Functions
-export function createFormControl(
-  initialValue: unknown = '',
-): FormControl {
+export function createFormControl(initialValue: unknown = ''): FormControl {
   return {
     value: initialValue,
     error: null,
