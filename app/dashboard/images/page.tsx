@@ -1,42 +1,41 @@
 "use client";
 import React, { useState } from "react";
+import dynamic from "next/dynamic";
 import { useDropzone } from "react-dropzone";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Upload, Trash2, FolderIcon, AlertCircle, Edit2 } from "lucide-react";
 import Image from "next/image";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
 import { Database } from "@/types";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/core/layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+
+// Dynamic imports for dialog and select components
+const Dialog = dynamic(() => import("@/components/ui/dialog").then(mod => mod.Dialog));
+const DialogContent = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogContent));
+const DialogDescription = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogDescription));
+const DialogFooter = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogFooter));
+const DialogHeader = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogHeader));
+const DialogTitle = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogTitle));
+
+const AlertDialog = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialog));
+const AlertDialogAction = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogAction));
+const AlertDialogCancel = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogCancel));
+const AlertDialogContent = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogContent));
+const AlertDialogDescription = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogDescription));
+const AlertDialogFooter = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogFooter));
+const AlertDialogHeader = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogHeader));
+const AlertDialogTitle = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogTitle));
+
+const Select = dynamic(() => import("@/components/ui/select").then(mod => mod.Select));
+const SelectContent = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectContent));
+const SelectItem = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectItem));
+const SelectTrigger = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectTrigger));
+const SelectValue = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectValue));
 
 const CATEGORIES = [
   "arroces",
