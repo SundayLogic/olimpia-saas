@@ -1,19 +1,13 @@
 "use client";
-import React, { useState, useMemo, useRef } from "react";
+
+import React, { useState, useMemo,  useRef, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Image from "next/image";
 import { Plus, Image as ImageIcon, Edit, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Database } from "@/types";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import type { Database } from "@/types";
+import dynamic from "next/dynamic";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -27,6 +21,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+
+// Dynamically import Dialog components
+const Dialog = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.Dialog));
+const DialogContent = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogContent));
+const DialogDescription = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogDescription));
+const DialogFooter = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogFooter));
+const DialogHeader = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogHeader));
+const DialogTitle = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogTitle));
 
 interface WineCategory {
   id: number;
@@ -70,65 +72,21 @@ interface EditFormData {
   category_ids: number[];
 }
 
-async function fetchCategories(supabase: ReturnType<typeof createClientComponentClient<Database>>) {
-  const { data, error } = await supabase
-    .from("wine_categories")
-    .select("*")
-    .order("display_order");
-  if (error) throw error;
-  return data as WineCategory[];
-}
-
-async function fetchWines(supabase: ReturnType<typeof createClientComponentClient<Database>>) {
-  const { data, error } = await supabase
-    .from("wines")
-    .select(`*, wine_category_assignments ( wine_categories ( id, name, display_order ) )`)
-    .order("name");
-  if (error) throw error;
-
-  type WineResponse = {
-    id: number;
-    name: string;
-    description: string;
-    bottle_price: number;
-    glass_price: number;
-    active: boolean;
-    created_at: string;
-    wine_category_assignments: {
-      wine_categories: WineCategory[];
-    }[];
-    image_path?: string;
-    image_url?: string;
-  };
-
-  const rawWines = data as WineResponse[];
-  return rawWines.map((wine) => ({
-    id: wine.id,
-    name: wine.name,
-    description: wine.description,
-    bottle_price: wine.bottle_price,
-    glass_price: wine.glass_price,
-    active: wine.active,
-    created_at: wine.created_at,
-    categories: wine.wine_category_assignments.flatMap((a) => a.wine_categories),
-    image_path: wine.image_path || "wines/wine.webp",
-    image_url:
-      wine.image_url ||
-      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`,
-  })) as Wine[];
-}
-
-function highlightText(text: string, searchTerm: string) {
-  if (!searchTerm.trim()) return text;
-  const regex = new RegExp(`(${searchTerm})`, "gi");
-  return text.split(regex).map((part, index) =>
-    regex.test(part) ? (
-      <span key={index} className="bg-orange-500 text-white">
-        {part}
+// Simplified highlight without regex
+function highlightText(text: string, term: string) {
+  if (!term.trim()) return text;
+  const lowerTerm = term.toLowerCase();
+  const lowerText = text.toLowerCase();
+  const index = lowerText.indexOf(lowerTerm);
+  if (index === -1) return text;
+  return (
+    <>
+      {text.slice(0, index)}
+      <span className="bg-orange-500 text-white">
+        {text.slice(index, index + term.length)}
       </span>
-    ) : (
-      part
-    )
+      {text.slice(index + term.length)}
+    </>
   );
 }
 
@@ -192,6 +150,56 @@ const WineCard = ({
   </div>
 );
 
+async function fetchCategories(supabase: ReturnType<typeof createClientComponentClient<Database>>) {
+  const { data, error } = await supabase
+    .from("wine_categories")
+    .select("id,name,display_order")
+    .order("display_order");
+  if (error) throw error;
+  return data as WineCategory[];
+}
+
+async function fetchWines(supabase: ReturnType<typeof createClientComponentClient<Database>>) {
+  // Reduced select columns if possible. If all are needed, keep them as is.
+  const { data, error } = await supabase
+    .from("wines")
+    .select(`id,name,description,bottle_price,glass_price,active,created_at,image_path,image_url,
+      wine_category_assignments ( wine_categories ( id, name, display_order ) )`)
+    .order("name");
+  if (error) throw error;
+
+  type WineResponse = {
+    id: number;
+    name: string;
+    description: string;
+    bottle_price: number;
+    glass_price: number;
+    active: boolean;
+    created_at: string;
+    image_path?: string;
+    image_url?: string;
+    wine_category_assignments: {
+      wine_categories: WineCategory[];
+    }[];
+  };
+
+  const rawWines = data as WineResponse[];
+  return rawWines.map((wine) => ({
+    id: wine.id,
+    name: wine.name,
+    description: wine.description,
+    bottle_price: wine.bottle_price,
+    glass_price: wine.glass_price,
+    active: wine.active,
+    created_at: wine.created_at,
+    categories: wine.wine_category_assignments.flatMap((a) => a.wine_categories),
+    image_path: wine.image_path || "wines/wine.webp",
+    image_url:
+      wine.image_url ||
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`,
+  })) as Wine[];
+}
+
 export default function WinePage() {
   const supabase = createClientComponentClient<Database>();
   const queryClient = useQueryClient();
@@ -226,9 +234,18 @@ export default function WinePage() {
   });
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [sortBy, setSortBy] = useState<"name" | "price">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  // Debounce search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchTerm(localSearchTerm);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [localSearchTerm]);
 
   const {
     data: categories = [],
@@ -302,7 +319,10 @@ export default function WinePage() {
         .select("*")
         .single();
       if (wineError) throw wineError;
-      const { error: deleteError } = await supabase.from("wine_category_assignments").delete().eq("wine_id", wineId);
+      const { error: deleteError } = await supabase
+        .from("wine_category_assignments")
+        .delete()
+        .eq("wine_id", wineId);
       if (deleteError) throw deleteError;
       if (form.category_ids.length > 0) {
         const assignments = form.category_ids.map((categoryId) => ({ wine_id: wineId, category_id: categoryId }));
@@ -358,19 +378,6 @@ export default function WinePage() {
     },
   });
 
-  const filteredAndSortedWines = useMemo(() => {
-    let filtered = wines;
-    if (searchTerm.trim()) {
-      const s = searchTerm.toLowerCase();
-      filtered = filtered.filter((wine) => wine.name.toLowerCase().includes(s) || wine.description.toLowerCase().includes(s));
-    }
-    if (selectedFilter !== "all") filtered = filtered.filter((wine) => wine.categories.some((cat) => cat.id.toString() === selectedFilter));
-    return [...filtered].sort((a, b) => {
-      if (sortBy === "name") return sortOrder === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-      return sortOrder === "asc" ? a.bottle_price - b.bottle_price : b.bottle_price - a.bottle_price;
-    });
-  }, [wines, selectedFilter, sortBy, sortOrder, searchTerm]);
-
   const handleCreateWine = () => createWineMutation.mutate(newWine);
   const handleEdit = (wine: Wine) => {
     setEditForm({
@@ -382,61 +389,107 @@ export default function WinePage() {
     });
     setEditDialog({ open: true, wine });
   };
-  const handleSaveEdit = () => { if (editDialog.wine) updateWineMutation.mutate({ wineId: editDialog.wine.id, form: editForm }); };
+  const handleSaveEdit = () => {
+    if (editDialog.wine) updateWineMutation.mutate({ wineId: editDialog.wine.id, form: editForm });
+  };
   const toggleWineStatus = (id: number, currentStatus: boolean) => toggleWineStatusMutation.mutate({ wineId: id, currentStatus });
-  const handleSelectImage = (wineId: number) => { setSelectedWineId(wineId); setIsImageDialogOpen(true); fileInputRef.current?.click(); };
+  const handleSelectImage = (wineId: number) => {
+    setSelectedWineId(wineId);
+    setIsImageDialogOpen(true);
+    fileInputRef.current?.click();
+  };
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedWineId) { toast({ title: "Error", description: "No file selected", variant: "destructive" }); return; }
     uploadImageMutation.mutate({ file, wineId: selectedWineId });
   };
 
+  const filteredAndSortedWines = useMemo(() => {
+    let filtered = wines;
+    const s = searchTerm.toLowerCase().trim();
+    if (s) {
+      filtered = filtered.filter((wine) => wine.name.toLowerCase().includes(s) || wine.description.toLowerCase().includes(s));
+    }
+    if (selectedFilter !== "all") filtered = filtered.filter((wine) => wine.categories.some((cat) => cat.id.toString() === selectedFilter));
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "name") return sortOrder === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+      return sortOrder === "asc" ? a.bottle_price - b.bottle_price : b.bottle_price - a.bottle_price;
+    });
+  }, [wines, selectedFilter, sortBy, sortOrder, searchTerm]);
+
   if (isLoading)
-    return <div className="flex items-center justify-center h-[200px]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"/></div>;
+    return (
+      <div className="flex items-center justify-center h-[200px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
   if (error)
-    return <div className="container p-6"><Alert variant="destructive"><AlertDescription>Failed to load wines or categories.</AlertDescription></Alert></div>;
+    return (
+      <div className="container p-6">
+        <Alert variant="destructive">
+          <AlertDescription>Failed to load wines or categories.</AlertDescription>
+        </Alert>
+      </div>
+    );
   if (!wines.length)
-    return <div className="container p-6"><Alert><AlertDescription>No wines found. Add one to get started.</AlertDescription></Alert><div className="mt-4"><Button onClick={()=>setIsDialogOpen(true)}><Plus className="mr-2 h-4 w-4"/>Add Wine</Button></div></div>;
+    return (
+      <div className="container p-6">
+        <Alert>
+          <AlertDescription>No wines found. Add one to get started.</AlertDescription>
+        </Alert>
+        <div className="mt-4">
+          <Button onClick={() => setIsDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Wine
+          </Button>
+        </div>
+      </div>
+    );
 
   return (
     <div className="container p-6">
       <PageHeader heading="Wine List" text="Manage your restaurant's wine selection">
-        <Button onClick={()=>setIsDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4"/>Add Wine
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Wine
         </Button>
       </PageHeader>
 
       <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="relative w-full md:w-[300px]">
-            <Input type="text" placeholder="Search wines..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-10"/>
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"/>
-          </div>
-
-          <Select value={selectedFilter} onValueChange={setSelectedFilter}>
-            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filter by Category"/></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map(c=><SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-
-          <Select value={sortBy} onValueChange={(val:"name"|"price")=>setSortBy(val)}>
-            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Sort by"/></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="name">Name</SelectItem>
-              <SelectItem value="price">Price</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button variant="outline" size="icon" onClick={()=>setSortOrder(o=>o==="asc"?"desc":"asc")} aria-label={`Sort order: ${sortOrder==="asc"?"Ascending":"Descending"}`}>
-            {sortOrder==="asc"?"↑":"↓"}
-          </Button>
+        <div className="relative w-full md:w-[300px]">
+          <Input
+            type="text"
+            placeholder="Search wines..."
+            value={localSearchTerm}
+            onChange={(e) => setLocalSearchTerm(e.target.value)}
+            className="w-full pl-10"
+          />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"/>
         </div>
+
+        <Select value={selectedFilter} onValueChange={setSelectedFilter}>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filter by Category"/></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            {categories.map(c=><SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+
+        <Select value={sortBy} onValueChange={(val:"name"|"price")=>setSortBy(val)}>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Sort by"/></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="name">Name</SelectItem>
+            <SelectItem value="price">Price</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Button variant="outline" size="icon" onClick={()=>setSortOrder(o=>o==="asc"?"desc":"asc")} aria-label={`Sort order: ${sortOrder==="asc"?"Ascending":"Descending"}`}>
+          {sortOrder==="asc"?"↑":"↓"}
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
-        {filteredAndSortedWines.map(wine=><WineCard key={wine.id} wine={wine} searchTerm={searchTerm} handleEdit={handleEdit}/>)}
+      <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+        {filteredAndSortedWines.map(wine => <WineCard key={wine.id} wine={wine} searchTerm={searchTerm} handleEdit={handleEdit}/>)}
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -465,7 +518,6 @@ export default function WinePage() {
                   ))}
                 </SelectContent>
               </Select>
-
               <div className="flex flex-wrap gap-2 mt-2">
                 {newWine.category_ids.map(categoryId=>{
                   const c=categories.find(ct=>ct.id===categoryId);
