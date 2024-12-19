@@ -2,67 +2,64 @@ import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.warn('Supabase environment variables not found');
+}
+
 export async function middleware(request: NextRequest) {
   const res = NextResponse.next();
   const { pathname } = request.nextUrl;
 
-  // Quickly skip middleware for public routes and static files
+  // Early exit for public assets and routes that don't need auth
   if (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/api/auth') ||
     pathname.includes('/_not-found') ||
     pathname.includes('/_error') ||
-    pathname.startsWith('/public') ||
-    pathname.endsWith('favicon.ico')
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api/auth')
   ) {
     return res;
   }
 
+  // If we are on login or signup and no session is needed yet:
+  if ((pathname === '/login' || pathname === '/signup') && (!SUPABASE_URL || !SUPABASE_ANON_KEY)) {
+    // If environment variables are not set, just proceed
+    return res;
+  }
+
   const supabase = createMiddlewareClient({ req: request, res });
+  const { data: { session } } = await supabase.auth.getSession();
 
-  // Get session once for all checks
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  // Auth routes: If user is logged in, redirect away from login/signup
-  if (pathname === '/login' || pathname === '/signup') {
+  // Check login/signup routes
+  if ((pathname === '/login' || pathname === '/signup')) {
     if (session) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
     return res;
   }
 
-  // Protected routes: Require session
-  if (pathname === '/' || pathname.startsWith('/dashboard')) {
+  // Protect dashboard and root route
+  if (pathname.startsWith('/dashboard') || pathname === '/') {
     if (!session) {
       const loginUrl = new URL('/login', request.url);
       loginUrl.searchParams.set('redirectTo', pathname);
       return NextResponse.redirect(loginUrl);
     }
 
-    // Admin-only routes
-    if (
-      pathname.startsWith('/dashboard/users') ||
-      pathname.startsWith('/dashboard/settings')
-    ) {
-      // We already have session, so we can trust `session.user` directly
-      const userId = session.user?.id;
-      if (!userId) {
-        return NextResponse.redirect(new URL('/login', request.url));
-      }
+    // Admin check for certain routes:
+    if (pathname.startsWith('/dashboard/users') || pathname.startsWith('/dashboard/settings')) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return NextResponse.redirect(new URL('/login', request.url));
 
-      try {
-        const { data: profile, error: profileError } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', userId)
-          .single();
+      const { data: profile } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
 
-        if (profileError || profile?.role !== 'admin') {
-          return NextResponse.redirect(new URL('/dashboard', request.url));
-        }
-      } catch {
+      if (profile?.role !== 'admin') {
         return NextResponse.redirect(new URL('/dashboard', request.url));
       }
     }
