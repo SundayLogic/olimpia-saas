@@ -1,76 +1,37 @@
-"use client";
+// Remove "use client"; we'll do server-side fetching
+import { cookies } from "next/headers";
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import type { Database } from "@/types";
+import { Card, PageHeader } from "@/components/core/layout";
+import { ClipboardList, Users, TrendingUp, Calendar } from "lucide-react";
 
-import { useState, useEffect } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Card } from "@/components/core/layout";
-import { PageHeader } from "@/components/core/layout";
-import {
-  ClipboardList,
-  Users,
-  TrendingUp,
-  Calendar,
-} from "lucide-react";
+export const dynamic = 'force-dynamic'; // If needed due to session
+export const revalidate = 60; // Revalidate every 60s if acceptable
 
-type DashboardStats = {
-  total_menu_items: number;
-  total_users: number;
-  daily_menus_active: number;
-  total_wine_items: number;
-};
+export default async function DashboardPage() {
+  const supabase = createServerComponentClient<Database>({ cookies });
 
-export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>({
-    total_menu_items: 0,
-    total_users: 0,
-    daily_menus_active: 0,
-    total_wine_items: 0,
-  });
-  const [isLoading, setIsLoading] = useState(true);
+  // Run queries in parallel
+  const [
+    { count: menuCount },
+    { count: usersCount },
+    { count: activeMenusCount },
+    { count: wineCount }
+  ] = await Promise.all([
+    supabase.from('menu_items').select('id', { count: 'exact', head: true }),
+    supabase.from('users').select('id', { count: 'exact', head: true }),
+    supabase.from('daily_menus').select('id', { count: 'exact', head: true }).eq('active', true),
+    supabase.from('wines').select('id', { count: 'exact', head: true }),
+  ]);
 
-  const supabase = createClientComponentClient();
+  const stats = {
+    total_menu_items: menuCount || 0,
+    total_users: usersCount || 0,
+    daily_menus_active: activeMenusCount || 0,
+    total_wine_items: wineCount || 0,
+  };
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        setIsLoading(true);
-
-        // Fetch menu items count
-        const { count: menuCount } = await supabase
-          .from('menu_items')
-          .select('*', { count: 'exact', head: true });
-
-        // Fetch users count
-        const { count: usersCount } = await supabase
-          .from('users')
-          .select('*', { count: 'exact', head: true });
-
-        // Fetch active daily menus
-        const { count: activeMenusCount } = await supabase
-          .from('daily_menus')
-          .select('*', { count: 'exact', head: true })
-          .eq('active', true);
-
-        // Fetch wine items count
-        const { count: wineCount } = await supabase
-          .from('wines')
-          .select('*', { count: 'exact', head: true });
-
-        setStats({
-          total_menu_items: menuCount || 0,
-          total_users: usersCount || 0,
-          daily_menus_active: activeMenusCount || 0,
-          total_wine_items: wineCount || 0,
-        });
-      } catch (error) {
-        console.error('Error fetching dashboard stats:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchStats();
-  }, [supabase]);
-
+  // No isLoading state needed, data is ready at render time
   return (
     <div className="p-6">
       <PageHeader
@@ -86,9 +47,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Menu Items</p>
-              <h3 className="text-2xl font-bold">
-                {isLoading ? "..." : stats.total_menu_items}
-              </h3>
+              <h3 className="text-2xl font-bold">{stats.total_menu_items}</h3>
             </div>
           </div>
         </Card>
@@ -100,9 +59,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Active Menus</p>
-              <h3 className="text-2xl font-bold">
-                {isLoading ? "..." : stats.daily_menus_active}
-              </h3>
+              <h3 className="text-2xl font-bold">{stats.daily_menus_active}</h3>
             </div>
           </div>
         </Card>
@@ -114,9 +71,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Wine Selection</p>
-              <h3 className="text-2xl font-bold">
-                {isLoading ? "..." : stats.total_wine_items}
-              </h3>
+              <h3 className="text-2xl font-bold">{stats.total_wine_items}</h3>
             </div>
           </div>
         </Card>
@@ -128,9 +83,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Total Users</p>
-              <h3 className="text-2xl font-bold">
-                {isLoading ? "..." : stats.total_users}
-              </h3>
+              <h3 className="text-2xl font-bold">{stats.total_users}</h3>
             </div>
           </div>
         </Card>
