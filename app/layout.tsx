@@ -1,10 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Lato } from "next/font/google";
-import { cookies } from "next/headers";
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Providers } from "./providers"; 
 import { Toaster } from "@/components/ui/toaster";
-import "./global.css";
-import { Providers } from "./providers"; // <-- Import the Providers here
+import "./global.css"; // Tailwind & global styles
 
 const lato = Lato({
   subsets: ['latin'],
@@ -51,15 +49,7 @@ interface RootLayoutProps {
 }
 
 export default async function RootLayout({ children }: RootLayoutProps) {
-  // Initialize the Supabase client
-  const supabase = createServerComponentClient({ cookies });
-
-  try {
-    // Check if we have a session
-    await supabase.auth.getSession();
-  } catch (error) {
-    console.error('Error fetching session:', error);
-  }
+  // Removed supabase session fetch since layout doesn’t seem to need it.
 
   return (
     <html 
@@ -73,6 +63,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
           <main className="relative flex min-h-screen flex-col">
             {children}
           </main>
+          {/* If Toaster is always needed, keep it. Otherwise, consider moving it into specific pages */}
           <Toaster />
         </Providers>
       </body>
