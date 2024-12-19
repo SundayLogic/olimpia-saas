@@ -1,5 +1,7 @@
 "use client";
+
 import { useState, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Plus, Search, Eye, Trash2, Calendar } from "lucide-react";
 import { format } from "date-fns";
@@ -10,14 +12,24 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/core/layout";
 import { useRouter } from "next/navigation";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
-} from "@/components/ui/select";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
-} from "@/components/ui/alert-dialog";
 
+// Dynamic Imports
+const AlertDialog = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialog));
+const AlertDialogContent = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogContent));
+const AlertDialogHeader = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogHeader));
+const AlertDialogTitle = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogTitle));
+const AlertDialogDescription = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogDescription));
+const AlertDialogFooter = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogFooter));
+const AlertDialogCancel = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogCancel));
+const AlertDialogAction = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogAction));
+
+const Select = dynamic(() => import("@/components/ui/select").then(mod => mod.Select));
+const SelectContent = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectContent));
+const SelectItem = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectItem));
+const SelectTrigger = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectTrigger));
+const SelectValue = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectValue));
+
+// Types
 type FilterOptions = { status:"all"|"published"|"draft"; author:string; sortBy:"newest"|"oldest"|"title"; };
 type ContentNode = { type:string; content?:{type:string; text?:string;}[] };
 type BlogContent = { type:string; content:ContentNode[] };
@@ -64,6 +76,8 @@ export default function BlogPage() {
 
   const getUniqueAuthors=():string[]=>
     Array.from(new Set(posts.flatMap(p=>p.author_info?.[0]?[(p.author_info[0].name||p.author_info[0].email)!]:[])));
+
+  const uniqueAuthors=useMemo(()=>getUniqueAuthors(),[posts]);
 
   useEffect(()=>{
     (async()=>{
@@ -162,7 +176,7 @@ export default function BlogPage() {
           <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filter by Author"/></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Authors</SelectItem>
-            {getUniqueAuthors().map(a=><SelectItem key={a} value={a}>{a}</SelectItem>)}
+            {uniqueAuthors.map(a=><SelectItem key={a} value={a}>{a}</SelectItem>)}
           </SelectContent>
         </Select>
 
@@ -260,7 +274,7 @@ export default function BlogPage() {
           </div>
           <div className="p-4 border rounded-md">
             <div className="text-sm text-muted-foreground">Authors</div>
-            <div className="text-2xl font-bold">{getUniqueAuthors().length}</div>
+            <div className="text-2xl font-bold">{uniqueAuthors.length}</div>
           </div>
         </div>
       </div>
