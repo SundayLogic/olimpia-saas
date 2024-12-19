@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -8,7 +9,10 @@ import * as z from "zod";
 import slugify from "slugify";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { useEditor, EditorContent, BubbleMenu } from "@tiptap/react";
+import dynamic from "next/dynamic";
+import { useEditor } from "@tiptap/react"; // Regular import for useEditor
+import { EditorView } from "@tiptap/pm/view";
+
 import StarterKit from "@tiptap/starter-kit";
 import ImageExt from "@tiptap/extension-image";
 import LinkExt from "@tiptap/extension-link";
@@ -25,6 +29,10 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
+// Dynamic imports for tiptap components
+const EditorContent = dynamic(() => import("@tiptap/react").then(mod => mod.EditorContent), { ssr: false });
+const BubbleMenu = dynamic(() => import("@tiptap/react").then(mod => mod.BubbleMenu), { ssr: false });
+
 type BlogStatus = "draft"|"published"|"scheduled";
 type AutoSaveState = { lastSaved:Date|null; saving:boolean; error:string|null; };
 
@@ -39,7 +47,9 @@ const schema = z.object({
 type FormData=z.infer<typeof schema>;
 
 export default function Page() {
-  const params=useParams();const router=useRouter();const {toast}=useToast();
+  const params=useParams();
+  const router=useRouter();
+  const {toast}=useToast();
   const supabase=createClientComponentClient();
   const [isLoading,setIsLoading]=useState(false);
   const [isPreview,setIsPreview]=useState(false);
@@ -58,6 +68,11 @@ export default function Page() {
       tags:[]
     },
   });
+
+  const status = form.watch("status");
+  const publishedAt = form.watch("published_at");
+  const metaDescription = form.watch("meta_description") || "";
+  const tags = form.watch("tags");
 
   const autoSavePost=useCallback(async(data:FormData)=>{
     if(!isNew&&isEditorReady){
@@ -80,7 +95,12 @@ export default function Page() {
     content:form.watch("content"),
     editorProps:{
       attributes:{class:"prose prose-lg max-w-none focus:outline-none [&_*]:outline-none",spellcheck:"false"},
-      handleDOMEvents:{focus:(_view,ev)=>(ev.preventDefault(),false)},
+      handleDOMEvents:{
+        focus:(view: EditorView, ev: Event)=>{
+          ev.preventDefault();
+          return false;
+        }
+      },
     },
     onUpdate:({editor:e})=>{
       if(!isPreview){
@@ -197,7 +217,7 @@ export default function Page() {
             ):(
               <div className="min-h-[300px]">
                 <div className="relative">
-                  <EditorContent editor={editor} className={cn("prose prose-lg max-w-none","[&_.ProseMirror]:min-h-[300px]","[&_.ProseMirror]:outline-none","[&_.ProseMirror_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]","[&_.ProseMirror_p.is-editor-empty:first-child]:before:text-muted-foreground/60","[&_.ProseMirror_p.is-editor-empty:first-child]:before:float-left","[&_.ProseMirror_p.is-editor-empty:first-child]:before:pointer-events-none","[&_.ProseMirror_::selection]:bg-primary/10","[&_.ProseMirror-selectednode]:outline-none","[&_.ProseMirror_h1]:text-3xl","[&_.ProseMirror_h2]:text-2xl","[&_.ProseMirror_h3]:text-xl","[&_.ProseMirror_h1,h2,h3,h4,h5,h6]:font-bold","[&_.ProseMirror_blockquote]:border-l-4","[&_.ProseMirror_blockquote]:border-muted","[&_.ProseMirror_blockquote]:pl-4","[&_.ProseMirror_blockquote]:italic","[&_.ProseMirror_pre]:bg-muted","[&_.ProseMirror_pre]:p-4","[&_.ProseMirror_pre]:rounded-md","[&_.ProseMirror_pre]:font-mono","[&_.ProseMirror_pre]:text-sm","[&_.ProseMirror_code]:bg-muted","[&_.ProseMirror_code]:px-1.5","[&_.ProseMirror_code]:py-0.5","[&_.ProseMirror_code]:rounded-sm","[&_.ProseMirror_code]:font-mono","[&_.ProseMirror_code]:text-sm","[&_.ProseMirror_img]:rounded-md","[&_.ProseMirror_img]:max-w-full","[&_.ProseMirror_img]:h-auto","[&_.ProseMirror_a]:text-primary","[&_.ProseMirror_a]:underline","[&_.ProseMirror_a:hover]:text-primary/80",isPreview?"pointer-events-none opacity-70":"")}/>
+                  {editor && <EditorContent editor={editor} className={cn("prose prose-lg max-w-none","[&_.ProseMirror]:min-h-[300px]","[&_.ProseMirror]:outline-none","[&_.ProseMirror_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]","[&_.ProseMirror_p.is-editor-empty:first-child]:before:text-muted-foreground/60","[&_.ProseMirror_p.is-editor-empty:first-child]:before:float-left","[&_.ProseMirror_p.is-editor-empty:first-child]:before:pointer-events-none","[&_.ProseMirror_::selection]:bg-primary/10","[&_.ProseMirror-selectednode]:outline-none","[&_.ProseMirror_h1]:text-3xl","[&_.ProseMirror_h2]:text-2xl","[&_.ProseMirror_h3]:text-xl","[&_.ProseMirror_h1,h2,h3,h4,h5,h6]:font-bold","[&_.ProseMirror_blockquote]:border-l-4","[&_.ProseMirror_blockquote]:border-muted","[&_.ProseMirror_blockquote]:pl-4","[&_.ProseMirror_blockquote]:italic","[&_.ProseMirror_pre]:bg-muted","[&_.ProseMirror_pre]:p-4","[&_.ProseMirror_pre]:rounded-md","[&_.ProseMirror_pre]:font-mono","[&_.ProseMirror_pre]:text-sm","[&_.ProseMirror_code]:bg-muted","[&_.ProseMirror_code]:px-1.5","[&_.ProseMirror_code]:py-0.5","[&_.ProseMirror_code]:rounded-sm","[&_.ProseMirror_code]:font-mono","[&_.ProseMirror_code]:text-sm","[&_.ProseMirror_img]:rounded-md","[&_.ProseMirror_img]:max-w-full","[&_.ProseMirror_img]:h-auto","[&_.ProseMirror_a]:text-primary","[&_.ProseMirror_a]:underline","[&_.ProseMirror_a:hover]:text-primary/80",isPreview?"pointer-events-none opacity-70":"")} />}
                   {editor&&!isPreview&&(
                     <BubbleMenu editor={editor} tippyOptions={{duration:100}} className="flex items-center space-x-1 rounded-lg bg-background shadow-lg border p-1">
                       <Button variant="ghost" size="sm" onClick={()=>editor.chain().focus().toggleBold().run()} className={cn("hover:bg-accent/50",editor.isActive("bold")?"bg-accent":"")} aria-label="Bold"><Bold className="h-4 w-4"/></Button>
@@ -220,7 +240,7 @@ export default function Page() {
             <div className="p-4 space-y-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Status</label>
-                <Select value={form.watch("status")} onValueChange={v=>form.setValue("status",v as BlogStatus)}>
+                <Select value={status} onValueChange={v=>form.setValue("status",v as BlogStatus)}>
                   <SelectTrigger><SelectValue placeholder="Select status"/></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="draft">Draft</SelectItem>
@@ -229,19 +249,19 @@ export default function Page() {
                   </SelectContent>
                 </Select>
               </div>
-              {form.watch("status")==="scheduled"&&(
+              {status==="scheduled"&&(
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Publish Date</label>
-                  <Input type="datetime-local" value={form.watch("published_at")||""} onChange={e=>form.setValue("published_at",e.target.value)} disabled={isPreview}/>
+                  <Input type="datetime-local" value={publishedAt||""} onChange={e=>form.setValue("published_at",e.target.value)} disabled={isPreview}/>
                 </div>
               )}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Meta Description</label>
-                <Textarea value={form.watch("meta_description")||""} onChange={e=>form.setValue("meta_description",e.target.value)} placeholder="Enter SEO description..." className="h-20" disabled={isPreview}/>
+                <Textarea value={metaDescription} onChange={e=>form.setValue("meta_description",e.target.value)} placeholder="Enter SEO description..." className="h-20" disabled={isPreview}/>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Tags</label>
-                <Select value={form.watch("tags").join(",")} onValueChange={v=>form.setValue("tags",v.split(",").filter(Boolean))}>
+                <Select value={tags.join(",")} onValueChange={v=>form.setValue("tags",v.split(",").filter(Boolean))}>
                   <SelectTrigger><SelectValue placeholder="Select tags"/></SelectTrigger>
                   <SelectContent>
                     {["tech","food","travel","lifestyle"].map(tag=><SelectItem key={tag} value={tag}>{tag.charAt(0).toUpperCase()+tag.slice(1)}</SelectItem>)}
@@ -261,11 +281,11 @@ export default function Page() {
         <div className="flex items-center space-x-4">
           <Button variant="outline" onClick={()=>router.push("/dashboard/blog")} disabled={isLoading||autoSave.saving}>Cancel</Button>
           <Button onClick={form.handleSubmit(onSubmit)} disabled={isLoading||autoSave.saving}>
-            {isLoading?(<><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Saving...</>):form.watch("status")==="published"?"Publish":form.watch("status")==="scheduled"?"Schedule":"Save Draft"}
+            {isLoading?(<><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Saving...</>):status==="published"?"Publish":status==="scheduled"?"Schedule":"Save Draft"}
           </Button>
         </div>
       </div>
-      {form.watch("status")==="scheduled"&&!form.watch("published_at")&&(
+      {status==="scheduled"&&!publishedAt&&(
         <div className="border-t bg-yellow-50 dark:bg-yellow-900/10 p-2 text-center">
           <span className="text-sm text-yellow-800 dark:text-yellow-200">Please select a publication date for scheduled posts</span>
         </div>
