@@ -21,7 +21,6 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 
-// Types for MultiSelect props
 type Allergen = { id: string; name: string };
 type MultiSelectProps = {
   options: Allergen[];
@@ -30,22 +29,14 @@ type MultiSelectProps = {
   placeholder?: string;
 };
 
-// Import MultiSelect as a named export, not default
+// Dynamic imports
 const Dialog = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.Dialog));
-const DialogContent = dynamic(() =>
-  import("@/components/ui/dialog").then((mod) => mod.DialogContent)
-);
-const DialogDescription = dynamic(() =>
-  import("@/components/ui/dialog").then((mod) => mod.DialogDescription)
-);
+const DialogContent = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogContent));
+const DialogDescription = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogDescription));
 const DialogFooter = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogFooter));
 const DialogHeader = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogHeader));
 const DialogTitle = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogTitle));
-
-// Here we assume MultiSelect is a named export { MultiSelect } from ui/multi-select
-const MultiSelect = dynamic<MultiSelectProps>(() =>
-  import("@/components/ui/multi-select").then((mod) => mod.MultiSelect)
-);
+const MultiSelect = dynamic<MultiSelectProps>(() => import("@/components/ui/multi-select").then((mod) => mod.MultiSelect));
 
 type Category = { id: string; name: string };
 type RawMenuItemResponse = {
@@ -89,6 +80,7 @@ interface EditFormData {
   price: string;
   category_id: string;
   allergen_ids: string[];
+  image_path: string;
 }
 
 export default function MenuPage() {
@@ -112,10 +104,13 @@ export default function MenuPage() {
     price: "",
     category_id: "",
     allergen_ids: [],
+    image_path: "",
   });
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
+
+  const [images, setImages] = useState<{ name: string; url: string }[]>([]);
 
   // Debounce searchTerm updates
   useEffect(() => {
@@ -213,8 +208,8 @@ export default function MenuPage() {
       );
     }
     if (selectedFilter !== "all") {
-      const parsed = Number(selectedFilter);
-      f = f.filter((i) => (i.category?.id === selectedFilter) || i.category_id === parsed);
+      const parsed = selectedFilter; // now a string
+      f = f.filter((i) => (i.category?.id === parsed) || i.category_id.toString() === parsed);
     }
     return f;
   }, [items, selectedFilter, searchTerm]);
@@ -267,6 +262,7 @@ export default function MenuPage() {
       price: item.price.toString(),
       category_id: item.category_id.toString(),
       allergen_ids: item.allergens?.map((a) => a.id) || [],
+      image_path: item.image_path || "",
     });
     setEditDialog({ open: true, item });
   }, []);
@@ -295,6 +291,7 @@ export default function MenuPage() {
           description: editForm.description,
           price: priceValue,
           category_id: categoryId,
+          image_path: editForm.image_path || null,
         })
         .eq("id", editDialog.item.id);
       if (itemError) throw itemError;
@@ -321,6 +318,37 @@ export default function MenuPage() {
       toast({ title: "Error", description: msg, variant: "destructive" });
     }
   }, [editDialog.item, editForm, supabase, toast, queryClient]);
+
+  // Fetch images for the currently selected category whenever the edit dialog is open and category changes
+  useEffect(() => {
+    const fetchImages = async () => {
+      if (!editDialog.open || !editForm.category_id || categories.length === 0) {
+        setImages([]);
+        return;
+      }
+      const cat = categories.find((c) => c.id.toString() === editForm.category_id);
+      if (!cat) {
+        setImages([]);
+        return;
+      }
+      // Convert category name to folder-friendly format
+      const folderName = cat.name.toLowerCase().replace(/\s+/g, '-');
+      const { data: fileList, error } = await supabase.storage.from("menu").list(folderName);
+      if (error || !fileList || fileList.length === 0) {
+        setImages([]);
+        return;
+      }
+      const imageInfos = fileList
+        .filter((f) => f.name !== "placeholder.webp") // just in case
+        .map((file) => {
+          const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/${folderName}/${file.name}`;
+          return { name: file.name, url };
+        });
+      setImages(imageInfos);
+    };
+
+    void fetchImages();
+  }, [editDialog.open, editForm.category_id, categories, supabase]);
 
   if (isLoading)
     return (
@@ -376,7 +404,7 @@ export default function MenuPage() {
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
               {categories.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
+                <SelectItem key={c.id} value={c.id.toString()}>
                   {c.name}
                 </SelectItem>
               ))}
@@ -478,7 +506,7 @@ export default function MenuPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
+                    <SelectItem key={c.id} value={c.id.toString()}>
                       {c.name}
                     </SelectItem>
                   ))}
@@ -556,7 +584,7 @@ export default function MenuPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
+                    <SelectItem key={c.id} value={c.id.toString()}>
                       {c.name}
                     </SelectItem>
                   ))}
@@ -571,6 +599,33 @@ export default function MenuPage() {
                 onChange={(ids: string[]) => setEditForm({ ...editForm, allergen_ids: ids })}
                 placeholder="Select allergens"
               />
+            </div>
+            <div className="grid gap-2">
+              <Label>Select Image</Label>
+              {images.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No images found for this category.</p>
+              ) : (
+                <div className="grid gap-2">
+                  {images.map((img) => {
+                    const cat = categories.find((c) => c.id.toString() === editForm.category_id);
+                    const folderName = cat ? cat.name.toLowerCase().replace(/\s+/g, '-') : '';
+                    const pathValue = `${folderName}/${img.name}`;
+                    return (
+                      <div key={img.name} className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="image_path"
+                          value={pathValue}
+                          checked={editForm.image_path === pathValue}
+                          onChange={(e) => setEditForm({ ...editForm, image_path: e.target.value })}
+                        />
+                        <Image src={img.url} alt={img.name} width={50} height={50} />
+                        <span>{img.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
