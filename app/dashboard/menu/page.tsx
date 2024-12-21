@@ -29,7 +29,6 @@ type MultiSelectProps = {
   placeholder?: string;
 };
 
-// Dynamic imports
 const Dialog = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.Dialog));
 const DialogContent = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogContent));
 const DialogDescription = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogDescription));
@@ -208,7 +207,7 @@ export default function MenuPage() {
       );
     }
     if (selectedFilter !== "all") {
-      const parsed = selectedFilter; // now a string
+      const parsed = selectedFilter;
       f = f.filter((i) => (i.category?.id === parsed) || i.category_id.toString() === parsed);
     }
     return f;
@@ -319,7 +318,6 @@ export default function MenuPage() {
     }
   }, [editDialog.item, editForm, supabase, toast, queryClient]);
 
-  // Fetch images for the currently selected category whenever the edit dialog is open and category changes
   useEffect(() => {
     const fetchImages = async () => {
       if (!editDialog.open || !editForm.category_id || categories.length === 0) {
@@ -331,7 +329,6 @@ export default function MenuPage() {
         setImages([]);
         return;
       }
-      // Convert category name to folder-friendly format
       const folderName = cat.name.toLowerCase().replace(/\s+/g, '-');
       const { data: fileList, error } = await supabase.storage.from("menu").list(folderName);
       if (error || !fileList || fileList.length === 0) {
@@ -339,7 +336,7 @@ export default function MenuPage() {
         return;
       }
       const imageInfos = fileList
-        .filter((f) => f.name !== "placeholder.webp") // just in case
+        .filter((f) => f.name !== "placeholder.webp")
         .map((file) => {
           const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/${folderName}/${file.name}`;
           return { name: file.name, url };
@@ -376,6 +373,13 @@ export default function MenuPage() {
       </div>
     );
 
+  // onFocus handler to remove highlight by re-setting input value.
+  const removeHighlightOnFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    e.target.value = '';
+    e.target.value = val;
+  };
+
   return (
     <div className="container p-6">
       <PageHeader heading="Menu Items" text="Manage your restaurant's menu selection">
@@ -389,6 +393,9 @@ export default function MenuPage() {
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative w-full md:w-[300px]">
             <Input
+              autoComplete="new-password"
+              spellCheck="false"
+              autoCorrect="off"
               type="text"
               placeholder="Search menu items..."
               value={localSearchTerm}
@@ -480,6 +487,10 @@ export default function MenuPage() {
             <div className="grid gap-2">
               <Label>Name</Label>
               <Input
+                autoComplete="new-password"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
                 value={newItem.name}
                 onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
                 placeholder="Menu item name"
@@ -488,6 +499,10 @@ export default function MenuPage() {
             <div className="grid gap-2">
               <Label>Price</Label>
               <Input
+                autoComplete="new-password"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
                 type="number"
                 step="0.01"
                 value={newItem.price}
@@ -516,6 +531,10 @@ export default function MenuPage() {
             <div className="grid gap-2">
               <Label>Description</Label>
               <Input
+                autoComplete="new-password"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
                 value={newItem.description}
                 onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
                 placeholder="Menu item description"
@@ -550,6 +569,10 @@ export default function MenuPage() {
             <div className="grid gap-2">
               <Label>Name</Label>
               <Input
+                autoComplete="new-password"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
                 value={editForm.name}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                 placeholder="Menu item name"
@@ -558,6 +581,10 @@ export default function MenuPage() {
             <div className="grid gap-2">
               <Label>Description</Label>
               <Input
+                autoComplete="new-password"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
                 value={editForm.description}
                 onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                 placeholder="Menu item description"
@@ -566,6 +593,10 @@ export default function MenuPage() {
             <div className="grid gap-2">
               <Label>Price</Label>
               <Input
+                autoComplete="new-password"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
                 type="number"
                 step="0.01"
                 value={editForm.price}
@@ -605,7 +636,7 @@ export default function MenuPage() {
               {images.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No images found for this category.</p>
               ) : (
-                <div className="grid gap-2">
+                <div className="grid gap-2 max-h-[200px] overflow-y-auto">
                   {images.map((img) => {
                     const cat = categories.find((c) => c.id.toString() === editForm.category_id);
                     const folderName = cat ? cat.name.toLowerCase().replace(/\s+/g, '-') : '';

@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useMemo,  useRef, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Image from "next/image";
-import { Plus, Image as ImageIcon, Edit, Search } from "lucide-react";
+import { Plus, Search, Edit } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Database } from "@/types";
@@ -22,7 +22,6 @@ import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-// Dynamically import Dialog components
 const Dialog = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.Dialog));
 const DialogContent = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogContent));
 const DialogDescription = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogDescription));
@@ -70,9 +69,9 @@ interface EditFormData {
   bottle_price: string;
   glass_price: string;
   category_ids: number[];
+  image_path?: string;
 }
 
-// Simplified highlight without regex
 function highlightText(text: string, term: string) {
   if (!term.trim()) return text;
   const lowerTerm = term.toLowerCase();
@@ -160,7 +159,6 @@ async function fetchCategories(supabase: ReturnType<typeof createClientComponent
 }
 
 async function fetchWines(supabase: ReturnType<typeof createClientComponentClient<Database>>) {
-  // Reduced select columns if possible. If all are needed, keep them as is.
   const { data, error } = await supabase
     .from("wines")
     .select(`id,name,description,bottle_price,glass_price,active,created_at,image_path,image_url,
@@ -206,10 +204,21 @@ export default function WinePage() {
   const { toast } = useToast();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isImageDialogOpen, setIsImageDialogOpen] = useState(false);
-  const [selectedWineId, setSelectedWineId] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
+  const [wineImages, setWineImages] = useState<{ name: string; url: string }[]>([]);
+  const [editDialog, setEditDialog] = useState<EditWineDialog>({ open: false, wine: null });
+  const [editForm, setEditForm] = useState<EditFormData>({
+    name: "",
+    description: "",
+    bottle_price: "",
+    glass_price: "",
+    category_ids: [],
+    image_path: "wines/wine.webp",
+  });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
+  const [selectedFilter, setSelectedFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<"name"|"price">("name");
+  const [sortOrder, setSortOrder] = useState<"asc"|"desc">("asc");
   const [newWine, setNewWine] = useState<NewWine>({
     name: "",
     description: "",
@@ -220,30 +229,9 @@ export default function WinePage() {
     image_path: "wines/wine.webp",
   });
 
-  const [editDialog, setEditDialog] = useState<EditWineDialog>({
-    open: false,
-    wine: null,
-  });
-
-  const [editForm, setEditForm] = useState<EditFormData>({
-    name: "",
-    description: "",
-    bottle_price: "",
-    glass_price: "",
-    category_ids: [],
-  });
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
-  const [selectedFilter, setSelectedFilter] = useState("all");
-  const [sortBy, setSortBy] = useState<"name" | "price">("name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-
   // Debounce search
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setSearchTerm(localSearchTerm);
-    }, 300);
+    const handler = setTimeout(() => setSearchTerm(localSearchTerm), 300);
     return () => clearTimeout(handler);
   }, [localSearchTerm]);
 
@@ -268,7 +256,7 @@ export default function WinePage() {
   const isLoading = categoriesLoading || winesLoading;
   const error = categoriesError || winesError;
 
-  const createWineMutation = useMutation({
+  const createWineMutation = useMutation<void, Error, NewWine>({
     mutationFn: async (data: NewWine) => {
       if (!data.name || !data.bottle_price) throw new Error("Please fill in all required fields");
       const { data: wine, error: wineError } = await supabase
@@ -284,11 +272,8 @@ export default function WinePage() {
         .select()
         .single();
       if (wineError) throw wineError;
-      if (data.category_ids.length > 0) {
-        const categoryAssignments = data.category_ids.map((categoryId) => ({
-          wine_id: wine.id,
-          category_id: categoryId,
-        }));
+      if (data.category_ids.length > 0 && wine) {
+        const categoryAssignments = data.category_ids.map((categoryId) => ({ wine_id: wine.id, category_id: categoryId }));
         const { error: assignmentError } = await supabase.from("wine_category_assignments").insert(categoryAssignments);
         if (assignmentError) throw assignmentError;
       }
@@ -305,31 +290,28 @@ export default function WinePage() {
     },
   });
 
-  const updateWineMutation = useMutation({
-    mutationFn: async ({ wineId, form }: { wineId: number; form: EditFormData }) => {
-      const { data: updatedWine, error: wineError } = await supabase
+  const updateWineMutation = useMutation<void, Error, { wineId: number; form: EditFormData }>({
+    mutationFn: async ({ wineId, form }) => {
+      const { error: wineError } = await supabase
         .from("wines")
         .update({
           name: form.name,
           description: form.description,
           bottle_price: parseFloat(form.bottle_price),
           glass_price: form.glass_price ? parseFloat(form.glass_price) : null,
+          image_path: form.image_path || "wines/wine.webp",
         })
         .eq("id", wineId)
         .select("*")
         .single();
       if (wineError) throw wineError;
-      const { error: deleteError } = await supabase
-        .from("wine_category_assignments")
-        .delete()
-        .eq("wine_id", wineId);
+      const { error: deleteError } = await supabase.from("wine_category_assignments").delete().eq("wine_id", wineId);
       if (deleteError) throw deleteError;
       if (form.category_ids.length > 0) {
         const assignments = form.category_ids.map((categoryId) => ({ wine_id: wineId, category_id: categoryId }));
         const { error: assignmentError } = await supabase.from("wine_category_assignments").insert(assignments);
         if (assignmentError) throw assignmentError;
       }
-      return updatedWine;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wines"] });
@@ -338,78 +320,15 @@ export default function WinePage() {
     },
     onError: (err) => {
       const msg = err instanceof Error ? err.message : "An unexpected error occurred";
-      toast({ title: "Warning", description: msg, variant: "destructive" });
+      toast({ title: "Error", description: msg, variant: "destructive" });
       setEditDialog({ open: false, wine: null });
     },
   });
 
-  const toggleWineStatusMutation = useMutation({
-    mutationFn: async ({ wineId, currentStatus }: { wineId: number; currentStatus: boolean }) => {
-      const { error } = await supabase.from("wines").update({ active: !currentStatus }).eq("id", wineId);
-      if (error) throw error;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wines"] }),
-    onError: (err) => {
-      const msg = err instanceof Error ? err.message : "An unexpected error occurred";
-      toast({ title: "Error", description: msg, variant: "destructive" });
-    },
-  });
-
-  const uploadImageMutation = useMutation({
-    mutationFn: async ({ file, wineId }: { file: File; wineId: number }) => {
-      const ext = file.name.split(".").pop();
-      const filePath = `wines/${wineId}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from("menu").upload(filePath, file, { cacheControl: "3600", upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from("menu").getPublicUrl(filePath);
-      if (!urlData.publicUrl) throw new Error("Failed to get public URL");
-      const { error: updateError } = await supabase.from("wines").update({ image_path: filePath, image_url: urlData.publicUrl }).eq("id", wineId);
-      if (updateError) throw updateError;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["wines"] });
-      toast({ title: "Success", description: "Image updated successfully" });
-      setIsImageDialogOpen(false);
-      setSelectedWineId(null);
-    },
-    onError: (err) => {
-      const msg = err instanceof Error ? err.message : "An unexpected error occurred";
-      toast({ title: "Error", description: msg, variant: "destructive" });
-    },
-  });
-
-  const handleCreateWine = () => createWineMutation.mutate(newWine);
-  const handleEdit = (wine: Wine) => {
-    setEditForm({
-      name: wine.name,
-      description: wine.description,
-      bottle_price: wine.bottle_price.toString(),
-      glass_price: wine.glass_price?.toString() || "",
-      category_ids: wine.categories.map((c) => c.id),
-    });
-    setEditDialog({ open: true, wine });
-  };
-  const handleSaveEdit = () => {
-    if (editDialog.wine) updateWineMutation.mutate({ wineId: editDialog.wine.id, form: editForm });
-  };
-  const toggleWineStatus = (id: number, currentStatus: boolean) => toggleWineStatusMutation.mutate({ wineId: id, currentStatus });
-  const handleSelectImage = (wineId: number) => {
-    setSelectedWineId(wineId);
-    setIsImageDialogOpen(true);
-    fileInputRef.current?.click();
-  };
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedWineId) { toast({ title: "Error", description: "No file selected", variant: "destructive" }); return; }
-    uploadImageMutation.mutate({ file, wineId: selectedWineId });
-  };
-
   const filteredAndSortedWines = useMemo(() => {
     let filtered = wines;
     const s = searchTerm.toLowerCase().trim();
-    if (s) {
-      filtered = filtered.filter((wine) => wine.name.toLowerCase().includes(s) || wine.description.toLowerCase().includes(s));
-    }
+    if (s) filtered = filtered.filter((wine) => wine.name.toLowerCase().includes(s) || wine.description.toLowerCase().includes(s));
     if (selectedFilter !== "all") filtered = filtered.filter((wine) => wine.categories.some((cat) => cat.id.toString() === selectedFilter));
     return [...filtered].sort((a, b) => {
       if (sortBy === "name") return sortOrder === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
@@ -417,12 +336,59 @@ export default function WinePage() {
     });
   }, [wines, selectedFilter, sortBy, sortOrder, searchTerm]);
 
+  const handleCreateWine = () => createWineMutation.mutate(newWine);
+
+  const handleEdit = useCallback((wine: Wine) => {
+    setEditForm({
+      name: wine.name,
+      description: wine.description,
+      bottle_price: wine.bottle_price.toString(),
+      glass_price: wine.glass_price?.toString() || "",
+      category_ids: wine.categories.map((c) => c.id),
+      image_path: wine.image_path || "wines/wine.webp",
+    });
+    setEditDialog({ open: true, wine });
+  }, []);
+
+  const handleSaveEdit = () => {
+    if (editDialog.wine) updateWineMutation.mutate({ wineId: editDialog.wine.id, form: editForm });
+  };
+
+  useEffect(() => {
+    const fetchImages = async () => {
+      if (!editDialog.open) {
+        setWineImages([]);
+        return;
+      }
+      const { data: fileList, error } = await supabase.storage.from("menu").list("wines");
+      if (error || !fileList || fileList.length === 0) {
+        setWineImages([]);
+        return;
+      }
+      const images = fileList
+        .filter((f) => f.name !== "placeholder.webp")
+        .map((file) => {
+          const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/${file.name}`;
+          return { name: file.name, url };
+        });
+      setWineImages(images);
+    };
+    void fetchImages();
+  }, [editDialog.open, supabase]);
+
+  const removeHighlightOnFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    e.target.value = '';
+    e.target.value = val;
+  };
+
   if (isLoading)
     return (
       <div className="flex items-center justify-center h-[200px]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     );
+
   if (error)
     return (
       <div className="container p-6">
@@ -431,6 +397,7 @@ export default function WinePage() {
         </Alert>
       </div>
     );
+
   if (!wines.length)
     return (
       <div className="container p-6">
@@ -448,7 +415,7 @@ export default function WinePage() {
 
   return (
     <div className="container p-6">
-      <PageHeader heading="Wine List" text="Manage your restaurant's wine selection">
+      <PageHeader heading="Wine List" text="Manage your restaurant&apos;s wine selection">
         <Button onClick={() => setIsDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Add Wine
@@ -458,6 +425,9 @@ export default function WinePage() {
       <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
         <div className="relative w-full md:w-[300px]">
           <Input
+            autoComplete="off"
+            spellCheck="false"
+            autoCorrect="off"
             type="text"
             placeholder="Search wines..."
             value={localSearchTerm}
@@ -468,7 +438,7 @@ export default function WinePage() {
         </div>
 
         <Select value={selectedFilter} onValueChange={setSelectedFilter}>
-          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filter by Category"/></SelectTrigger>
+          <SelectTrigger className="w-[180px]" aria-label="Filter by Category"><SelectValue placeholder="Filter by Category"/></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
             {categories.map(c=><SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}
@@ -476,7 +446,7 @@ export default function WinePage() {
         </Select>
 
         <Select value={sortBy} onValueChange={(val:"name"|"price")=>setSortBy(val)}>
-          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Sort by"/></SelectTrigger>
+          <SelectTrigger className="w-[180px]" aria-label="Sort by"><SelectValue placeholder="Sort by"/></SelectTrigger>
           <SelectContent>
             <SelectItem value="name">Name</SelectItem>
             <SelectItem value="price">Price</SelectItem>
@@ -500,14 +470,64 @@ export default function WinePage() {
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2"><Label>Name</Label><Input value={newWine.name} onChange={e=>setNewWine({...newWine,name:e.target.value})} placeholder="Wine name"/></div>
-            <div className="grid gap-2"><Label>Description</Label><Input value={newWine.description} onChange={e=>setNewWine({...newWine,description:e.target.value})} placeholder="Wine description"/></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2"><Label>Bottle Price</Label><Input type="number" step="0.01" value={newWine.bottle_price} onChange={e=>setNewWine({...newWine,bottle_price:e.target.value})} placeholder="0.00"/></div>
-              <div className="grid gap-2"><Label>Glass Price (Optional)</Label><Input type="number" step="0.01" value={newWine.glass_price} onChange={e=>setNewWine({...newWine,glass_price:e.target.value})} placeholder="0.00"/></div>
+            <div className="grid gap-1">
+              <Label>Name<span className="text-red-500 ml-1">*</span></Label>
+              <Input
+                autoComplete="off"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                value={newWine.name}
+                onChange={e=>setNewWine({...newWine,name:e.target.value})}
+                placeholder="Wine name"
+              />
             </div>
-            <div className="grid gap-2">
+            <div className="grid gap-1">
+              <Label>Description</Label>
+              <Input
+                autoComplete="off"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                value={newWine.description}
+                onChange={e=>setNewWine({...newWine,description:e.target.value})}
+                placeholder="Wine description"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-1">
+                <Label>Bottle Price<span className="text-red-500 ml-1">*</span></Label>
+                <span className="text-sm text-muted-foreground">Price in USD, e.g. 10.00</span>
+                <Input
+                  autoComplete="off"
+                  spellCheck="false"
+                  autoCorrect="off"
+                  onFocus={removeHighlightOnFocus}
+                  type="number"
+                  step="0.01"
+                  value={newWine.bottle_price}
+                  onChange={e=>setNewWine({...newWine,bottle_price:e.target.value})}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label>Glass Price (Optional)</Label>
+                <Input
+                  autoComplete="off"
+                  spellCheck="false"
+                  autoCorrect="off"
+                  onFocus={removeHighlightOnFocus}
+                  type="number"
+                  step="0.01"
+                  value={newWine.glass_price}
+                  onChange={e=>setNewWine({...newWine,glass_price:e.target.value})}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+            <div className="grid gap-1">
               <Label>Categories</Label>
+              <span className="text-sm text-muted-foreground">Select categories to classify the wine</span>
               <Select value={newWine.category_ids[0]?.toString()||""} onValueChange={val=>setNewWine({...newWine,category_ids:[...newWine.category_ids,parseInt(val)]})}>
                 <SelectTrigger className="w-full"><SelectValue placeholder="Select categories"/></SelectTrigger>
                 <SelectContent>
@@ -524,7 +544,7 @@ export default function WinePage() {
                   return c?(
                     <Badge key={c.id} variant="secondary" className="flex items-center gap-1">
                       {c.name}
-                      <button type="button" onClick={()=>setNewWine({...newWine,category_ids:newWine.category_ids.filter(id=>id!==categoryId)})} className="ml-1 hover:text-destructive" aria-label={`Remove category ${c.name}`}>
+                      <button type="button" onClick={()=>setNewWine({...newWine,category_ids:newWine.category_ids.filter(id=>id!==categoryId)})} className="ml-1 hover:text-destructive" aria-label={`Remove category &quot;${c.name}&quot;`}>
                         ×
                       </button>
                     </Badge>
@@ -536,7 +556,9 @@ export default function WinePage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={()=>setIsDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreateWine}>{createWineMutation.isPending?"Creating...":"Create Wine"}</Button>
+            <Button onClick={handleCreateWine}>
+              {createWineMutation.status === "loading" ? "Creating..." : "Create Wine"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -545,18 +567,66 @@ export default function WinePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Wine</DialogTitle>
-            <DialogDescription>Update the details of the wine.</DialogDescription>
+            <DialogDescription>Update the details of the wine, including selecting a new image from the &quot;wines&quot; folder.</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2"><Label>Name</Label><Input value={editForm.name} onChange={e=>setEditForm({...editForm,name:e.target.value})} placeholder="Wine name"/></div>
-            <div className="grid gap-2"><Label>Description</Label><Input value={editForm.description} onChange={e=>setEditForm({...editForm,description:e.target.value})} placeholder="Wine description"/></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2"><Label>Bottle Price</Label><Input type="number" step="0.01" value={editForm.bottle_price} onChange={e=>setEditForm({...editForm,bottle_price:e.target.value})} placeholder="0.00"/></div>
-              <div className="grid gap-2"><Label>Glass Price (Optional)</Label><Input type="number" step="0.01" value={editForm.glass_price} onChange={e=>setEditForm({...editForm,glass_price:e.target.value})} placeholder="0.00"/></div>
+            <div className="grid gap-1">
+              <Label>Name<span className="text-red-500 ml-1">*</span></Label>
+              <Input
+                autoComplete="off"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                value={editForm.name}
+                onChange={e=>setEditForm({...editForm,name:e.target.value})}
+                placeholder="Wine name"
+              />
             </div>
-            <div className="grid gap-2">
+            <div className="grid gap-1">
+              <Label>Description</Label>
+              <Input
+                autoComplete="off"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                value={editForm.description}
+                onChange={e=>setEditForm({...editForm,description:e.target.value})}
+                placeholder="Wine description"
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label>Bottle Price<span className="text-red-500 ml-1">*</span></Label>
+              <span className="text-sm text-muted-foreground">Price in USD, e.g. 10.00</span>
+              <Input
+                autoComplete="off"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                type="number"
+                step="0.01"
+                value={editForm.bottle_price}
+                onChange={e=>setEditForm({...editForm,bottle_price:e.target.value})}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label>Glass Price (Optional)</Label>
+              <Input
+                autoComplete="off"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                type="number"
+                step="0.01"
+                value={editForm.glass_price}
+                onChange={e=>setEditForm({...editForm,glass_price:e.target.value})}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="grid gap-1">
               <Label>Categories</Label>
+              <span className="text-sm text-muted-foreground">Select categories that fit this wine</span>
               <Select value={editForm.category_ids[0]?.toString()||""} onValueChange={val=>setEditForm({...editForm,category_ids:[...editForm.category_ids,parseInt(val)]})}>
                 <SelectTrigger className="w-full"><SelectValue placeholder="Select categories"/></SelectTrigger>
                 <SelectContent>
@@ -573,7 +643,7 @@ export default function WinePage() {
                   return c?(
                     <Badge key={c.id} variant="secondary" className="flex items-center gap-1">
                       {c.name}
-                      <button type="button" onClick={()=>setEditForm({...editForm,category_ids:editForm.category_ids.filter(id=>id!==categoryId)})} className="ml-1 hover:text-destructive" aria-label={`Remove category ${c.name}`}>
+                      <button type="button" onClick={()=>setEditForm({...editForm,category_ids:editForm.category_ids.filter(id=>id!==categoryId)})} className="ml-1 hover:text-destructive" aria-label={`Remove category &quot;${c.name}&quot;`}>
                         ×
                       </button>
                     </Badge>
@@ -582,39 +652,43 @@ export default function WinePage() {
               </div>
             </div>
 
-            <div className="flex gap-4 pt-4 border-t">
-              <Button variant="outline" size="sm" className="flex-1" onClick={()=>editDialog.wine&&toggleWineStatus(editDialog.wine.id,editDialog.wine.active)}>
-                {editDialog.wine?.active?"Set Unavailable":"Set Available"}
-              </Button>
-              <Button variant="outline" size="sm" onClick={()=>editDialog.wine&&handleSelectImage(editDialog.wine.id)}>
-                <ImageIcon className="h-4 w-4 mr-2"/>Change Image
-              </Button>
+            <div className="grid gap-1 border-t pt-4">
+              <p className="text-sm font-semibold">Select Image</p>
+              <span className="text-sm text-muted-foreground">
+                Images are in the &quot;wines&quot; folder. Scroll if many images appear.
+              </span>
+              {wineImages.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No images found in the &quot;wines&quot; folder.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 max-h-[200px] overflow-y-auto">
+                  {wineImages.map(img => {
+                    const pathValue = `wines/${img.name}`;
+                    return (
+                      <label key={img.name} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="image_path"
+                          value={pathValue}
+                          checked={editForm.image_path===pathValue}
+                          onChange={e=>setEditForm({...editForm,image_path:e.target.value})}
+                        />
+                        <div className="flex items-center gap-2">
+                          <Image src={img.url} alt={img.name} width={50} height={50}/>
+                          <span className="truncate text-sm">{img.name}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="space-x-2">
             <Button variant="outline" onClick={()=>setEditDialog({open:false,wine:null})}>Cancel</Button>
-            <Button onClick={handleSaveEdit}>{updateWineMutation.isPending?"Saving...":"Save Changes"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Change Wine Image</DialogTitle>
-            <DialogDescription>Select a new image for the wine.</DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            <input type="file" accept="image/*" ref={fileInputRef} style={{display:"none"}} onChange={handleImageUpload}/>
-            <Button variant="outline" onClick={()=>fileInputRef.current?.click()} disabled={uploadImageMutation.isPending}>
-              {uploadImageMutation.isPending?"Uploading...":"Select Image"}
+            <Button onClick={handleSaveEdit} disabled={updateWineMutation.status==="loading"}>
+              {updateWineMutation.status==="loading" ? "Saving..." : "Save Changes"}
             </Button>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={()=>setIsImageDialogOpen(false)}>Cancel</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
