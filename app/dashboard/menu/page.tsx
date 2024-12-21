@@ -29,13 +29,16 @@ type MultiSelectProps = {
   placeholder?: string;
 };
 
+// Dynamic imports for Dialog & MultiSelect
 const Dialog = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.Dialog));
 const DialogContent = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogContent));
 const DialogDescription = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogDescription));
 const DialogFooter = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogFooter));
 const DialogHeader = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogHeader));
 const DialogTitle = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogTitle));
-const MultiSelect = dynamic<MultiSelectProps>(() => import("@/components/ui/multi-select").then((mod) => mod.MultiSelect));
+const MultiSelect = dynamic<MultiSelectProps>(() =>
+  import("@/components/ui/multi-select").then((mod) => mod.MultiSelect)
+);
 
 type Category = { id: string; name: string };
 type RawMenuItemResponse = {
@@ -49,6 +52,7 @@ type RawMenuItemResponse = {
   menu_categories: { id: string; name: string }[];
   menu_item_allergens: { allergens: { id: string; name: string }[] }[];
 };
+
 type MenuItem = {
   id: string;
   name: string;
@@ -61,6 +65,7 @@ type MenuItem = {
   category?: { id: string; name: string } | null;
   allergens?: Allergen[];
 };
+
 type NewMenuItem = {
   name: string;
   description: string;
@@ -69,6 +74,7 @@ type NewMenuItem = {
   active: boolean;
   allergen_ids: string[];
 };
+
 interface EditDialogState {
   open: boolean;
   item: MenuItem | null;
@@ -119,11 +125,13 @@ export default function MenuPage() {
     return () => clearTimeout(handler);
   }, [localSearchTerm]);
 
+  // Helper to construct the public URL for a Supabase Storage image
   const getImageUrl = (path: string | null) =>
     path
       ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/${path}`
       : null;
 
+  // Simple highlight function
   const highlightText = useCallback((text: string, term: string) => {
     if (!term.trim()) return text;
     const lowerTerm = term.toLowerCase();
@@ -141,23 +149,28 @@ export default function MenuPage() {
     );
   }, []);
 
+  // Fetch Allergens
   const fetchAllergens = async () => {
     const { data, error } = await supabase.from("allergens").select("*").order("name");
     if (error) throw error;
     return data as Allergen[];
   };
 
+  // Fetch Categories
   const fetchCategories = async () => {
     const { data, error } = await supabase.from("menu_categories").select("*").order("name");
     if (error) throw error;
     return data as Category[];
   };
 
+  // Fetch Menu Items
   const fetchItems = async () => {
     const { data, error } = await supabase
       .from("menu_items")
       .select(
-        `id,name,description,price,category_id,image_path,active,menu_categories(id,name),menu_item_allergens(allergens(id,name))`
+        `id,name,description,price,category_id,image_path,active,
+         menu_categories(id,name),
+         menu_item_allergens(allergens(id,name))`
       )
       .order("name");
     if (error) throw error;
@@ -176,16 +189,19 @@ export default function MenuPage() {
     }));
   };
 
+  // React Query data
   const {
     data: allergens = [],
     isLoading: allergensLoading,
     error: allergensError,
   } = useQuery<Allergen[]>({ queryKey: ["allergens"], queryFn: fetchAllergens });
+
   const {
     data: categories = [],
     isLoading: categoriesLoading,
     error: categoriesError,
   } = useQuery<Category[]>({ queryKey: ["categories"], queryFn: fetchCategories });
+
   const {
     data: items = [],
     isLoading: itemsLoading,
@@ -195,6 +211,7 @@ export default function MenuPage() {
   const isLoading = allergensLoading || categoriesLoading || itemsLoading;
   const error = allergensError || categoriesError || itemsError;
 
+  // Filtered items
   const filteredItems = useMemo(() => {
     if (!items) return [];
     let f = items;
@@ -207,23 +224,36 @@ export default function MenuPage() {
       );
     }
     if (selectedFilter !== "all") {
-      const parsed = selectedFilter;
-      f = f.filter((i) => (i.category?.id === parsed) || i.category_id.toString() === parsed);
+      // Compare IDs as strings
+      f = f.filter(
+        (i) => (i.category?.id === selectedFilter) || i.category_id.toString() === selectedFilter
+      );
     }
     return f;
   }, [items, selectedFilter, searchTerm]);
 
+  // Create new item
   const handleCreateItem = async () => {
     try {
+      // Basic validation
       if (!newItem.name || !newItem.category_id || !newItem.price) {
-        toast({ title: "Error", description: "Please fill in all required fields", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields",
+          variant: "destructive",
+        });
         return;
       }
       const priceValue = parseFloat(newItem.price);
       if (isNaN(priceValue) || priceValue < 0) {
-        toast({ title: "Error", description: "Please enter a valid positive price.", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: "Please enter a valid positive price.",
+          variant: "destructive",
+        });
         return;
       }
+      // Insert the item
       const { data: insertedItem, error: itemError } = await supabase
         .from("menu_items")
         .insert({
@@ -236,17 +266,29 @@ export default function MenuPage() {
         .select()
         .single();
       if (itemError) throw itemError;
+
+      // Insert allergens if any
       if (newItem.allergen_ids.length > 0) {
         const assign = newItem.allergen_ids.map((allergenId) => ({
           menu_item_id: insertedItem.id,
           allergen_id: allergenId,
         }));
-        const { error: assignmentError } = await supabase.from("menu_item_allergens").insert(assign);
+        const { error: assignmentError } = await supabase
+          .from("menu_item_allergens")
+          .insert(assign);
         if (assignmentError) throw assignmentError;
       }
+
       await queryClient.invalidateQueries({ queryKey: ["items"] });
       setIsDialogOpen(false);
-      setNewItem({ name: "", description: "", price: "", category_id: "", active: true, allergen_ids: [] });
+      setNewItem({
+        name: "",
+        description: "",
+        price: "",
+        category_id: "",
+        active: true,
+        allergen_ids: [],
+      });
       toast({ title: "Success", description: "Menu item created successfully" });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to create menu item";
@@ -254,6 +296,7 @@ export default function MenuPage() {
     }
   };
 
+  // Open edit dialog with item data
   const handleEdit = useCallback((item: MenuItem) => {
     setEditForm({
       name: item.name || "",
@@ -266,23 +309,39 @@ export default function MenuPage() {
     setEditDialog({ open: true, item });
   }, []);
 
+  // Save item changes
   const handleSaveEdit = useCallback(async () => {
     if (!editDialog.item) return;
     try {
+      // Basic validation
       if (!editForm.name || !editForm.category_id || !editForm.price) {
-        toast({ title: "Error", description: "Please fill in all required fields.", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields.",
+          variant: "destructive",
+        });
         return;
       }
       const priceValue = parseFloat(editForm.price);
       if (isNaN(priceValue) || priceValue < 0) {
-        toast({ title: "Error", description: "Please enter a valid positive price.", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: "Please enter a valid positive price.",
+          variant: "destructive",
+        });
         return;
       }
       const categoryId = Number(editForm.category_id);
       if (isNaN(categoryId)) {
-        toast({ title: "Error", description: "Please select a valid category.", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: "Please select a valid category.",
+          variant: "destructive",
+        });
         return;
       }
+
+      // Update the item
       const { error: itemError } = await supabase
         .from("menu_items")
         .update({
@@ -295,20 +354,26 @@ export default function MenuPage() {
         .eq("id", editDialog.item.id);
       if (itemError) throw itemError;
 
+      // Remove existing allergens for this item
       const { error: deleteError } = await supabase
         .from("menu_item_allergens")
         .delete()
         .eq("menu_item_id", editDialog.item.id);
       if (deleteError) throw deleteError;
 
+      // Insert updated allergens
       if (editForm.allergen_ids.length > 0) {
         const assign = editForm.allergen_ids.map((allergenId) => ({
           menu_item_id: editDialog.item!.id,
           allergen_id: allergenId,
         }));
-        const { error: assignmentError } = await supabase.from("menu_item_allergens").insert(assign);
+        const { error: assignmentError } = await supabase
+          .from("menu_item_allergens")
+          .insert(assign);
         if (assignmentError) throw assignmentError;
       }
+
+      // Refresh query
       await queryClient.invalidateQueries({ queryKey: ["items"] });
       toast({ title: "Success", description: "Menu item updated successfully." });
       setEditDialog({ open: false, item: null });
@@ -318,6 +383,7 @@ export default function MenuPage() {
     }
   }, [editDialog.item, editForm, supabase, toast, queryClient]);
 
+  // Fetch images for the chosen category in the edit dialog
   useEffect(() => {
     const fetchImages = async () => {
       if (!editDialog.open || !editForm.category_id || categories.length === 0) {
@@ -329,7 +395,8 @@ export default function MenuPage() {
         setImages([]);
         return;
       }
-      const folderName = cat.name.toLowerCase().replace(/\s+/g, '-');
+      // Convert category name to folder-friendly format
+      const folderName = cat.name.toLowerCase().replace(/\s+/g, "-");
       const { data: fileList, error } = await supabase.storage.from("menu").list(folderName);
       if (error || !fileList || fileList.length === 0) {
         setImages([]);
@@ -347,13 +414,16 @@ export default function MenuPage() {
     void fetchImages();
   }, [editDialog.open, editForm.category_id, categories, supabase]);
 
-  if (isLoading)
+  // If still loading
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     );
-  if (error)
+  }
+  // If error
+  if (error) {
     return (
       <div className="container p-6">
         <Alert variant="destructive">
@@ -361,7 +431,9 @@ export default function MenuPage() {
         </Alert>
       </div>
     );
-  if (!items || items.length === 0)
+  }
+  // If no items
+  if (!items || items.length === 0) {
     return (
       <div className="container p-6">
         <Alert>
@@ -372,11 +444,12 @@ export default function MenuPage() {
         </div>
       </div>
     );
+  }
 
-  // onFocus handler to remove highlight by re-setting input value.
+  // Utility to remove highlight from input onFocus
   const removeHighlightOnFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    e.target.value = '';
+    e.target.value = "";
     e.target.value = val;
   };
 
@@ -389,6 +462,7 @@ export default function MenuPage() {
         </Button>
       </PageHeader>
 
+      {/* Search & Category Filter */}
       <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative w-full md:w-[300px]">
@@ -420,12 +494,14 @@ export default function MenuPage() {
         </div>
       </div>
 
+      {/* Items grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8 relative">
         {filteredItems.map((item) => (
           <div
             key={item.id}
             className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm transition-shadow"
           >
+            {/* Edit button visible on hover */}
             <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
               <Button
                 variant="secondary"
@@ -438,6 +514,7 @@ export default function MenuPage() {
               </Button>
             </div>
 
+            {/* Image Container */}
             <div className="relative w-full pb-[100%] mb-4">
               {item.image_url ? (
                 <Image
@@ -458,13 +535,25 @@ export default function MenuPage() {
                 </div>
               )}
             </div>
+
+            {/* Category */}
             <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
               {item.category?.name}
             </div>
-            {item.name && <h3 className="text-lg font-medium mb-2">{highlightText(item.name, searchTerm)}</h3>}
-            {item.description && (
-              <p className="text-sm text-neutral-600 mb-4">{highlightText(item.description, searchTerm)}</p>
+
+            {/* Name and Description with highlight */}
+            {item.name && (
+              <h3 className="text-lg font-medium mb-2">
+                {highlightText(item.name, searchTerm)}
+              </h3>
             )}
+            {item.description && (
+              <p className="text-sm text-neutral-600 mb-4">
+                {highlightText(item.description, searchTerm)}
+              </p>
+            )}
+
+            {/* Allergens */}
             <div className="flex flex-wrap gap-1 mb-4">
               {item.allergens?.map((a) => (
                 <Badge key={a.id} variant="secondary" className="text-xs px-2 py-0.5 bg-neutral-100">
@@ -472,11 +561,16 @@ export default function MenuPage() {
                 </Badge>
               ))}
             </div>
-            <div className="mt-auto font-medium text-lg">${item.price.toFixed(2)}</div>
+
+            {/* Price in Euros */}
+            <div className="mt-auto font-medium text-lg">
+              €{item.price.toFixed(2)}
+            </div>
           </div>
         ))}
       </div>
 
+      {/* Dialog for creating new items */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -559,6 +653,7 @@ export default function MenuPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Dialog for editing existing items */}
       <Dialog open={editDialog.open} onOpenChange={(open) => !open && setEditDialog({ open: false, item: null })}>
         <DialogContent>
           <DialogHeader>
