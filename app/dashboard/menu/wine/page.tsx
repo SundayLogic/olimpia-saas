@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, FocusEvent } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Image from "next/image";
 import { Plus, Search, Edit } from "lucide-react";
@@ -22,13 +22,25 @@ import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
+// Dynamically imported components for the Dialog
 const Dialog = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.Dialog));
-const DialogContent = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogContent));
-const DialogDescription = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogDescription));
-const DialogFooter = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogFooter));
-const DialogHeader = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogHeader));
-const DialogTitle = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogTitle));
+const DialogContent = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogContent)
+);
+const DialogDescription = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogDescription)
+);
+const DialogFooter = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogFooter)
+);
+const DialogHeader = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogHeader)
+);
+const DialogTitle = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogTitle)
+);
 
+// WineCategory and Wine interfaces
 interface WineCategory {
   id: number;
   name: string;
@@ -72,6 +84,7 @@ interface EditFormData {
   image_path?: string;
 }
 
+// Simple highlight function
 function highlightText(text: string, term: string) {
   if (!term.trim()) return text;
   const lowerTerm = term.toLowerCase();
@@ -89,6 +102,7 @@ function highlightText(text: string, term: string) {
   );
 }
 
+// Wine card used for listing wines
 const WineCard = ({
   wine,
   searchTerm,
@@ -97,58 +111,77 @@ const WineCard = ({
   wine: Wine;
   searchTerm: string;
   handleEdit: (wine: Wine) => void;
-}) => (
-  <div className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm transition-shadow">
-    <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => handleEdit(wine)}
-        className="h-8 w-8 p-0"
-        aria-label={`Edit ${wine.name}`}
-      >
-        <Edit className="h-4 w-4" />
-      </Button>
-    </div>
-    <div className="relative w-full pb-[150%] mb-4">
-      <Image
-        src={wine.image_url}
-        alt={wine.name}
-        fill
-        className="object-contain"
-        sizes="(max-width: 640px) 100vw,(max-width: 1024px) 50vw,(max-width: 1536px) 33vw,25vw"
-        priority={false}
-        loading="lazy"
-        unoptimized
-        onError={(e) => {
-          (e.target as HTMLImageElement).src = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`;
-        }}
-      />
-    </div>
-    <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
-      {wine.categories.map((c) => c.name).join(" · ")}
-    </div>
-    <h3 className="text-lg font-medium mb-2 line-clamp-2">
-      {highlightText(wine.name, searchTerm)}
-    </h3>
-    <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
-      {highlightText(wine.description, searchTerm)}
-    </p>
-    <div className="mt-auto grid grid-cols-2 gap-x-4 text-sm">
-      <div>
-        <div className="font-medium">${wine.bottle_price.toFixed(2)}</div>
-        <div className="text-neutral-500 uppercase text-xs">bottle</div>
+}) => {
+  return (
+    <div className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm transition-shadow">
+      {/* Edit button */}
+      <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => handleEdit(wine)}
+          className="h-8 w-8 p-0"
+          aria-label={`Edit ${wine.name}`}
+        >
+          <Edit className="h-4 w-4" />
+        </Button>
       </div>
-      {wine.glass_price && (
-        <div>
-          <div className="font-medium">${wine.glass_price.toFixed(2)}</div>
-          <div className="text-neutral-500 uppercase text-xs">glass</div>
-        </div>
-      )}
-    </div>
-  </div>
-);
 
+      {/* Image container */}
+      <div className="relative w-full pb-[150%] mb-4">
+        <Image
+          src={wine.image_url}
+          alt={wine.name}
+          fill
+          className="object-contain"
+          sizes="(max-width: 640px) 100vw,(max-width: 1024px) 50vw,(max-width: 1536px) 33vw,25vw"
+          priority={false}
+          loading="lazy"
+          unoptimized
+          onError={(e) => {
+            (e.target as HTMLImageElement).src =
+              `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`;
+          }}
+        />
+      </div>
+
+      {/* Categories */}
+      <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
+        {wine.categories.map((c) => c.name).join(" · ")}
+      </div>
+
+      {/* Name & description with highlight */}
+      <h3 className="text-lg font-medium mb-2 line-clamp-2">
+        {highlightText(wine.name, searchTerm)}
+      </h3>
+      <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
+        {highlightText(wine.description, searchTerm)}
+      </p>
+
+      {/* Pricing */}
+      <div className="mt-auto grid grid-cols-2 gap-x-4 text-sm">
+        <div>
+          <div className="font-medium">
+            {/* Changed '$' to '€' */}
+            €{wine.bottle_price.toFixed(2)}
+          </div>
+          <div className="text-neutral-500 uppercase text-xs">bottle</div>
+        </div>
+        {wine.glass_price && (
+          <div>
+            <div className="font-medium">
+              {/* Changed '$' to '€' */}
+              €{wine.glass_price.toFixed(2)}
+            </div>
+            <div className="text-neutral-500 uppercase text-xs">glass</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Fetch categories
 async function fetchCategories(supabase: ReturnType<typeof createClientComponentClient<Database>>) {
   const { data, error } = await supabase
     .from("wine_categories")
@@ -158,11 +191,16 @@ async function fetchCategories(supabase: ReturnType<typeof createClientComponent
   return data as WineCategory[];
 }
 
+// Fetch wines
 async function fetchWines(supabase: ReturnType<typeof createClientComponentClient<Database>>) {
   const { data, error } = await supabase
     .from("wines")
-    .select(`id,name,description,bottle_price,glass_price,active,created_at,image_path,image_url,
-      wine_category_assignments ( wine_categories ( id, name, display_order ) )`)
+    .select(`
+      id,name,description,bottle_price,glass_price,active,created_at,image_path,image_url,
+      wine_category_assignments (
+        wine_categories ( id, name, display_order )
+      )
+    `)
     .order("name");
   if (error) throw error;
 
@@ -182,6 +220,7 @@ async function fetchWines(supabase: ReturnType<typeof createClientComponentClien
   };
 
   const rawWines = data as WineResponse[];
+
   return rawWines.map((wine) => ({
     id: wine.id,
     name: wine.name,
@@ -203,6 +242,7 @@ export default function WinePage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Local states
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [wineImages, setWineImages] = useState<{ name: string; url: string }[]>([]);
   const [editDialog, setEditDialog] = useState<EditWineDialog>({ open: false, wine: null });
@@ -214,11 +254,13 @@ export default function WinePage() {
     category_ids: [],
     image_path: "wines/wine.webp",
   });
+
+  // For searching & filtering
   const [searchTerm, setSearchTerm] = useState("");
   const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
   const [selectedFilter, setSelectedFilter] = useState("all");
-  const [sortBy, setSortBy] = useState<"name"|"price">("name");
-  const [sortOrder, setSortOrder] = useState<"asc"|"desc">("asc");
+  const [sortBy, setSortBy] = useState<"name" | "price">("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [newWine, setNewWine] = useState<NewWine>({
     name: "",
     description: "",
@@ -229,12 +271,13 @@ export default function WinePage() {
     image_path: "wines/wine.webp",
   });
 
-  // Debounce search
+  // Debounce searchTerm updates
   useEffect(() => {
     const handler = setTimeout(() => setSearchTerm(localSearchTerm), 300);
     return () => clearTimeout(handler);
   }, [localSearchTerm]);
 
+  // Queries for categories and wines
   const {
     data: categories = [],
     isLoading: categoriesLoading,
@@ -256,6 +299,7 @@ export default function WinePage() {
   const isLoading = categoriesLoading || winesLoading;
   const error = categoriesError || winesError;
 
+  // Create Wine mutation
   const createWineMutation = useMutation<void, Error, NewWine>({
     mutationFn: async (data: NewWine) => {
       if (!data.name || !data.bottle_price) throw new Error("Please fill in all required fields");
@@ -272,8 +316,13 @@ export default function WinePage() {
         .select()
         .single();
       if (wineError) throw wineError;
+
+      // Insert categories
       if (data.category_ids.length > 0 && wine) {
-        const categoryAssignments = data.category_ids.map((categoryId) => ({ wine_id: wine.id, category_id: categoryId }));
+        const categoryAssignments = data.category_ids.map((categoryId) => ({
+          wine_id: wine.id,
+          category_id: categoryId,
+        }));
         const { error: assignmentError } = await supabase.from("wine_category_assignments").insert(categoryAssignments);
         if (assignmentError) throw assignmentError;
       }
@@ -281,7 +330,15 @@ export default function WinePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wines"] });
       setIsDialogOpen(false);
-      setNewWine({ name: "", description: "", bottle_price: "", glass_price: "", category_ids: [], active: true, image_path: "wines/wine.webp" });
+      setNewWine({
+        name: "",
+        description: "",
+        bottle_price: "",
+        glass_price: "",
+        category_ids: [],
+        active: true,
+        image_path: "wines/wine.webp",
+      });
       toast({ title: "Success", description: "Wine added successfully" });
     },
     onError: (err) => {
@@ -290,6 +347,7 @@ export default function WinePage() {
     },
   });
 
+  // Update Wine mutation
   const updateWineMutation = useMutation<void, Error, { wineId: number; form: EditFormData }>({
     mutationFn: async ({ wineId, form }) => {
       const { error: wineError } = await supabase
@@ -305,8 +363,12 @@ export default function WinePage() {
         .select("*")
         .single();
       if (wineError) throw wineError;
+
+      // Delete old assignments
       const { error: deleteError } = await supabase.from("wine_category_assignments").delete().eq("wine_id", wineId);
       if (deleteError) throw deleteError;
+
+      // Insert new ones
       if (form.category_ids.length > 0) {
         const assignments = form.category_ids.map((categoryId) => ({ wine_id: wineId, category_id: categoryId }));
         const { error: assignmentError } = await supabase.from("wine_category_assignments").insert(assignments);
@@ -325,17 +387,34 @@ export default function WinePage() {
     },
   });
 
+  // Filter and sort wines
   const filteredAndSortedWines = useMemo(() => {
     let filtered = wines;
     const s = searchTerm.toLowerCase().trim();
-    if (s) filtered = filtered.filter((wine) => wine.name.toLowerCase().includes(s) || wine.description.toLowerCase().includes(s));
-    if (selectedFilter !== "all") filtered = filtered.filter((wine) => wine.categories.some((cat) => cat.id.toString() === selectedFilter));
+    if (s) {
+      filtered = filtered.filter(
+        (wine) => wine.name.toLowerCase().includes(s) || wine.description.toLowerCase().includes(s)
+      );
+    }
+    if (selectedFilter !== "all") {
+      filtered = filtered.filter((wine) =>
+        wine.categories.some((cat) => cat.id.toString() === selectedFilter)
+      );
+    }
+
     return [...filtered].sort((a, b) => {
-      if (sortBy === "name") return sortOrder === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-      return sortOrder === "asc" ? a.bottle_price - b.bottle_price : b.bottle_price - a.bottle_price;
+      if (sortBy === "name") {
+        return sortOrder === "asc"
+          ? a.name.localeCompare(b.name)
+          : b.name.localeCompare(a.name);
+      }
+      return sortOrder === "asc"
+        ? a.bottle_price - b.bottle_price
+        : b.bottle_price - a.bottle_price;
     });
   }, [wines, selectedFilter, sortBy, sortOrder, searchTerm]);
 
+  // Functions
   const handleCreateWine = () => createWineMutation.mutate(newWine);
 
   const handleEdit = useCallback((wine: Wine) => {
@@ -351,15 +430,26 @@ export default function WinePage() {
   }, []);
 
   const handleSaveEdit = () => {
-    if (editDialog.wine) updateWineMutation.mutate({ wineId: editDialog.wine.id, form: editForm });
+    if (editDialog.wine) {
+      updateWineMutation.mutate({ wineId: editDialog.wine.id, form: editForm });
+    }
   };
 
+  // Remove highlight from input onFocus
+  const removeHighlightOnFocus = (e: FocusEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    e.target.value = "";
+    e.target.value = val;
+  };
+
+  // Pre-load "wines" folder images if needed for selection
   useEffect(() => {
     const fetchImages = async () => {
       if (!editDialog.open) {
         setWineImages([]);
         return;
       }
+      // List all images in "wines" folder
       const { data: fileList, error } = await supabase.storage.from("menu").list("wines");
       if (error || !fileList || fileList.length === 0) {
         setWineImages([]);
@@ -376,20 +466,15 @@ export default function WinePage() {
     void fetchImages();
   }, [editDialog.open, supabase]);
 
-  const removeHighlightOnFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    e.target.value = '';
-    e.target.value = val;
-  };
-
-  if (isLoading)
+  // Render conditions
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[200px]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     );
-
-  if (error)
+  }
+  if (error) {
     return (
       <div className="container p-6">
         <Alert variant="destructive">
@@ -397,8 +482,8 @@ export default function WinePage() {
         </Alert>
       </div>
     );
-
-  if (!wines.length)
+  }
+  if (!wines.length) {
     return (
       <div className="container p-6">
         <Alert>
@@ -412,7 +497,9 @@ export default function WinePage() {
         </div>
       </div>
     );
+  }
 
+  // Final JSX
   return (
     <div className="container p-6">
       <PageHeader heading="Wine List" text="Manage your restaurant&apos;s wine selection">
@@ -422,6 +509,7 @@ export default function WinePage() {
         </Button>
       </PageHeader>
 
+      {/* Search & filter section */}
       <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
         <div className="relative w-full md:w-[300px]">
           <Input
@@ -434,51 +522,75 @@ export default function WinePage() {
             onChange={(e) => setLocalSearchTerm(e.target.value)}
             className="w-full pl-10"
           />
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"/>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
         </div>
 
+        {/* Category filter */}
         <Select value={selectedFilter} onValueChange={setSelectedFilter}>
-          <SelectTrigger className="w-[180px]" aria-label="Filter by Category"><SelectValue placeholder="Filter by Category"/></SelectTrigger>
+          <SelectTrigger className="w-[180px]" aria-label="Filter by Category">
+            <SelectValue placeholder="Filter by Category" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
-            {categories.map(c=><SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}
+            {categories.map((c) => (
+              <SelectItem key={c.id} value={c.id.toString()}>
+                {c.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
-        <Select value={sortBy} onValueChange={(val:"name"|"price")=>setSortBy(val)}>
-          <SelectTrigger className="w-[180px]" aria-label="Sort by"><SelectValue placeholder="Sort by"/></SelectTrigger>
+        {/* Sort by */}
+        <Select value={sortBy} onValueChange={(val: "name" | "price") => setSortBy(val)}>
+          <SelectTrigger className="w-[180px]" aria-label="Sort by">
+            <SelectValue placeholder="Sort by" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="name">Name</SelectItem>
             <SelectItem value="price">Price</SelectItem>
           </SelectContent>
         </Select>
 
-        <Button variant="outline" size="icon" onClick={()=>setSortOrder(o=>o==="asc"?"desc":"asc")} aria-label={`Sort order: ${sortOrder==="asc"?"Ascending":"Descending"}`}>
-          {sortOrder==="asc"?"↑":"↓"}
+        {/* Sort order */}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))}
+          aria-label={`Sort order: ${sortOrder === "asc" ? "Ascending" : "Descending"}`}
+        >
+          {sortOrder === "asc" ? "↑" : "↓"}
         </Button>
       </div>
 
+      {/* Wines grid */}
       <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-        {filteredAndSortedWines.map(wine => <WineCard key={wine.id} wine={wine} searchTerm={searchTerm} handleEdit={handleEdit}/>)}
+        {filteredAndSortedWines.map((wine) => (
+          <WineCard key={wine.id} wine={wine} searchTerm={searchTerm} handleEdit={handleEdit} />
+        ))}
       </div>
 
+      {/* Dialog for creating wine */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Wine</DialogTitle>
-            <DialogDescription>Add a new wine to your list with its details and pricing.</DialogDescription>
+            <DialogDescription>
+              Add a new wine to your list with its details and pricing.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-1">
-              <Label>Name<span className="text-red-500 ml-1">*</span></Label>
+              <Label>
+                Name<span className="text-red-500 ml-1">*</span>
+              </Label>
               <Input
                 autoComplete="off"
                 spellCheck="false"
                 autoCorrect="off"
                 onFocus={removeHighlightOnFocus}
                 value={newWine.name}
-                onChange={e=>setNewWine({...newWine,name:e.target.value})}
+                onChange={(e) => setNewWine({ ...newWine, name: e.target.value })}
                 placeholder="Wine name"
               />
             </div>
@@ -490,14 +602,20 @@ export default function WinePage() {
                 autoCorrect="off"
                 onFocus={removeHighlightOnFocus}
                 value={newWine.description}
-                onChange={e=>setNewWine({...newWine,description:e.target.value})}
+                onChange={(e) => setNewWine({ ...newWine, description: e.target.value })}
                 placeholder="Wine description"
               />
             </div>
+
+            {/* Price fields */}
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1">
-                <Label>Bottle Price<span className="text-red-500 ml-1">*</span></Label>
-                <span className="text-sm text-muted-foreground">Price in USD, e.g. 10.00</span>
+                <Label>
+                  Bottle Price<span className="text-red-500 ml-1">*</span>
+                </Label>
+                <span className="text-sm text-muted-foreground">
+                  Price in EUR, e.g. 10.00
+                </span>
                 <Input
                   autoComplete="off"
                   spellCheck="false"
@@ -506,7 +624,7 @@ export default function WinePage() {
                   type="number"
                   step="0.01"
                   value={newWine.bottle_price}
-                  onChange={e=>setNewWine({...newWine,bottle_price:e.target.value})}
+                  onChange={(e) => setNewWine({ ...newWine, bottle_price: e.target.value })}
                   placeholder="0.00"
                 />
               </div>
@@ -520,66 +638,102 @@ export default function WinePage() {
                   type="number"
                   step="0.01"
                   value={newWine.glass_price}
-                  onChange={e=>setNewWine({...newWine,glass_price:e.target.value})}
+                  onChange={(e) => setNewWine({ ...newWine, glass_price: e.target.value })}
                   placeholder="0.00"
                 />
               </div>
             </div>
+
+            {/* Category selection */}
             <div className="grid gap-1">
               <Label>Categories</Label>
-              <span className="text-sm text-muted-foreground">Select categories to classify the wine</span>
-              <Select value={newWine.category_ids[0]?.toString()||""} onValueChange={val=>setNewWine({...newWine,category_ids:[...newWine.category_ids,parseInt(val)]})}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Select categories"/></SelectTrigger>
+              <span className="text-sm text-muted-foreground">
+                Select categories to classify the wine
+              </span>
+              <Select
+                value={newWine.category_ids[0]?.toString() || ""}
+                onValueChange={(val) =>
+                  setNewWine({
+                    ...newWine,
+                    category_ids: [...newWine.category_ids, parseInt(val)],
+                  })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select categories" />
+                </SelectTrigger>
                 <SelectContent>
-                  {categories.map(cat=>(
-                    <SelectItem key={cat.id} value={cat.id.toString()} disabled={newWine.category_ids.includes(cat.id)}>
+                  {categories.map((cat) => (
+                    <SelectItem
+                      key={cat.id}
+                      value={cat.id.toString()}
+                      disabled={newWine.category_ids.includes(cat.id)}
+                    >
                       {cat.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <div className="flex flex-wrap gap-2 mt-2">
-                {newWine.category_ids.map(categoryId=>{
-                  const c=categories.find(ct=>ct.id===categoryId);
-                  return c?(
+                {newWine.category_ids.map((categoryId) => {
+                  const c = categories.find((ct) => ct.id === categoryId);
+                  return c ? (
                     <Badge key={c.id} variant="secondary" className="flex items-center gap-1">
                       {c.name}
-                      <button type="button" onClick={()=>setNewWine({...newWine,category_ids:newWine.category_ids.filter(id=>id!==categoryId)})} className="ml-1 hover:text-destructive" aria-label={`Remove category &quot;${c.name}&quot;`}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewWine({
+                            ...newWine,
+                            category_ids: newWine.category_ids.filter((id) => id !== categoryId),
+                          })
+                        }
+                        className="ml-1 hover:text-destructive"
+                        aria-label={`Remove category &quot;${c.name}&quot;`}
+                      >
                         ×
                       </button>
                     </Badge>
-                  ):null;
+                  ) : null;
                 })}
               </div>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={()=>setIsDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreateWine}>
-              {createWineMutation.status === "loading" ? "Creating..." : "Create Wine"}
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            {/* Use status === "pending" rather than .isLoading */}
+            <Button onClick={handleCreateWine} disabled={createWineMutation.status === "pending"}>
+              {createWineMutation.status === "pending" ? "Creating..." : "Create Wine"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editDialog.open} onOpenChange={open=>!open&&setEditDialog({open,wine:null})}>
+      {/* Dialog for editing wine */}
+      <Dialog open={editDialog.open} onOpenChange={(open) => !open && setEditDialog({ open, wine: null })}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Wine</DialogTitle>
-            <DialogDescription>Update the details of the wine, including selecting a new image from the &quot;wines&quot; folder.</DialogDescription>
+            <DialogDescription>
+              Update the details of the wine, including selecting a new image from the &quot;wines&quot; folder.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-1">
-              <Label>Name<span className="text-red-500 ml-1">*</span></Label>
+              <Label>
+                Name<span className="text-red-500 ml-1">*</span>
+              </Label>
               <Input
                 autoComplete="off"
                 spellCheck="false"
                 autoCorrect="off"
                 onFocus={removeHighlightOnFocus}
                 value={editForm.name}
-                onChange={e=>setEditForm({...editForm,name:e.target.value})}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                 placeholder="Wine name"
               />
             </div>
@@ -591,13 +745,17 @@ export default function WinePage() {
                 autoCorrect="off"
                 onFocus={removeHighlightOnFocus}
                 value={editForm.description}
-                onChange={e=>setEditForm({...editForm,description:e.target.value})}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                 placeholder="Wine description"
               />
             </div>
+
+            {/* Price fields in EUR */}
             <div className="grid gap-1">
-              <Label>Bottle Price<span className="text-red-500 ml-1">*</span></Label>
-              <span className="text-sm text-muted-foreground">Price in USD, e.g. 10.00</span>
+              <Label>
+                Bottle Price<span className="text-red-500 ml-1">*</span>
+              </Label>
+              <span className="text-sm text-muted-foreground">Price in EUR, e.g. 10.00</span>
               <Input
                 autoComplete="off"
                 spellCheck="false"
@@ -606,7 +764,7 @@ export default function WinePage() {
                 type="number"
                 step="0.01"
                 value={editForm.bottle_price}
-                onChange={e=>setEditForm({...editForm,bottle_price:e.target.value})}
+                onChange={(e) => setEditForm({ ...editForm, bottle_price: e.target.value })}
                 placeholder="0.00"
               />
             </div>
@@ -620,48 +778,79 @@ export default function WinePage() {
                 type="number"
                 step="0.01"
                 value={editForm.glass_price}
-                onChange={e=>setEditForm({...editForm,glass_price:e.target.value})}
+                onChange={(e) => setEditForm({ ...editForm, glass_price: e.target.value })}
                 placeholder="0.00"
               />
             </div>
+
+            {/* Category selection for edit */}
             <div className="grid gap-1">
               <Label>Categories</Label>
-              <span className="text-sm text-muted-foreground">Select categories that fit this wine</span>
-              <Select value={editForm.category_ids[0]?.toString()||""} onValueChange={val=>setEditForm({...editForm,category_ids:[...editForm.category_ids,parseInt(val)]})}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Select categories"/></SelectTrigger>
+              <span className="text-sm text-muted-foreground">
+                Select categories that fit this wine
+              </span>
+              <Select
+                value={editForm.category_ids[0]?.toString() || ""}
+                onValueChange={(val) =>
+                  setEditForm({
+                    ...editForm,
+                    category_ids: [...editForm.category_ids, parseInt(val)],
+                  })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select categories" />
+                </SelectTrigger>
                 <SelectContent>
-                  {categories.map(cat=>(
-                    <SelectItem key={cat.id} value={cat.id.toString()} disabled={editForm.category_ids.includes(cat.id)}>
+                  {categories.map((cat) => (
+                    <SelectItem
+                      key={cat.id}
+                      value={cat.id.toString()}
+                      disabled={editForm.category_ids.includes(cat.id)}
+                    >
                       {cat.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <div className="flex flex-wrap gap-2 mt-2">
-                {editForm.category_ids.map(categoryId=>{
-                  const c=categories.find(ct=>ct.id===categoryId);
-                  return c?(
+                {editForm.category_ids.map((categoryId) => {
+                  const c = categories.find((ct) => ct.id === categoryId);
+                  return c ? (
                     <Badge key={c.id} variant="secondary" className="flex items-center gap-1">
                       {c.name}
-                      <button type="button" onClick={()=>setEditForm({...editForm,category_ids:editForm.category_ids.filter(id=>id!==categoryId)})} className="ml-1 hover:text-destructive" aria-label={`Remove category &quot;${c.name}&quot;`}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditForm({
+                            ...editForm,
+                            category_ids: editForm.category_ids.filter((id) => id !== categoryId),
+                          })
+                        }
+                        className="ml-1 hover:text-destructive"
+                        aria-label={`Remove category &quot;${c.name}&quot;`}
+                      >
                         ×
                       </button>
                     </Badge>
-                  ):null;
+                  ) : null;
                 })}
               </div>
             </div>
 
+            {/* Image selection */}
             <div className="grid gap-1 border-t pt-4">
               <p className="text-sm font-semibold">Select Image</p>
               <span className="text-sm text-muted-foreground">
                 Images are in the &quot;wines&quot; folder. Scroll if many images appear.
               </span>
               {wineImages.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No images found in the &quot;wines&quot; folder.</p>
+                <p className="text-sm text-muted-foreground">
+                  No images found in the &quot;wines&quot; folder.
+                </p>
               ) : (
                 <div className="grid grid-cols-2 gap-2 max-h-[200px] overflow-y-auto">
-                  {wineImages.map(img => {
+                  {wineImages.map((img) => {
                     const pathValue = `wines/${img.name}`;
                     return (
                       <label key={img.name} className="flex items-center gap-2 cursor-pointer">
@@ -669,11 +858,11 @@ export default function WinePage() {
                           type="radio"
                           name="image_path"
                           value={pathValue}
-                          checked={editForm.image_path===pathValue}
-                          onChange={e=>setEditForm({...editForm,image_path:e.target.value})}
+                          checked={editForm.image_path === pathValue}
+                          onChange={(e) => setEditForm({ ...editForm, image_path: e.target.value })}
                         />
                         <div className="flex items-center gap-2">
-                          <Image src={img.url} alt={img.name} width={50} height={50}/>
+                          <Image src={img.url} alt={img.name} width={50} height={50} />
                           <span className="truncate text-sm">{img.name}</span>
                         </div>
                       </label>
@@ -685,9 +874,15 @@ export default function WinePage() {
           </div>
 
           <DialogFooter className="space-x-2">
-            <Button variant="outline" onClick={()=>setEditDialog({open:false,wine:null})}>Cancel</Button>
-            <Button onClick={handleSaveEdit} disabled={updateWineMutation.status==="loading"}>
-              {updateWineMutation.status==="loading" ? "Saving..." : "Save Changes"}
+            <Button variant="outline" onClick={() => setEditDialog({ open: false, wine: null })}>
+              Cancel
+            </Button>
+            {/* Use status === "pending" instead of .isLoading */}
+            <Button
+              onClick={handleSaveEdit}
+              disabled={updateWineMutation.status === "pending"}
+            >
+              {updateWineMutation.status === "pending" ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
