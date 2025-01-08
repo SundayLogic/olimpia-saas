@@ -1,15 +1,15 @@
 # Documentation for Selected Directories
 
-Generated on: 2024-12-19 13:11:30
+Generated on: 2025-01-06 20:06:01
 
 ## Documented Directories:
 - app/
+- src/
 - middleware.ts
-- tailwind.config.ts
 - next.config.ts
 - package.json
-- src/
-- next.config.ts
+- tailwind.config.ts
+- tsconfig.json
 
 ## Directory Structure
 
@@ -27,11 +27,6 @@ app/
             ├── auth/
                 ├── [...supabase]/
                 │   ├── route.ts
-        ├── blog/
-            ├── [slug]/
-            │   ├── page.tsx
-        │   
-        │   ├── page.tsx
         ├── dashboard/
             ├── blog/
                 ├── [id]/
@@ -49,8 +44,6 @@ app/
             │   ├── page.tsx
             ├── settings/
             │   ├── pages.tsx
-            ├── users/
-            │   ├── page.tsx
         │   
         │   ├── layout.tsx
         │   ├── page.tsx
@@ -59,18 +52,6 @@ app/
     │   ├── layout.tsx
     │   ├── page.tsx
     │   ├── providers.tsx
-
-middleware.ts/
-    ├── middleware.ts/
-
-tailwind.config.ts/
-    ├── tailwind.config.ts/
-
-next.config.ts/
-    ├── next.config.ts/
-
-package.json/
-    ├── package.json/
 
 src/
     ├── src/
@@ -111,8 +92,20 @@ src/
         ├── types/
         │   ├── index.ts
 
+middleware.ts/
+    ├── middleware.ts/
+
 next.config.ts/
     ├── next.config.ts/
+
+package.json/
+    ├── package.json/
+
+tailwind.config.ts/
+    ├── tailwind.config.ts/
+
+tsconfig.json/
+    ├── tsconfig.json/
 
 ```
 
@@ -652,392 +645,11 @@ export async function POST(request: NextRequest) {
 export const dynamic = 'force-dynamic';
 ```
 
-### app/blog/[slug]/page.tsx
-
-```typescript
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import { notFound } from "next/navigation";
-import Image from "next/image";
-import Link from "next/link";
-import { format } from "date-fns";
-
-// Types for blog content structure
-type ContentNode = {
- type: string;
- content?: Array<{
-   type: string;
-   text?: string;
-   content?: ContentNode[];
- }>;
- text?: string;
- attrs?: Record<string, unknown>;
-};
-
-type BlogContent = {
- type: string;
- content: ContentNode[];
-};
-
-type MenuItem = {
- id: number;
- name: string;
- price: number;
-};
-
-type Wine = {
- id: number;
- name: string;
- bottle_price: number;
-};
-
-type BlogPostData = {
- id: string;
- title: string;
- slug: string;
- content: BlogContent;
- featured_image: string | null;
- featured_image_url: string | null;
- featured_image_alt: string | null;
- published: boolean;
- created_at: string;
- author_info: Array<{
-   name: string | null;
-   email: string;
- }>;
- menu_items: Array<{
-   menu_items: MenuItem;
- }>;
- wines: Array<{
-   wines: Wine;
- }>;
-};
-
-// Helper function to render content
-const renderContent = (content: BlogContent) => {
- if (!content.content) return null;
-
- return content.content.map((node, index) => {
-   switch (node.type) {
-     case 'paragraph':
-       return (
-         <p key={index} className="mb-4 leading-relaxed">
-           {node.content?.map((child, childIndex) => (
-             <span key={childIndex}>{child.text}</span>
-           ))}
-         </p>
-       );
-     case 'heading':
-       const HeadingTag = `h${(node.attrs?.level || 1) as number}` as keyof JSX.IntrinsicElements;
-       return (
-         <HeadingTag key={index} className="mb-4 mt-6 font-bold">
-           {node.content?.map((child, childIndex) => (
-             <span key={childIndex}>{child.text}</span>
-           ))}
-         </HeadingTag>
-       );
-     case 'image':
-       return (
-         <div key={index} className="my-6">
-           <Image
-             src={node.attrs?.src as string}
-             alt={node.attrs?.alt as string || ''}
-             width={800}
-             height={400}
-             className="rounded-lg"
-             unoptimized
-           />
-         </div>
-       );
-     default:
-       return null;
-   }
- });
-};
-
-type Props = {
- params: Promise<{ slug: string }>;
- searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-};
-
-export default async function BlogPostPage({ params, searchParams }: Props) {
- const [resolvedParams] = await Promise.all([
-   params,
-   searchParams
- ]);
- 
- const supabase = createServerComponentClient({ cookies });
-
- // Fetch blog post with related content
- const { data: post } = await supabase
-   .from('blog_posts')
-   .select(`
-     *,
-     author_info:users(name, email),
-     menu_items:blog_menu_references(
-       menu_items(id, name, price)
-     ),
-     wines:blog_wine_references(
-       wines(id, name, bottle_price)
-     )
-   `)
-   .eq('slug', resolvedParams.slug)
-   .eq('published', true)
-   .single();
-
- if (!post) {
-   notFound();
- }
-
- const typedPost = post as unknown as BlogPostData;
-
- return (
-   <article className="mx-auto max-w-3xl px-4 py-8">
-     {/* Header */}
-     <header className="mb-8">
-       <h1 className="mb-4 text-4xl font-bold tracking-tight">
-         {typedPost.title}
-       </h1>
-       <div className="flex items-center gap-4 text-muted-foreground">
-         <span>
-           By {typedPost.author_info[0]?.name || typedPost.author_info[0]?.email || 'Anonymous'}
-         </span>
-         <span>•</span>
-         <time dateTime={typedPost.created_at}>
-           {format(new Date(typedPost.created_at), 'MMMM d, yyyy')}
-         </time>
-       </div>
-     </header>
-
-     {/* Featured Image */}
-     {typedPost.featured_image_url && (
-       <div className="mb-8 overflow-hidden rounded-lg">
-         <Image
-           src={typedPost.featured_image_url}
-           alt={typedPost.featured_image_alt || typedPost.title}
-           width={1200}
-           height={630}
-           className="w-full object-cover"
-           priority
-           unoptimized
-         />
-       </div>
-     )}
-
-     {/* Content */}
-     <div className="prose prose-lg max-w-none">
-       {renderContent(typedPost.content)}
-     </div>
-
-     {/* Related Items Section */}
-     {(typedPost.menu_items?.length > 0 || typedPost.wines?.length > 0) && (
-       <div className="mt-12 border-t pt-8">
-         <h2 className="mb-6 text-2xl font-bold">Featured Items</h2>
-         
-         {/* Menu Items */}
-         {typedPost.menu_items?.length > 0 && (
-           <div className="mb-8">
-             <h3 className="mb-4 text-xl font-semibold">Menu Items</h3>
-             <div className="grid gap-4 sm:grid-cols-2">
-               {typedPost.menu_items.map(({ menu_items: item }) => (
-                 <div key={item.id} className="rounded-lg border p-4">
-                   <div className="flex items-center justify-between">
-                     <h4 className="font-medium">{item.name}</h4>
-                     <span className="text-muted-foreground">
-                       ${item.price.toFixed(2)}
-                     </span>
-                   </div>
-                 </div>
-               ))}
-             </div>
-           </div>
-         )}
-
-         {/* Wines */}
-         {typedPost.wines?.length > 0 && (
-           <div>
-             <h3 className="mb-4 text-xl font-semibold">Featured Wines</h3>
-             <div className="grid gap-4 sm:grid-cols-2">
-               {typedPost.wines.map(({ wines: wine }) => (
-                 <div key={wine.id} className="rounded-lg border p-4">
-                   <div className="flex items-center justify-between">
-                     <h4 className="font-medium">{wine.name}</h4>
-                     <span className="text-muted-foreground">
-                       ${wine.bottle_price.toFixed(2)}
-                     </span>
-                   </div>
-                 </div>
-               ))}
-             </div>
-           </div>
-         )}
-       </div>
-     )}
-
-     {/* Back Link */}
-     <div className="mt-12 border-t pt-8">
-       <Link
-         href="/blog"
-         className="text-sm text-muted-foreground hover:text-foreground"
-       >
-         ← Back to all posts
-       </Link>
-     </div>
-   </article>
- );
-}
-```
-
-### app/blog/page.tsx
-
-```typescript
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import Link from "next/link";
-import Image from "next/image";
-import { formatDate } from "@/lib/utils";
-
-// Define types for blog content structure
-type ContentNode = {
-  type: string;
-  content?: Array<{
-    type: string;
-    text?: string;
-    content?: ContentNode[];
-  }>;
-  text?: string;
-};
-
-type BlogContent = {
-  type: string;
-  content: ContentNode[];
-};
-
-type BlogPostType = {
-  id: string;
-  title: string;
-  slug: string;
-  content: BlogContent;
-  featured_image: string | null;
-  featured_image_url: string | null;
-  featured_image_alt: string | null;
-  published: boolean;
-  created_at: string;
-  author_info: Array<{
-    name: string | null;
-    email: string;
-  }>;
-};
-
-export default async function BlogPage() {
-  const supabase = createServerComponentClient({ cookies });
-
-  // Fetch published blog posts
-  const { data: posts } = await supabase
-    .from('blog_posts')
-    .select(`
-      id,
-      title,
-      slug,
-      content,
-      featured_image,
-      featured_image_url,
-      featured_image_alt,
-      published,
-      created_at,
-      author_info:users(name, email)
-    `)
-    .eq('published', true)
-    .order('created_at', { ascending: false });
-
-  // Extract a preview from the content
-  const getPreview = (content: BlogContent | null): string => {
-    if (!content || !content.content) return "";
-    
-    const textContent = content.content.reduce((acc: string, node) => {
-      if (node.content?.[0]?.text) {
-        return acc + " " + node.content[0].text;
-      }
-      return acc;
-    }, "");
-
-    return textContent.length > 200 
-      ? textContent.substring(0, 200) + "..."
-      : textContent;
-  };
-
-  return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <div className="space-y-4">
-        <h1 className="text-3xl font-bold tracking-tight">Blog</h1>
-        <p className="text-xl text-muted-foreground">
-          Latest news and updates from our restaurant
-        </p>
-      </div>
-
-      {!posts?.length ? (
-        <div className="mt-8 text-center">
-          <p className="text-muted-foreground">No blog posts found.</p>
-        </div>
-      ) : (
-        <div className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {posts.map((post: BlogPostType) => (
-            <Link
-              key={post.id}
-              href={`/blog/${post.slug}`}
-              className="group relative flex flex-col overflow-hidden rounded-lg border bg-card transition-shadow hover:shadow-lg"
-            >
-              {/* Featured Image */}
-              <div className="relative aspect-[16/9] overflow-hidden bg-muted">
-                {post.featured_image_url ? (
-                  <Image
-                    src={post.featured_image_url}
-                    alt={post.featured_image_alt || post.title}
-                    fill
-                    className="object-cover transition-transform duration-300 group-hover:scale-105"
-                    unoptimized
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center bg-muted">
-                    <span className="text-sm text-muted-foreground">
-                      No image available
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Content */}
-              <div className="flex flex-1 flex-col justify-between p-6">
-                <div className="space-y-4">
-                  <h2 className="text-xl font-semibold tracking-tight transition-colors group-hover:text-primary">
-                    {post.title}
-                  </h2>
-                  <p className="text-sm text-muted-foreground line-clamp-3">
-                    {getPreview(post.content)}
-                  </p>
-                </div>
-
-                {/* Metadata */}
-                <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-                  <span>
-                    By {post.author_info[0]?.name || post.author_info[0]?.email || 'Anonymous'}
-                  </span>
-                  <span>{formatDate(post.created_at)}</span>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-```
-
 ### app/dashboard/blog/[id]/page.tsx
 
 ```typescript
 "use client";
+
 import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -1047,7 +659,10 @@ import * as z from "zod";
 import slugify from "slugify";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { useEditor, EditorContent, BubbleMenu } from "@tiptap/react";
+import dynamic from "next/dynamic";
+import { useEditor } from "@tiptap/react"; // Regular import for useEditor
+import { EditorView } from "@tiptap/pm/view";
+
 import StarterKit from "@tiptap/starter-kit";
 import ImageExt from "@tiptap/extension-image";
 import LinkExt from "@tiptap/extension-link";
@@ -1064,6 +679,10 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
+// Dynamic imports for tiptap components
+const EditorContent = dynamic(() => import("@tiptap/react").then(mod => mod.EditorContent), { ssr: false });
+const BubbleMenu = dynamic(() => import("@tiptap/react").then(mod => mod.BubbleMenu), { ssr: false });
+
 type BlogStatus = "draft"|"published"|"scheduled";
 type AutoSaveState = { lastSaved:Date|null; saving:boolean; error:string|null; };
 
@@ -1078,7 +697,9 @@ const schema = z.object({
 type FormData=z.infer<typeof schema>;
 
 export default function Page() {
-  const params=useParams();const router=useRouter();const {toast}=useToast();
+  const params=useParams();
+  const router=useRouter();
+  const {toast}=useToast();
   const supabase=createClientComponentClient();
   const [isLoading,setIsLoading]=useState(false);
   const [isPreview,setIsPreview]=useState(false);
@@ -1097,6 +718,11 @@ export default function Page() {
       tags:[]
     },
   });
+
+  const status = form.watch("status");
+  const publishedAt = form.watch("published_at");
+  const metaDescription = form.watch("meta_description") || "";
+  const tags = form.watch("tags");
 
   const autoSavePost=useCallback(async(data:FormData)=>{
     if(!isNew&&isEditorReady){
@@ -1119,7 +745,12 @@ export default function Page() {
     content:form.watch("content"),
     editorProps:{
       attributes:{class:"prose prose-lg max-w-none focus:outline-none [&_*]:outline-none",spellcheck:"false"},
-      handleDOMEvents:{focus:(_view,ev)=>(ev.preventDefault(),false)},
+      handleDOMEvents:{
+        focus:(view: EditorView, ev: Event)=>{
+          ev.preventDefault();
+          return false;
+        }
+      },
     },
     onUpdate:({editor:e})=>{
       if(!isPreview){
@@ -1236,7 +867,7 @@ export default function Page() {
             ):(
               <div className="min-h-[300px]">
                 <div className="relative">
-                  <EditorContent editor={editor} className={cn("prose prose-lg max-w-none","[&_.ProseMirror]:min-h-[300px]","[&_.ProseMirror]:outline-none","[&_.ProseMirror_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]","[&_.ProseMirror_p.is-editor-empty:first-child]:before:text-muted-foreground/60","[&_.ProseMirror_p.is-editor-empty:first-child]:before:float-left","[&_.ProseMirror_p.is-editor-empty:first-child]:before:pointer-events-none","[&_.ProseMirror_::selection]:bg-primary/10","[&_.ProseMirror-selectednode]:outline-none","[&_.ProseMirror_h1]:text-3xl","[&_.ProseMirror_h2]:text-2xl","[&_.ProseMirror_h3]:text-xl","[&_.ProseMirror_h1,h2,h3,h4,h5,h6]:font-bold","[&_.ProseMirror_blockquote]:border-l-4","[&_.ProseMirror_blockquote]:border-muted","[&_.ProseMirror_blockquote]:pl-4","[&_.ProseMirror_blockquote]:italic","[&_.ProseMirror_pre]:bg-muted","[&_.ProseMirror_pre]:p-4","[&_.ProseMirror_pre]:rounded-md","[&_.ProseMirror_pre]:font-mono","[&_.ProseMirror_pre]:text-sm","[&_.ProseMirror_code]:bg-muted","[&_.ProseMirror_code]:px-1.5","[&_.ProseMirror_code]:py-0.5","[&_.ProseMirror_code]:rounded-sm","[&_.ProseMirror_code]:font-mono","[&_.ProseMirror_code]:text-sm","[&_.ProseMirror_img]:rounded-md","[&_.ProseMirror_img]:max-w-full","[&_.ProseMirror_img]:h-auto","[&_.ProseMirror_a]:text-primary","[&_.ProseMirror_a]:underline","[&_.ProseMirror_a:hover]:text-primary/80",isPreview?"pointer-events-none opacity-70":"")}/>
+                  {editor && <EditorContent editor={editor} className={cn("prose prose-lg max-w-none","[&_.ProseMirror]:min-h-[300px]","[&_.ProseMirror]:outline-none","[&_.ProseMirror_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]","[&_.ProseMirror_p.is-editor-empty:first-child]:before:text-muted-foreground/60","[&_.ProseMirror_p.is-editor-empty:first-child]:before:float-left","[&_.ProseMirror_p.is-editor-empty:first-child]:before:pointer-events-none","[&_.ProseMirror_::selection]:bg-primary/10","[&_.ProseMirror-selectednode]:outline-none","[&_.ProseMirror_h1]:text-3xl","[&_.ProseMirror_h2]:text-2xl","[&_.ProseMirror_h3]:text-xl","[&_.ProseMirror_h1,h2,h3,h4,h5,h6]:font-bold","[&_.ProseMirror_blockquote]:border-l-4","[&_.ProseMirror_blockquote]:border-muted","[&_.ProseMirror_blockquote]:pl-4","[&_.ProseMirror_blockquote]:italic","[&_.ProseMirror_pre]:bg-muted","[&_.ProseMirror_pre]:p-4","[&_.ProseMirror_pre]:rounded-md","[&_.ProseMirror_pre]:font-mono","[&_.ProseMirror_pre]:text-sm","[&_.ProseMirror_code]:bg-muted","[&_.ProseMirror_code]:px-1.5","[&_.ProseMirror_code]:py-0.5","[&_.ProseMirror_code]:rounded-sm","[&_.ProseMirror_code]:font-mono","[&_.ProseMirror_code]:text-sm","[&_.ProseMirror_img]:rounded-md","[&_.ProseMirror_img]:max-w-full","[&_.ProseMirror_img]:h-auto","[&_.ProseMirror_a]:text-primary","[&_.ProseMirror_a]:underline","[&_.ProseMirror_a:hover]:text-primary/80",isPreview?"pointer-events-none opacity-70":"")} />}
                   {editor&&!isPreview&&(
                     <BubbleMenu editor={editor} tippyOptions={{duration:100}} className="flex items-center space-x-1 rounded-lg bg-background shadow-lg border p-1">
                       <Button variant="ghost" size="sm" onClick={()=>editor.chain().focus().toggleBold().run()} className={cn("hover:bg-accent/50",editor.isActive("bold")?"bg-accent":"")} aria-label="Bold"><Bold className="h-4 w-4"/></Button>
@@ -1259,7 +890,7 @@ export default function Page() {
             <div className="p-4 space-y-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Status</label>
-                <Select value={form.watch("status")} onValueChange={v=>form.setValue("status",v as BlogStatus)}>
+                <Select value={status} onValueChange={v=>form.setValue("status",v as BlogStatus)}>
                   <SelectTrigger><SelectValue placeholder="Select status"/></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="draft">Draft</SelectItem>
@@ -1268,19 +899,19 @@ export default function Page() {
                   </SelectContent>
                 </Select>
               </div>
-              {form.watch("status")==="scheduled"&&(
+              {status==="scheduled"&&(
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Publish Date</label>
-                  <Input type="datetime-local" value={form.watch("published_at")||""} onChange={e=>form.setValue("published_at",e.target.value)} disabled={isPreview}/>
+                  <Input type="datetime-local" value={publishedAt||""} onChange={e=>form.setValue("published_at",e.target.value)} disabled={isPreview}/>
                 </div>
               )}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Meta Description</label>
-                <Textarea value={form.watch("meta_description")||""} onChange={e=>form.setValue("meta_description",e.target.value)} placeholder="Enter SEO description..." className="h-20" disabled={isPreview}/>
+                <Textarea value={metaDescription} onChange={e=>form.setValue("meta_description",e.target.value)} placeholder="Enter SEO description..." className="h-20" disabled={isPreview}/>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Tags</label>
-                <Select value={form.watch("tags").join(",")} onValueChange={v=>form.setValue("tags",v.split(",").filter(Boolean))}>
+                <Select value={tags.join(",")} onValueChange={v=>form.setValue("tags",v.split(",").filter(Boolean))}>
                   <SelectTrigger><SelectValue placeholder="Select tags"/></SelectTrigger>
                   <SelectContent>
                     {["tech","food","travel","lifestyle"].map(tag=><SelectItem key={tag} value={tag}>{tag.charAt(0).toUpperCase()+tag.slice(1)}</SelectItem>)}
@@ -1300,11 +931,11 @@ export default function Page() {
         <div className="flex items-center space-x-4">
           <Button variant="outline" onClick={()=>router.push("/dashboard/blog")} disabled={isLoading||autoSave.saving}>Cancel</Button>
           <Button onClick={form.handleSubmit(onSubmit)} disabled={isLoading||autoSave.saving}>
-            {isLoading?(<><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Saving...</>):form.watch("status")==="published"?"Publish":form.watch("status")==="scheduled"?"Schedule":"Save Draft"}
+            {isLoading?(<><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Saving...</>):status==="published"?"Publish":status==="scheduled"?"Schedule":"Save Draft"}
           </Button>
         </div>
       </div>
-      {form.watch("status")==="scheduled"&&!form.watch("published_at")&&(
+      {status==="scheduled"&&!publishedAt&&(
         <div className="border-t bg-yellow-50 dark:bg-yellow-900/10 p-2 text-center">
           <span className="text-sm text-yellow-800 dark:text-yellow-200">Please select a publication date for scheduled posts</span>
         </div>
@@ -1328,7 +959,9 @@ export default function Page() {
 
 ```typescript
 "use client";
+
 import { useState, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Plus, Search, Eye, Trash2, Calendar } from "lucide-react";
 import { format } from "date-fns";
@@ -1339,14 +972,24 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/core/layout";
 import { useRouter } from "next/navigation";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
-} from "@/components/ui/select";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
-} from "@/components/ui/alert-dialog";
 
+// Dynamic Imports
+const AlertDialog = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialog));
+const AlertDialogContent = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogContent));
+const AlertDialogHeader = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogHeader));
+const AlertDialogTitle = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogTitle));
+const AlertDialogDescription = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogDescription));
+const AlertDialogFooter = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogFooter));
+const AlertDialogCancel = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogCancel));
+const AlertDialogAction = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogAction));
+
+const Select = dynamic(() => import("@/components/ui/select").then(mod => mod.Select));
+const SelectContent = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectContent));
+const SelectItem = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectItem));
+const SelectTrigger = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectTrigger));
+const SelectValue = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectValue));
+
+// Types
 type FilterOptions = { status:"all"|"published"|"draft"; author:string; sortBy:"newest"|"oldest"|"title"; };
 type ContentNode = { type:string; content?:{type:string; text?:string;}[] };
 type BlogContent = { type:string; content:ContentNode[] };
@@ -1393,6 +1036,8 @@ export default function BlogPage() {
 
   const getUniqueAuthors=():string[]=>
     Array.from(new Set(posts.flatMap(p=>p.author_info?.[0]?[(p.author_info[0].name||p.author_info[0].email)!]:[])));
+
+  const uniqueAuthors=useMemo(()=>getUniqueAuthors(),[posts]);
 
   useEffect(()=>{
     (async()=>{
@@ -1491,7 +1136,7 @@ export default function BlogPage() {
           <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filter by Author"/></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Authors</SelectItem>
-            {getUniqueAuthors().map(a=><SelectItem key={a} value={a}>{a}</SelectItem>)}
+            {uniqueAuthors.map(a=><SelectItem key={a} value={a}>{a}</SelectItem>)}
           </SelectContent>
         </Select>
 
@@ -1589,7 +1234,7 @@ export default function BlogPage() {
           </div>
           <div className="p-4 border rounded-md">
             <div className="text-sm text-muted-foreground">Authors</div>
-            <div className="text-2xl font-bold">{getUniqueAuthors().length}</div>
+            <div className="text-2xl font-bold">{uniqueAuthors.length}</div>
           </div>
         </div>
       </div>
@@ -1604,44 +1249,44 @@ export default function BlogPage() {
 ```typescript
 "use client";
 import React, { useState } from "react";
+import dynamic from "next/dynamic";
 import { useDropzone } from "react-dropzone";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Upload, Trash2, FolderIcon, AlertCircle, Edit2 } from "lucide-react";
 import Image from "next/image";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
 import { Database } from "@/types";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/core/layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 
+// Dynamic imports for dialog and select components
+const Dialog = dynamic(() => import("@/components/ui/dialog").then(mod => mod.Dialog));
+const DialogContent = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogContent));
+const DialogDescription = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogDescription));
+const DialogFooter = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogFooter));
+const DialogHeader = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogHeader));
+const DialogTitle = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogTitle));
+
+const AlertDialog = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialog));
+const AlertDialogAction = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogAction));
+const AlertDialogCancel = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogCancel));
+const AlertDialogContent = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogContent));
+const AlertDialogDescription = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogDescription));
+const AlertDialogFooter = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogFooter));
+const AlertDialogHeader = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogHeader));
+const AlertDialogTitle = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogTitle));
+
+const Select = dynamic(() => import("@/components/ui/select").then(mod => mod.Select));
+const SelectContent = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectContent));
+const SelectItem = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectItem));
+const SelectTrigger = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectTrigger));
+const SelectValue = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectValue));
+
+// Categories, plus a label mapping for nicer UI strings
 const CATEGORIES = [
   "arroces",
   "carnes",
@@ -1653,7 +1298,21 @@ const CATEGORIES = [
   "postres",
   "wines",
 ] as const;
+
 type Category = (typeof CATEGORIES)[number];
+
+// Mapping from raw key -> friendly label
+const CATEGORY_LABELS: Record<Category, string> = {
+  "arroces": "Arroces",
+  "carnes": "Carnes",
+  "del-huerto": "Del Huerto",
+  "del-mar": "Del Mar",
+  "para-compartir": "Para Compartir",
+  "para-peques": "Para Peques",
+  "para-veganos": "Para Veganos",
+  "postres": "Postres",
+  "wines": "Wines",
+};
 
 interface ImageInfo {
   name: string;
@@ -1666,6 +1325,7 @@ async function getImageUsageCount(
   supabase: ReturnType<typeof createClientComponentClient<Database>>,
   imagePath: string
 ): Promise<number> {
+  // Example usage check: let's say we check in "wines" table
   const { count } = await supabase
     .from("wines")
     .select("*", { count: "exact", head: true })
@@ -1681,11 +1341,17 @@ async function fetchImages(
     .from("menu")
     .list(category);
   if (storageError) throw storageError;
+
   const imageList: ImageInfo[] = [];
   for (const file of storageData || []) {
     const { data } = supabase.storage.from("menu").getPublicUrl(`${category}/${file.name}`);
     const usageCount = await getImageUsageCount(supabase, `${category}/${file.name}`);
-    imageList.push({ name: file.name, url: data.publicUrl, category, usageCount });
+    imageList.push({
+      name: file.name,
+      url: data.publicUrl,
+      category,
+      usageCount,
+    });
   }
   return imageList;
 }
@@ -1711,12 +1377,17 @@ export default function ImagesPage() {
   const [newImageName, setNewImageName] = useState("");
   const [targetCategory, setTargetCategory] = useState<Category>(CATEGORIES[0]);
 
+  // Handler to show nicely-labeled categories in the dropdown
   const handleCategoryChange = (value: string) => {
-    if (CATEGORIES.includes(value as Category)) setSelectedCategory(value as Category);
+    if (CATEGORIES.includes(value as Category)) {
+      setSelectedCategory(value as Category);
+    }
   };
 
   const handleTargetCategoryChange = (value: string) => {
-    if (CATEGORIES.includes(value as Category)) setTargetCategory(value as Category);
+    if (CATEGORIES.includes(value as Category)) {
+      setTargetCategory(value as Category);
+    }
   };
 
   const {
@@ -1728,19 +1399,26 @@ export default function ImagesPage() {
     queryFn: () => fetchImages(supabase, selectedCategory),
   });
 
+  // Upload multiple images
   const uploadMutation = useMutation<string[], Error, File[]>({
     mutationFn: async (files: File[]): Promise<string[]> => {
       const results: string[] = [];
       for (const file of files) {
         if (file.size > 2 * 1024 * 1024) {
-          toast({ title: "Error", description: `File ${file.name} exceeds 2MB limit`, variant: "destructive" });
+          toast({
+            title: "Error",
+            description: `File ${file.name} exceeds 2MB limit`,
+            variant: "destructive",
+          });
           continue;
         }
         const filePath = `${selectedCategory}/${file.name}`;
-        const { error: uploadError } = await supabase.storage.from("menu").upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
+        const { error: uploadError } = await supabase.storage
+          .from("menu")
+          .upload(filePath, file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
         if (uploadError) {
           if (uploadError.message.includes("duplicate")) {
             toast({
@@ -1759,103 +1437,128 @@ export default function ImagesPage() {
     },
     onSuccess: (fileNames: string[]) => {
       if (fileNames.length > 0) {
-        toast({ title: "Success", description: `Uploaded ${fileNames.length} files` });
+        toast({ title: "Success", description: `Uploaded ${fileNames.length} file(s)` });
         queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
       }
     },
-    onError: (err: unknown) => {
+    onError: (err) => {
       const message = err instanceof Error ? err.message : "Failed to upload images";
       toast({ title: "Error", description: message, variant: "destructive" });
     },
   });
 
+  // Delete image
   const deleteMutation = useMutation<string, Error, ImageInfo>({
-    mutationFn: async (image: ImageInfo): Promise<string> => {
-      const { error: deleteError } = await supabase.storage.from("menu").remove([`${image.category}/${image.name}`]);
+    mutationFn: async (image) => {
+      const { error: deleteError } = await supabase.storage
+        .from("menu")
+        .remove([`${image.category}/${image.name}`]);
       if (deleteError) throw deleteError;
       return image.name;
     },
-    onSuccess: (fileName: string) => {
+    onSuccess: (fileName) => {
       toast({ title: "Success", description: `Deleted ${fileName}` });
       setDeleteDialog({ open: false, image: null });
       queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
     },
-    onError: (err: unknown) => {
+    onError: (err) => {
       const message = err instanceof Error ? err.message : "Failed to delete image";
       toast({ title: "Error", description: message, variant: "destructive" });
     },
   });
 
+  // Move image
   const moveMutation = useMutation<string, Error, { image: ImageInfo; targetCategory: string }>({
-    mutationFn: async ({ image, targetCategory }): Promise<string> => {
+    mutationFn: async ({ image, targetCategory }) => {
+      // Download file
       const { data: fileData, error: downloadError } = await supabase.storage
         .from("menu")
         .download(`${image.category}/${image.name}`);
       if (downloadError || !fileData) throw new Error("Failed to download file");
+
+      // Upload file to the new category
       const newFile = new File([fileData], image.name, { type: fileData.type });
       const { error: uploadError } = await supabase.storage
         .from("menu")
-        .upload(`${targetCategory}/${image.name}`, newFile, { cacheControl: "3600", upsert: false });
+        .upload(`${targetCategory}/${image.name}`, newFile, {
+          cacheControl: "3600",
+          upsert: false,
+        });
       if (uploadError) throw uploadError;
+
+      // Remove the old file
       const { error: removeError } = await supabase.storage
         .from("menu")
         .remove([`${image.category}/${image.name}`]);
       if (removeError) throw removeError;
+
       return image.name;
     },
-    onSuccess: (fileName: string) => {
+    onSuccess: (fileName) => {
       toast({ title: "Success", description: `Moved ${fileName}` });
       setMoveDialog({ open: false, image: null });
       queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
       queryClient.invalidateQueries({ queryKey: ["images", targetCategory] });
     },
-    onError: (err: unknown) => {
+    onError: (err) => {
       const message = err instanceof Error ? err.message : "Failed to move image";
       toast({ title: "Error", description: message, variant: "destructive" });
     },
   });
 
+  // Rename image
   const renameMutation = useMutation<{ oldName: string; newName: string }, Error, { image: ImageInfo; newImageName: string }>({
-    mutationFn: async ({ image, newImageName }): Promise<{ oldName: string; newName: string }> => {
+    mutationFn: async ({ image, newImageName }) => {
+      // Download existing file
       const { data: fileData, error: downloadError } = await supabase.storage
         .from("menu")
         .download(`${image.category}/${image.name}`);
       if (downloadError || !fileData) throw new Error("Failed to download file");
+
+      // Upload new file with new name
       const newFile = new File([fileData], newImageName, { type: fileData.type });
       const { error: uploadError } = await supabase.storage
         .from("menu")
-        .upload(`${image.category}/${newImageName}`, newFile, { cacheControl: "3600", upsert: false });
+        .upload(`${image.category}/${newImageName}`, newFile, {
+          cacheControl: "3600",
+          upsert: false,
+        });
       if (uploadError) throw uploadError;
+
+      // Remove old file
       const { error: removeError } = await supabase.storage
         .from("menu")
         .remove([`${image.category}/${image.name}`]);
       if (removeError) throw removeError;
+
       return { oldName: image.name, newName: newImageName };
     },
-    onSuccess: ({ oldName, newName }: { oldName: string; newName: string }) => {
+    onSuccess: ({ oldName, newName }) => {
       toast({ title: "Success", description: `Renamed ${oldName} to ${newName}` });
       setRenameDialog({ open: false, image: null });
       setNewImageName("");
       queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
     },
-    onError: (err: unknown) => {
+    onError: (err) => {
       const message = err instanceof Error ? err.message : "Failed to rename image";
       toast({ title: "Error", description: message, variant: "destructive" });
     },
   });
 
+  // For drag & drop 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { "image/jpeg": [], "image/png": [], "image/webp": [] },
     onDrop: (acceptedFiles: File[]) => uploadMutation.mutate(acceptedFiles),
   });
 
-  if (isLoading)
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[200px]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     );
-  if (error)
+  }
+  if (error) {
     return (
       <div className="container p-6">
         <Alert variant="destructive">
@@ -1863,6 +1566,7 @@ export default function ImagesPage() {
         </Alert>
       </div>
     );
+  }
 
   return (
     <div className="container p-6">
@@ -1874,7 +1578,7 @@ export default function ImagesPage() {
           <SelectContent>
             {CATEGORIES.map((cat) => (
               <SelectItem key={cat} value={cat}>
-                {cat}
+                {CATEGORY_LABELS[cat]} {/* Display the friendly label */}
               </SelectItem>
             ))}
           </SelectContent>
@@ -1885,7 +1589,11 @@ export default function ImagesPage() {
         {...getRootProps()}
         className={`mt-6 border-2 border-dashed rounded-lg p-8 text-center ${
           isDragActive ? "border-primary" : "border-muted-foreground/25"
-        } ${uploadMutation.isPending ? "pointer-events-none opacity-50" : "cursor-pointer hover:border-primary/50"}`}
+        } ${
+          uploadMutation.isPending
+            ? "pointer-events-none opacity-50"
+            : "cursor-pointer hover:border-primary/50"
+        }`}
       >
         <input {...getInputProps()} />
         <div className="flex flex-col items-center justify-center">
@@ -1899,7 +1607,10 @@ export default function ImagesPage() {
 
       <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {images.map((image) => (
-          <div key={image.name} className="group relative aspect-square rounded-lg overflow-hidden border bg-card">
+          <div
+            key={image.name}
+            className="group relative aspect-square rounded-lg overflow-hidden border bg-card"
+          >
             <Image
               src={image.url}
               alt={image.name}
@@ -1912,13 +1623,25 @@ export default function ImagesPage() {
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <p className="text-white text-sm mb-2 truncate">{image.name}</p>
                 <div className="flex gap-2 mt-2">
-                  <Button size="sm" variant="secondary" onClick={() => setRenameDialog({ open: true, image })}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setRenameDialog({ open: true, image })}
+                  >
                     <Edit2 className="h-4 w-4" />
                   </Button>
-                  <Button size="sm" variant="secondary" onClick={() => setMoveDialog({ open: true, image })}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setMoveDialog({ open: true, image })}
+                  >
                     <FolderIcon className="h-4 w-4" />
                   </Button>
-                  <Button size="sm" variant="destructive" onClick={() => setDeleteDialog({ open: true, image })}>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setDeleteDialog({ open: true, image })}
+                  >
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -1928,7 +1651,11 @@ export default function ImagesPage() {
         ))}
       </div>
 
-      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ open, image: null })}>
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog({ open, image: null })}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Image</AlertDialogTitle>
@@ -1937,8 +1664,8 @@ export default function ImagesPage() {
                 <div className="flex items-center gap-2 text-yellow-600">
                   <AlertCircle className="h-4 w-4" />
                   This image is used in {deleteDialog.image.usageCount}{" "}
-                  {deleteDialog.image.usageCount === 1 ? "item" : "items"}. Deleting it will remove the image from those
-                  items.
+                  {deleteDialog.image.usageCount === 1 ? "item" : "items"}. Deleting it will remove
+                  the image from those items.
                 </div>
               ) : (
                 "Are you sure you want to delete this image? This action cannot be undone."
@@ -1957,6 +1684,7 @@ export default function ImagesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Move dialog */}
       <Dialog open={moveDialog.open} onOpenChange={(open) => setMoveDialog({ open, image: null })}>
         <DialogContent>
           <DialogHeader>
@@ -1978,7 +1706,7 @@ export default function ImagesPage() {
                 <SelectContent>
                   {CATEGORIES.filter((cat) => cat !== moveDialog.image?.category).map((cat) => (
                     <SelectItem key={cat} value={cat}>
-                      {cat}
+                      {CATEGORY_LABELS[cat]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1994,12 +1722,21 @@ export default function ImagesPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setMoveDialog({ open: false, image: null })}>
+            <Button
+              variant="outline"
+              onClick={() => setMoveDialog({ open: false, image: null })}
+            >
               Cancel
             </Button>
             <Button
-              onClick={() => moveDialog.image && moveMutation.mutate({ image: moveDialog.image, targetCategory })}
-              disabled={!targetCategory || targetCategory === moveDialog.image?.category || moveMutation.isPending}
+              onClick={() =>
+                moveDialog.image && moveMutation.mutate({ image: moveDialog.image, targetCategory })
+              }
+              disabled={
+                !targetCategory ||
+                targetCategory === moveDialog.image?.category ||
+                moveMutation.isPending
+              }
             >
               {moveMutation.isPending ? "Moving..." : "Move Image"}
             </Button>
@@ -2007,6 +1744,7 @@ export default function ImagesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Rename dialog */}
       <Dialog
         open={renameDialog.open}
         onOpenChange={(open) => {
@@ -2027,7 +1765,11 @@ export default function ImagesPage() {
             </div>
             <div className="grid gap-2">
               <Label>New Name</Label>
-              <Input value={newImageName} onChange={(e) => setNewImageName(e.target.value)} placeholder="image.jpg" />
+              <Input
+                value={newImageName}
+                onChange={(e) => setNewImageName(e.target.value)}
+                placeholder="image.jpg"
+              />
               {!newImageName.includes(".") && newImageName && (
                 <p className="text-sm text-red-500 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
@@ -2055,7 +1797,9 @@ export default function ImagesPage() {
               Cancel
             </Button>
             <Button
-              onClick={() => renameDialog.image && renameMutation.mutate({ image: renameDialog.image, newImageName })}
+              onClick={() =>
+                renameDialog.image && renameMutation.mutate({ image: renameDialog.image, newImageName })
+              }
               disabled={
                 !newImageName ||
                 newImageName === renameDialog.image?.name ||
@@ -2078,42 +1822,88 @@ export default function ImagesPage() {
 
 ```typescript
 "use client";
-import React,{useState,useMemo}from"react";
-import{Plus,ToggleLeft,Edit,Copy,Search,Calendar as CalendarIcon}from"lucide-react";
-import{useToast}from"@/hooks/use-toast";
-import type{Database}from'@/types';
-import{createClientComponentClient}from"@supabase/auth-helpers-nextjs";
-import{useQuery,useMutation,useQueryClient}from"@tanstack/react-query";
-import{startOfWeek,endOfWeek,startOfMonth,endOfMonth,addWeeks,addMonths,addDays,format,isSameDay}from"date-fns";
-import{es}from"date-fns/locale";
-import{DateRange}from"react-day-picker";
-import{cn}from"@/lib/utils";
-import{Button}from"@/components/ui/button";
-import{Switch}from"@/components/ui/switch";
-import{Input}from"@/components/ui/input";
-import{Label}from"@/components/ui/label";
-import{Alert,AlertDescription}from"@/components/ui/alert";
-import{Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter}from"@/components/ui/dialog";
-import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from"@/components/ui/select";
-import{Calendar}from"@/components/ui/calendar";
-import{Popover,PopoverTrigger,PopoverContent}from"@/components/ui/popover";
 
-interface DailyMenuItem{id:string;course_name:string;course_type:"first"|"second";display_order:number}
-interface DailyMenu{id:string;date:string;repeat_pattern:"none"|"weekly"|"monthly";active:boolean;scheduled_for:string;created_at:string;daily_menu_items:DailyMenuItem[]}
-interface FilterOptions{search:string;pattern:"all"|"none"|"weekly"|"monthly";status:"all"|"active"|"inactive"}
-interface AdvancedFilterOptions extends FilterOptions{dateRange:DateRange|undefined;courseSearch:string;}
-interface NewMenu{dateRange:DateRange;repeat_pattern:"none"|"weekly"|"monthly";active:boolean;firstCourse:string;secondCourse:string;}
-interface GroupedMenus{[key:string]:DailyMenu[]}
+import React, { useState, useMemo, useEffect } from "react";
+import { Plus, ToggleLeft, Edit, Copy, Search, Calendar as CalendarIcon } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import type { Database } from "@/types";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, addDays, format, isSameDay } from "date-fns";
+import { es } from "date-fns/locale";
+import { DateRange } from "react-day-picker";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import dynamic from "next/dynamic";
 
-function groupMenusByWeek(menus:DailyMenu[]):GroupedMenus{return menus.reduce((acc,menu)=>{const w=format(startOfWeek(new Date(menu.date),{locale:es}),'yyyy-MM-dd');acc[w]=(acc[w]||[]).concat(menu);return acc;},{} as GroupedMenus);}
+// Dynamic Imports for heavy components
+const Dialog = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.Dialog));
+const DialogContent = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogContent));
+const DialogDescription = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogDescription));
+const DialogFooter = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogFooter));
+const DialogHeader = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogHeader));
+const DialogTitle = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogTitle));
 
-const getThisWeekRange=():DateRange=>({from:startOfWeek(new Date(),{locale:es}),to:endOfWeek(new Date(),{locale:es})});
-const getNextWeekRange=():DateRange=>({from:startOfWeek(addWeeks(new Date(),1),{locale:es}),to:endOfWeek(addWeeks(new Date(),1),{locale:es})});
-const getThisMonthRange=():DateRange=>({from:startOfMonth(new Date()),to:endOfMonth(new Date())});
+const Popover = dynamic(() => import("@/components/ui/popover").then((mod) => mod.Popover));
+const PopoverTrigger = dynamic(() => import("@/components/ui/popover").then((mod) => mod.PopoverTrigger));
+const PopoverContent = dynamic(() => import("@/components/ui/popover").then((mod) => mod.PopoverContent));
 
-async function fetchDailyMenus(supabase:ReturnType<typeof createClientComponentClient<Database>>){const{data,error}=await supabase.from("daily_menus").select(`id,date,repeat_pattern,active,scheduled_for,created_at,daily_menu_items (id,course_name,course_type,display_order)`).order("date",{ascending:false});if(error)throw error;return data as DailyMenu[];}
+const Select = dynamic(() => import("@/components/ui/select").then((mod) => mod.Select));
+const SelectContent = dynamic(() => import("@/components/ui/select").then((mod) => mod.SelectContent));
+const SelectItem = dynamic(() => import("@/components/ui/select").then((mod) => mod.SelectItem));
+const SelectTrigger = dynamic(() => import("@/components/ui/select").then((mod) => mod.SelectTrigger));
+const SelectValue = dynamic(() => import("@/components/ui/select").then((mod) => mod.SelectValue));
 
-const AdvancedFilters=({filters,onFilterChange}:{filters:AdvancedFilterOptions;onFilterChange:(f:AdvancedFilterOptions)=>void;})=>(
+const Calendar = dynamic(() => import("@/components/ui/calendar").then((mod) => mod.Calendar));
+
+// Dynamically import Switch
+const Switch = dynamic(() => import("@/components/ui/switch").then((mod) => mod.Switch));
+
+interface DailyMenuItem {
+  id: string;
+  course_name: string;
+  course_type: "first" | "second";
+  display_order: number;
+}
+interface DailyMenu {
+  id: string;
+  date: string;
+  repeat_pattern: "none" | "weekly" | "monthly";
+  active: boolean;
+  scheduled_for: string;
+  created_at: string;
+  daily_menu_items: DailyMenuItem[];
+}
+interface FilterOptions { search: string; pattern: "all"|"none"|"weekly"|"monthly"; status: "all"|"active"|"inactive" }
+interface AdvancedFilterOptions extends FilterOptions { dateRange: DateRange|undefined; courseSearch: string; }
+interface NewMenu { dateRange: DateRange; repeat_pattern: "none"|"weekly"|"monthly"; active: boolean; firstCourse: string; secondCourse: string; }
+interface GroupedMenus { [key: string]: DailyMenu[] }
+
+function groupMenusByWeek(menus: DailyMenu[]): GroupedMenus {
+  return menus.reduce((acc, menu) => {
+    const w = format(startOfWeek(new Date(menu.date), { locale: es }), 'yyyy-MM-dd');
+    acc[w] = (acc[w] || []).concat(menu);
+    return acc;
+  }, {} as GroupedMenus);
+}
+
+const getThisWeekRange = (): DateRange => ({ from: startOfWeek(new Date(), { locale: es }), to: endOfWeek(new Date(), { locale: es }) });
+const getNextWeekRange = (): DateRange => ({ from: startOfWeek(addWeeks(new Date(), 1), { locale: es }), to: endOfWeek(addWeeks(new Date(), 1), { locale: es }) });
+const getThisMonthRange = (): DateRange => ({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) });
+
+async function fetchDailyMenus(supabase: ReturnType<typeof createClientComponentClient<Database>>) {
+  const { data, error } = await supabase
+    .from("daily_menus")
+    .select(`id,date,repeat_pattern,active,scheduled_for,created_at,daily_menu_items (id,course_name,course_type,display_order)`)
+    .order("date", { ascending: false });
+  if (error) throw error;
+  return data as DailyMenu[];
+}
+
+const AdvancedFilters = ({ filters, onFilterChange }: { filters: AdvancedFilterOptions; onFilterChange: (f: AdvancedFilterOptions) => void; }) => (
   <div className="space-y-4">
     <div className="flex gap-4 flex-wrap">
       <div className="flex-1 min-w-[200px] relative">
@@ -2124,7 +1914,7 @@ const AdvancedFilters=({filters,onFilterChange}:{filters:AdvancedFilterOptions;o
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
         <Input placeholder="Search courses..." value={filters.courseSearch} onChange={e=>onFilterChange({...filters,courseSearch:e.target.value})} className="pl-9"/>
       </div>
-      <Select value={filters.pattern} onValueChange={(value:FilterOptions["pattern"])=>onFilterChange({...filters,pattern:value})}>
+      <Select value={filters.pattern} onValueChange={(value: FilterOptions["pattern"])=>onFilterChange({...filters,pattern:value})}>
         <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filter by pattern"/></SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Patterns</SelectItem>
@@ -2137,7 +1927,11 @@ const AdvancedFilters=({filters,onFilterChange}:{filters:AdvancedFilterOptions;o
         <PopoverTrigger asChild>
           <Button variant="outline" className="min-w-[200px] justify-start">
             <CalendarIcon className="mr-2 h-4 w-4"/>
-            {filters.dateRange?.from?filters.dateRange.to?`${format(filters.dateRange.from,"PPP",{locale:es})} - ${format(filters.dateRange.to,"PPP",{locale:es})}`:format(filters.dateRange.from,"PPP",{locale:es}):"Pick a date range"}
+            {filters.dateRange?.from
+              ? filters.dateRange.to
+                ? `${format(filters.dateRange.from, "PPP", { locale: es })} - ${format(filters.dateRange.to, "PPP", { locale: es })}`
+                : format(filters.dateRange.from, "PPP", { locale: es })
+              : "Pick a date range"}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0">
@@ -2156,7 +1950,7 @@ const AdvancedFilters=({filters,onFilterChange}:{filters:AdvancedFilterOptions;o
   </div>
 );
 
-const QuickActions=({onSelectDateRange,onCreateMenu}:{onSelectDateRange:(r:DateRange)=>void;onCreateMenu:()=>void;})=>(
+const QuickActions = ({ onSelectDateRange, onCreateMenu }: { onSelectDateRange: (r: DateRange) => void; onCreateMenu: () => void; }) => (
   <div className="flex items-center justify-between mb-6">
     <div className="flex gap-2">
       <Button variant="outline" size="sm" onClick={()=>onSelectDateRange(getThisWeekRange())}>This Week</Button>
@@ -2176,18 +1970,28 @@ const QuickActions=({onSelectDateRange,onCreateMenu}:{onSelectDateRange:(r:DateR
   </div>
 );
 
-type MenuCardProps={menu:DailyMenu;onStatusToggle:(id:string,status:boolean)=>void;onEdit:(m:DailyMenu)=>void;onDuplicate:(m:DailyMenu)=>void;}
+type MenuCardProps = {
+  menu: DailyMenu;
+  onStatusToggle: (id: string, status: boolean) => void;
+  onEdit: (m: DailyMenu) => void;
+  onDuplicate: (m: DailyMenu) => void;
+};
 
-const MenuCard=({menu,onStatusToggle,onEdit,onDuplicate}:MenuCardProps)=>(
+const MenuCard = ({ menu, onStatusToggle, onEdit, onDuplicate }: MenuCardProps) => (
   <div className="bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all p-6 rounded-sm relative group">
     <div className="flex justify-between items-start mb-6">
       <div>
         <div className="text-xs uppercase text-muted-foreground font-medium tracking-wide">DATE</div>
-        <div className="text-lg mt-1">{format(new Date(menu.date),"PPP",{locale:es})}</div>
+        <div className="text-lg mt-1">{format(new Date(menu.date), "PPP", { locale: es })}</div>
       </div>
-      <Switch checked={menu.active} onCheckedChange={checked=>onStatusToggle(menu.id,checked)} aria-label={`Toggle ${format(new Date(menu.date),"PPP",{locale:es})} menu status`} className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",menu.active?"bg-black":"bg-gray-200")}>
+      <Switch
+        checked={menu.active}
+        onCheckedChange={(checked: boolean) => onStatusToggle(menu.id, checked)}
+        aria-label={`Toggle ${format(new Date(menu.date), "PPP", { locale: es })} menu status`}
+        className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none", menu.active ? "bg-black" : "bg-gray-200")}
+      >
         <span className="sr-only">Toggle menu status</span>
-        <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white transition-transform",menu.active?"translate-x-6":"translate-x-1")}/>
+        <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white transition-transform", menu.active ? "translate-x-6" : "translate-x-1")}/>
       </Switch>
     </div>
     <div className="space-y-4">
@@ -2198,32 +2002,55 @@ const MenuCard=({menu,onStatusToggle,onEdit,onDuplicate}:MenuCardProps)=>(
       <div>
         <div className="text-xs uppercase text-muted-foreground font-medium tracking-wide">COURSES</div>
         <div className="grid gap-2 mt-2">
-          {menu.daily_menu_items?.sort((a,b)=>a.display_order-b.display_order).map(item=><div key={item.id} className="text-sm"><span className="font-medium capitalize">{item.course_type}:</span> {item.course_name}</div>)}
+          {menu.daily_menu_items?.sort((a,b)=>a.display_order-b.display_order).map(item =>
+            <div key={item.id} className="text-sm">
+              <span className="font-medium capitalize">{item.course_type}:</span> {item.course_name}
+            </div>
+          )}
         </div>
       </div>
     </div>
     <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity">
       <div className="absolute bottom-4 right-4 flex gap-2">
-        <Button size="sm" variant="ghost" onClick={()=>onEdit(menu)} className="hover:bg-black hover:text-white" aria-label="Edit menu"><Edit className="h-4 w-4"/></Button>
-        <Button size="sm" variant="ghost" onClick={()=>onDuplicate(menu)} className="hover:bg-black hover:text-white" aria-label="Duplicate menu"><Copy className="h-4 w-4"/></Button>
-        <Button size="sm" variant="ghost" onClick={()=>onStatusToggle(menu.id,menu.active)} className="hover:bg-black hover:text-white" aria-label="Toggle menu status"><ToggleLeft className="h-4 w-4"/></Button>
+        <Button size="sm" variant="ghost" onClick={()=>onEdit(menu)} className="hover:bg-black hover:text-white" aria-label="Edit menu">
+          <Edit className="h-4 w-4"/>
+        </Button>
+        <Button size="sm" variant="ghost" onClick={()=>onDuplicate(menu)} className="hover:bg-black hover:text-white" aria-label="Duplicate menu">
+          <Copy className="h-4 w-4"/>
+        </Button>
+        <Button size="sm" variant="ghost" onClick={()=>onStatusToggle(menu.id, menu.active)} className="hover:bg-black hover:text-white" aria-label="Toggle menu status">
+          <ToggleLeft className="h-4 w-4"/>
+        </Button>
       </div>
     </div>
   </div>
 );
 
-const MenuListSection=({filteredMenus,toggleMenuStatus,handleEditMenu,handleDuplicateMenu}:{filteredMenus:DailyMenu[];toggleMenuStatus:(id:string,status:boolean)=>void;handleEditMenu:(m:DailyMenu)=>void;handleDuplicateMenu:(m:DailyMenu)=>void;})=>{
-  const groupedMenus=useMemo(()=>groupMenusByWeek(filteredMenus),[filteredMenus]);
-  if(!filteredMenus.length)return<div className="text-center py-12"><p className="text-muted-foreground">No menus found.</p></div>;
-  return(
+const MenuListSection = ({ filteredMenus, toggleMenuStatus, handleEditMenu, handleDuplicateMenu }: {
+  filteredMenus: DailyMenu[];
+  toggleMenuStatus: (id: string, status: boolean) => void;
+  handleEditMenu: (m: DailyMenu) => void;
+  handleDuplicateMenu: (m: DailyMenu) => void;
+}) => {
+  const groupedMenus = useMemo(() => groupMenusByWeek(filteredMenus), [filteredMenus]);
+  if (!filteredMenus.length) return <div className="text-center py-12"><p className="text-muted-foreground">No menus found.</p></div>;
+  return (
     <div className="space-y-8">
-      {Object.entries(groupedMenus).map(([week,menus])=>(
+      {Object.entries(groupedMenus).map(([week, menus]) => (
         <div key={week} className="space-y-4">
           <h3 className="text-sm font-medium text-gray-500 sticky top-0 bg-white z-10 py-2">
-            Week of {format(new Date(week),"PPP",{locale:es})}
+            Week of {format(new Date(week), "PPP", { locale: es })}
           </h3>
           <div className="space-y-4">
-            {menus.map(menu=><MenuCard key={menu.id} menu={menu} onStatusToggle={toggleMenuStatus} onEdit={handleEditMenu} onDuplicate={handleDuplicateMenu}/>)}
+            {menus.map(menu =>
+              <MenuCard
+                key={menu.id}
+                menu={menu}
+                onStatusToggle={toggleMenuStatus}
+                onEdit={handleEditMenu}
+                onDuplicate={handleDuplicateMenu}
+              />
+            )}
           </div>
         </div>
       ))}
@@ -2231,18 +2058,41 @@ const MenuListSection=({filteredMenus,toggleMenuStatus,handleEditMenu,handleDupl
   );
 };
 
-export default function DailyMenuPage(){
-  const supabase=createClientComponentClient<Database>(),{toast}=useToast(),queryClient=useQueryClient();
-  const[advancedFilter,setAdvancedFilter]=useState<AdvancedFilterOptions>({search:"",pattern:"all",status:"all",dateRange:undefined,courseSearch:""});
-  const[isDialogOpen,setIsDialogOpen]=useState(false);
-  const[editingMenu,setEditingMenu]=useState<DailyMenu|null>(null);
-  const[newMenu,setNewMenu]=useState<NewMenu>({dateRange:{from:new Date(),to:new Date()},repeat_pattern:"none",active:true,firstCourse:"",secondCourse:""});
-  const {data:dailyMenus=[],isLoading,error}=useQuery<DailyMenu[],Error>({queryKey:["dailyMenus"],queryFn:()=>fetchDailyMenus(supabase)});
+export default function DailyMenuPage() {
+  const supabase = createClientComponentClient<Database>(), { toast } = useToast(), queryClient = useQueryClient();
+  
+  // Local states for debouncing search and courseSearch
+  const [advancedFilter, setAdvancedFilter] = useState<AdvancedFilterOptions>({ search: "", pattern: "all", status: "all", dateRange: undefined, courseSearch: "" });
+  const [localSearch, setLocalSearch] = useState(advancedFilter.search);
+  const [localCourseSearch, setLocalCourseSearch] = useState(advancedFilter.courseSearch);
+  
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setAdvancedFilter(f => ({ ...f, search: localSearch }));
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [localSearch]);
 
-  const queryInvalidate=()=>queryClient.invalidateQueries({queryKey:["dailyMenus"]});
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setAdvancedFilter(f => ({ ...f, courseSearch: localCourseSearch }));
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [localCourseSearch]);
 
-  const toggleStatusMutation=useMutation({
-    mutationFn:async({id,status}:{id:string;status:boolean})=>{
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingMenu, setEditingMenu] = useState<DailyMenu|null>(null);
+  const [newMenu, setNewMenu] = useState<NewMenu>({dateRange:{from:new Date(),to:new Date()},repeat_pattern:"none",active:true,firstCourse:"",secondCourse:""});
+
+  const { data: dailyMenus = [], isLoading, error } = useQuery<DailyMenu[], Error>({
+    queryKey: ["dailyMenus"],
+    queryFn: () => fetchDailyMenus(supabase)
+  });
+
+  const queryInvalidate = () => queryClient.invalidateQueries({ queryKey: ["dailyMenus"] });
+
+  const toggleStatusMutation = useMutation({
+    mutationFn: async({id,status}:{id:string;status:boolean})=>{
       const{error:toggleError}=await supabase.from("daily_menus").update({active:status}).eq("id",id);
       if(toggleError)throw toggleError;
     },
@@ -2255,9 +2105,9 @@ export default function DailyMenuPage(){
     },
   });
 
-  type InsertedMenu=Pick<DailyMenu,'id'|'date'|'repeat_pattern'|'active'|'scheduled_for'|'created_at'>;
-  const createMenuMutation=useMutation({
-    mutationFn:async()=>{
+  type InsertedMenu = Pick<DailyMenu,'id'|'date'|'repeat_pattern'|'active'|'scheduled_for'|'created_at'>;
+  const createMenuMutation = useMutation({
+    mutationFn: async()=>{
       const{dateRange,firstCourse,secondCourse,repeat_pattern,active}=newMenu;
       if(!dateRange.from||!firstCourse||!secondCourse)throw new Error("Please fill in all required fields and select dates");
       const datesToSchedule:Date[]=[];
@@ -2318,7 +2168,7 @@ export default function DailyMenuPage(){
 
   const resetNewMenu=()=>{setEditingMenu(null);setNewMenu({dateRange:{from:new Date(),to:new Date()},repeat_pattern:"none",active:true,firstCourse:"",secondCourse:""});};
 
-  const filteredMenus=useMemo(()=>{
+  const filteredMenus = useMemo(()=>{
     let menus=[...dailyMenus];
     if(advancedFilter.search.trim()){
       const s=advancedFilter.search.toLowerCase();
@@ -2340,7 +2190,7 @@ export default function DailyMenuPage(){
     return menus.sort((a,b)=>new Date(b.date).getTime()-new Date(a.date).getTime());
   },[dailyMenus,advancedFilter]);
 
-  return(
+  return (
     <div className="min-h-screen bg-background">
       <div className="container py-6 space-y-6">
         <div className="flex justify-between items-center">
@@ -2353,7 +2203,7 @@ export default function DailyMenuPage(){
           </Button>
         </div>
 
-        {error&&<Alert variant="destructive"><AlertDescription>{String(error)}</AlertDescription></Alert>}
+        {error && <Alert variant="destructive"><AlertDescription>{String(error)}</AlertDescription></Alert>}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
@@ -2362,8 +2212,10 @@ export default function DailyMenuPage(){
               <p className="text-sm text-gray-500 mt-1">SELECT DATES TO VIEW OR SCHEDULE MENUS</p>
             </div>
             <QuickActions onSelectDateRange={r=>setNewMenu({...newMenu,dateRange:r})} onCreateMenu={()=>{resetNewMenu();setIsDialogOpen(true);}}/>
-            {isLoading?<div className="flex h-[200px] items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"/></div>:
-              <Calendar mode="range" selected={newMenu.dateRange} onSelect={range=>setNewMenu({...newMenu,dateRange:range||{from:undefined,to:undefined}})} numberOfMonths={1} locale={es}/>}
+            {isLoading
+              ?<div className="flex h-[200px] items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"/></div>
+              :<Calendar mode="range" selected={newMenu.dateRange} onSelect={range=>setNewMenu({...newMenu,dateRange:range||{from:undefined,to:undefined}})} numberOfMonths={1} locale={es}/>
+            }
             <div className="mt-6 flex items-center justify-between px-2">
               <div className="flex items-center gap-2"><div className="w-3 h-3 bg-black rounded-sm"/><span className="text-sm text-gray-600">Single</span></div>
               <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#2563eb] rounded-sm"/><span className="text-sm text-gray-600">Weekly</span></div>
@@ -2376,14 +2228,24 @@ export default function DailyMenuPage(){
               <h2 className="text-2xl font-medium mb-1">Scheduled Menus</h2>
               <p className="text-sm uppercase text-muted-foreground tracking-wide">View and manage your daily menus</p>
             </div>
-            <AdvancedFilters filters={advancedFilter} onFilterChange={setAdvancedFilter}/>
-            {isLoading?<div className="flex h-[200px] items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"/></div>:
-              <MenuListSection
+            <AdvancedFilters
+              filters={advancedFilter}
+              onFilterChange={f=>{
+                // Update local states for debouncing
+                setLocalSearch(f.search);
+                setLocalCourseSearch(f.courseSearch);
+                setAdvancedFilter({...f, search: f.search, courseSearch: f.courseSearch});
+              }}
+            />
+            {isLoading
+              ?<div className="flex h-[200px] items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"/></div>
+              :<MenuListSection
                 filteredMenus={filteredMenus}
                 toggleMenuStatus={(id,status)=>toggleStatusMutation.mutate({id,status:!status})}
                 handleEditMenu={handleEditMenu}
                 handleDuplicateMenu={handleDuplicateMenu}
-              />}
+              />
+            }
           </div>
         </div>
 
@@ -2398,8 +2260,8 @@ export default function DailyMenuPage(){
               <div className="grid gap-2">
                 <Label className="text-xs uppercase text-muted-foreground font-medium tracking-wide">Selected Dates</Label>
                 <div className="text-sm">
-                  {newMenu.dateRange.from&&format(newMenu.dateRange.from,"PPP",{locale:es})}
-                  {newMenu.dateRange.to&&newMenu.dateRange.from!==newMenu.dateRange.to&&` - ${format(newMenu.dateRange.to,"PPP",{locale:es})}`}
+                  {newMenu.dateRange.from && format(newMenu.dateRange.from,"PPP",{locale:es})}
+                  {newMenu.dateRange.to && newMenu.dateRange.from!==newMenu.dateRange.to && ` - ${format(newMenu.dateRange.to,"PPP",{locale:es})}`}
                 </div>
               </div>
 
@@ -2443,21 +2305,15 @@ export default function DailyMenuPage(){
 
 ```typescript
 "use client";
-import React, { useState, useMemo, useRef } from "react";
+
+import React, { useState, useMemo, useEffect, useCallback, FocusEvent } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Image from "next/image";
-import { Plus, Image as ImageIcon, Edit, Search } from "lucide-react";
+import { Plus, Search, Edit } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Database } from "@/types";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import type { Database } from "@/types";
+import dynamic from "next/dynamic";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -2472,6 +2328,25 @@ import { PageHeader } from "@/components/core/layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
+// Dynamically imported components for the Dialog
+const Dialog = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.Dialog));
+const DialogContent = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogContent)
+);
+const DialogDescription = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogDescription)
+);
+const DialogFooter = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogFooter)
+);
+const DialogHeader = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogHeader)
+);
+const DialogTitle = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogTitle)
+);
+
+// WineCategory and Wine interfaces
 interface WineCategory {
   id: number;
   name: string;
@@ -2512,21 +2387,126 @@ interface EditFormData {
   bottle_price: string;
   glass_price: string;
   category_ids: number[];
+  image_path?: string;
 }
 
+// Simple highlight function
+function highlightText(text: string, term: string) {
+  if (!term.trim()) return text;
+  const lowerTerm = term.toLowerCase();
+  const lowerText = text.toLowerCase();
+  const index = lowerText.indexOf(lowerTerm);
+  if (index === -1) return text;
+  return (
+    <>
+      {text.slice(0, index)}
+      <span className="bg-orange-500 text-white">
+        {text.slice(index, index + term.length)}
+      </span>
+      {text.slice(index + term.length)}
+    </>
+  );
+}
+
+// Wine card used for listing wines
+const WineCard = ({
+  wine,
+  searchTerm,
+  handleEdit,
+}: {
+  wine: Wine;
+  searchTerm: string;
+  handleEdit: (wine: Wine) => void;
+}) => {
+  return (
+    <div className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm transition-shadow">
+      {/* Edit button */}
+      <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => handleEdit(wine)}
+          className="h-8 w-8 p-0"
+          aria-label={`Edit ${wine.name}`}
+        >
+          <Edit className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Image container */}
+      <div className="relative w-full pb-[150%] mb-4">
+        <Image
+          src={wine.image_url}
+          alt={wine.name}
+          fill
+          className="object-contain"
+          sizes="(max-width: 640px) 100vw,(max-width: 1024px) 50vw,(max-width: 1536px) 33vw,25vw"
+          priority={false}
+          loading="lazy"
+          unoptimized
+          onError={(e) => {
+            (e.target as HTMLImageElement).src =
+              `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`;
+          }}
+        />
+      </div>
+
+      {/* Categories */}
+      <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
+        {wine.categories.map((c) => c.name).join(" · ")}
+      </div>
+
+      {/* Name & description with highlight */}
+      <h3 className="text-lg font-medium mb-2 line-clamp-2">
+        {highlightText(wine.name, searchTerm)}
+      </h3>
+      <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
+        {highlightText(wine.description, searchTerm)}
+      </p>
+
+      {/* Pricing */}
+      <div className="mt-auto grid grid-cols-2 gap-x-4 text-sm">
+        <div>
+          <div className="font-medium">
+            {/* Changed '$' to '€' */}
+            €{wine.bottle_price.toFixed(2)}
+          </div>
+          <div className="text-neutral-500 uppercase text-xs">bottle</div>
+        </div>
+        {wine.glass_price && (
+          <div>
+            <div className="font-medium">
+              {/* Changed '$' to '€' */}
+              €{wine.glass_price.toFixed(2)}
+            </div>
+            <div className="text-neutral-500 uppercase text-xs">glass</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Fetch categories
 async function fetchCategories(supabase: ReturnType<typeof createClientComponentClient<Database>>) {
   const { data, error } = await supabase
     .from("wine_categories")
-    .select("*")
+    .select("id,name,display_order")
     .order("display_order");
   if (error) throw error;
   return data as WineCategory[];
 }
 
+// Fetch wines
 async function fetchWines(supabase: ReturnType<typeof createClientComponentClient<Database>>) {
   const { data, error } = await supabase
     .from("wines")
-    .select(`*, wine_category_assignments ( wine_categories ( id, name, display_order ) )`)
+    .select(`
+      id,name,description,bottle_price,glass_price,active,created_at,image_path,image_url,
+      wine_category_assignments (
+        wine_categories ( id, name, display_order )
+      )
+    `)
     .order("name");
   if (error) throw error;
 
@@ -2538,14 +2518,15 @@ async function fetchWines(supabase: ReturnType<typeof createClientComponentClien
     glass_price: number;
     active: boolean;
     created_at: string;
+    image_path?: string;
+    image_url?: string;
     wine_category_assignments: {
       wine_categories: WineCategory[];
     }[];
-    image_path?: string;
-    image_url?: string;
   };
 
   const rawWines = data as WineResponse[];
+
   return rawWines.map((wine) => ({
     id: wine.id,
     name: wine.name,
@@ -2562,90 +2543,30 @@ async function fetchWines(supabase: ReturnType<typeof createClientComponentClien
   })) as Wine[];
 }
 
-function highlightText(text: string, searchTerm: string) {
-  if (!searchTerm.trim()) return text;
-  const regex = new RegExp(`(${searchTerm})`, "gi");
-  return text.split(regex).map((part, index) =>
-    regex.test(part) ? (
-      <span key={index} className="bg-orange-500 text-white">
-        {part}
-      </span>
-    ) : (
-      part
-    )
-  );
-}
-
-const WineCard = ({
-  wine,
-  searchTerm,
-  handleEdit,
-}: {
-  wine: Wine;
-  searchTerm: string;
-  handleEdit: (wine: Wine) => void;
-}) => (
-  <div className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm transition-shadow">
-    <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => handleEdit(wine)}
-        className="h-8 w-8 p-0"
-        aria-label={`Edit ${wine.name}`}
-      >
-        <Edit className="h-4 w-4" />
-      </Button>
-    </div>
-    <div className="relative w-full pb-[150%] mb-4">
-      <Image
-        src={wine.image_url}
-        alt={wine.name}
-        fill
-        className="object-contain"
-        sizes="(max-width: 640px) 100vw,(max-width: 1024px) 50vw,(max-width: 1536px) 33vw,25vw"
-        priority={false}
-        loading="lazy"
-        unoptimized
-        onError={(e) => {
-          (e.target as HTMLImageElement).src = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/wine.webp`;
-        }}
-      />
-    </div>
-    <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
-      {wine.categories.map((c) => c.name).join(" · ")}
-    </div>
-    <h3 className="text-lg font-medium mb-2 line-clamp-2">
-      {highlightText(wine.name, searchTerm)}
-    </h3>
-    <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
-      {highlightText(wine.description, searchTerm)}
-    </p>
-    <div className="mt-auto grid grid-cols-2 gap-x-4 text-sm">
-      <div>
-        <div className="font-medium">${wine.bottle_price.toFixed(2)}</div>
-        <div className="text-neutral-500 uppercase text-xs">bottle</div>
-      </div>
-      {wine.glass_price && (
-        <div>
-          <div className="font-medium">${wine.glass_price.toFixed(2)}</div>
-          <div className="text-neutral-500 uppercase text-xs">glass</div>
-        </div>
-      )}
-    </div>
-  </div>
-);
-
 export default function WinePage() {
   const supabase = createClientComponentClient<Database>();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Local states
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isImageDialogOpen, setIsImageDialogOpen] = useState(false);
-  const [selectedWineId, setSelectedWineId] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [wineImages, setWineImages] = useState<{ name: string; url: string }[]>([]);
+  const [editDialog, setEditDialog] = useState<EditWineDialog>({ open: false, wine: null });
+  const [editForm, setEditForm] = useState<EditFormData>({
+    name: "",
+    description: "",
+    bottle_price: "",
+    glass_price: "",
+    category_ids: [],
+    image_path: "wines/wine.webp",
+  });
 
+  // For searching & filtering
+  const [searchTerm, setSearchTerm] = useState("");
+  const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
+  const [selectedFilter, setSelectedFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<"name" | "price">("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [newWine, setNewWine] = useState<NewWine>({
     name: "",
     description: "",
@@ -2656,24 +2577,13 @@ export default function WinePage() {
     image_path: "wines/wine.webp",
   });
 
-  const [editDialog, setEditDialog] = useState<EditWineDialog>({
-    open: false,
-    wine: null,
-  });
+  // Debounce searchTerm updates
+  useEffect(() => {
+    const handler = setTimeout(() => setSearchTerm(localSearchTerm), 300);
+    return () => clearTimeout(handler);
+  }, [localSearchTerm]);
 
-  const [editForm, setEditForm] = useState<EditFormData>({
-    name: "",
-    description: "",
-    bottle_price: "",
-    glass_price: "",
-    category_ids: [],
-  });
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedFilter, setSelectedFilter] = useState("all");
-  const [sortBy, setSortBy] = useState<"name" | "price">("name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-
+  // Queries for categories and wines
   const {
     data: categories = [],
     isLoading: categoriesLoading,
@@ -2695,7 +2605,8 @@ export default function WinePage() {
   const isLoading = categoriesLoading || winesLoading;
   const error = categoriesError || winesError;
 
-  const createWineMutation = useMutation({
+  // Create Wine mutation
+  const createWineMutation = useMutation<void, Error, NewWine>({
     mutationFn: async (data: NewWine) => {
       if (!data.name || !data.bottle_price) throw new Error("Please fill in all required fields");
       const { data: wine, error: wineError } = await supabase
@@ -2711,7 +2622,9 @@ export default function WinePage() {
         .select()
         .single();
       if (wineError) throw wineError;
-      if (data.category_ids.length > 0) {
+
+      // Insert categories
+      if (data.category_ids.length > 0 && wine) {
         const categoryAssignments = data.category_ids.map((categoryId) => ({
           wine_id: wine.id,
           category_id: categoryId,
@@ -2723,7 +2636,15 @@ export default function WinePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wines"] });
       setIsDialogOpen(false);
-      setNewWine({ name: "", description: "", bottle_price: "", glass_price: "", category_ids: [], active: true, image_path: "wines/wine.webp" });
+      setNewWine({
+        name: "",
+        description: "",
+        bottle_price: "",
+        glass_price: "",
+        category_ids: [],
+        active: true,
+        image_path: "wines/wine.webp",
+      });
       toast({ title: "Success", description: "Wine added successfully" });
     },
     onError: (err) => {
@@ -2732,28 +2653,33 @@ export default function WinePage() {
     },
   });
 
-  const updateWineMutation = useMutation({
-    mutationFn: async ({ wineId, form }: { wineId: number; form: EditFormData }) => {
-      const { data: updatedWine, error: wineError } = await supabase
+  // Update Wine mutation
+  const updateWineMutation = useMutation<void, Error, { wineId: number; form: EditFormData }>({
+    mutationFn: async ({ wineId, form }) => {
+      const { error: wineError } = await supabase
         .from("wines")
         .update({
           name: form.name,
           description: form.description,
           bottle_price: parseFloat(form.bottle_price),
           glass_price: form.glass_price ? parseFloat(form.glass_price) : null,
+          image_path: form.image_path || "wines/wine.webp",
         })
         .eq("id", wineId)
         .select("*")
         .single();
       if (wineError) throw wineError;
+
+      // Delete old assignments
       const { error: deleteError } = await supabase.from("wine_category_assignments").delete().eq("wine_id", wineId);
       if (deleteError) throw deleteError;
+
+      // Insert new ones
       if (form.category_ids.length > 0) {
         const assignments = form.category_ids.map((categoryId) => ({ wine_id: wineId, category_id: categoryId }));
         const { error: assignmentError } = await supabase.from("wine_category_assignments").insert(assignments);
         if (assignmentError) throw assignmentError;
       }
-      return updatedWine;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wines"] });
@@ -2762,251 +2688,508 @@ export default function WinePage() {
     },
     onError: (err) => {
       const msg = err instanceof Error ? err.message : "An unexpected error occurred";
-      toast({ title: "Warning", description: msg, variant: "destructive" });
+      toast({ title: "Error", description: msg, variant: "destructive" });
       setEditDialog({ open: false, wine: null });
     },
   });
 
-  const toggleWineStatusMutation = useMutation({
-    mutationFn: async ({ wineId, currentStatus }: { wineId: number; currentStatus: boolean }) => {
-      const { error } = await supabase.from("wines").update({ active: !currentStatus }).eq("id", wineId);
-      if (error) throw error;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wines"] }),
-    onError: (err) => {
-      const msg = err instanceof Error ? err.message : "An unexpected error occurred";
-      toast({ title: "Error", description: msg, variant: "destructive" });
-    },
-  });
-
-  const uploadImageMutation = useMutation({
-    mutationFn: async ({ file, wineId }: { file: File; wineId: number }) => {
-      const ext = file.name.split(".").pop();
-      const filePath = `wines/${wineId}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from("menu").upload(filePath, file, { cacheControl: "3600", upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from("menu").getPublicUrl(filePath);
-      if (!urlData.publicUrl) throw new Error("Failed to get public URL");
-      const { error: updateError } = await supabase.from("wines").update({ image_path: filePath, image_url: urlData.publicUrl }).eq("id", wineId);
-      if (updateError) throw updateError;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["wines"] });
-      toast({ title: "Success", description: "Image updated successfully" });
-      setIsImageDialogOpen(false);
-      setSelectedWineId(null);
-    },
-    onError: (err) => {
-      const msg = err instanceof Error ? err.message : "An unexpected error occurred";
-      toast({ title: "Error", description: msg, variant: "destructive" });
-    },
-  });
-
+  // Filter and sort wines
   const filteredAndSortedWines = useMemo(() => {
     let filtered = wines;
-    if (searchTerm.trim()) {
-      const s = searchTerm.toLowerCase();
-      filtered = filtered.filter((wine) => wine.name.toLowerCase().includes(s) || wine.description.toLowerCase().includes(s));
+    const s = searchTerm.toLowerCase().trim();
+    if (s) {
+      filtered = filtered.filter(
+        (wine) => wine.name.toLowerCase().includes(s) || wine.description.toLowerCase().includes(s)
+      );
     }
-    if (selectedFilter !== "all") filtered = filtered.filter((wine) => wine.categories.some((cat) => cat.id.toString() === selectedFilter));
+    if (selectedFilter !== "all") {
+      filtered = filtered.filter((wine) =>
+        wine.categories.some((cat) => cat.id.toString() === selectedFilter)
+      );
+    }
+
     return [...filtered].sort((a, b) => {
-      if (sortBy === "name") return sortOrder === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-      return sortOrder === "asc" ? a.bottle_price - b.bottle_price : b.bottle_price - a.bottle_price;
+      if (sortBy === "name") {
+        return sortOrder === "asc"
+          ? a.name.localeCompare(b.name)
+          : b.name.localeCompare(a.name);
+      }
+      return sortOrder === "asc"
+        ? a.bottle_price - b.bottle_price
+        : b.bottle_price - a.bottle_price;
     });
   }, [wines, selectedFilter, sortBy, sortOrder, searchTerm]);
 
+  // Functions
   const handleCreateWine = () => createWineMutation.mutate(newWine);
-  const handleEdit = (wine: Wine) => {
+
+  const handleEdit = useCallback((wine: Wine) => {
     setEditForm({
       name: wine.name,
       description: wine.description,
       bottle_price: wine.bottle_price.toString(),
       glass_price: wine.glass_price?.toString() || "",
       category_ids: wine.categories.map((c) => c.id),
+      image_path: wine.image_path || "wines/wine.webp",
     });
     setEditDialog({ open: true, wine });
-  };
-  const handleSaveEdit = () => { if (editDialog.wine) updateWineMutation.mutate({ wineId: editDialog.wine.id, form: editForm }); };
-  const toggleWineStatus = (id: number, currentStatus: boolean) => toggleWineStatusMutation.mutate({ wineId: id, currentStatus });
-  const handleSelectImage = (wineId: number) => { setSelectedWineId(wineId); setIsImageDialogOpen(true); fileInputRef.current?.click(); };
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedWineId) { toast({ title: "Error", description: "No file selected", variant: "destructive" }); return; }
-    uploadImageMutation.mutate({ file, wineId: selectedWineId });
+  }, []);
+
+  const handleSaveEdit = () => {
+    if (editDialog.wine) {
+      updateWineMutation.mutate({ wineId: editDialog.wine.id, form: editForm });
+    }
   };
 
-  if (isLoading)
-    return <div className="flex items-center justify-center h-[200px]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"/></div>;
-  if (error)
-    return <div className="container p-6"><Alert variant="destructive"><AlertDescription>Failed to load wines or categories.</AlertDescription></Alert></div>;
-  if (!wines.length)
-    return <div className="container p-6"><Alert><AlertDescription>No wines found. Add one to get started.</AlertDescription></Alert><div className="mt-4"><Button onClick={()=>setIsDialogOpen(true)}><Plus className="mr-2 h-4 w-4"/>Add Wine</Button></div></div>;
+  // Remove highlight from input onFocus
+  const removeHighlightOnFocus = (e: FocusEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    e.target.value = "";
+    e.target.value = val;
+  };
 
-  return (
-    <div className="container p-6">
-      <PageHeader heading="Wine List" text="Manage your restaurant's wine selection">
-        <Button onClick={()=>setIsDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4"/>Add Wine
-        </Button>
-      </PageHeader>
+  // Pre-load "wines" folder images if needed for selection
+  useEffect(() => {
+    const fetchImages = async () => {
+      if (!editDialog.open) {
+        setWineImages([]);
+        return;
+      }
+      // List all images in "wines" folder
+      const { data: fileList, error } = await supabase.storage.from("menu").list("wines");
+      if (error || !fileList || fileList.length === 0) {
+        setWineImages([]);
+        return;
+      }
+      const images = fileList
+        .filter((f) => f.name !== "placeholder.webp")
+        .map((file) => {
+          const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/wines/${file.name}`;
+          return { name: file.name, url };
+        });
+      setWineImages(images);
+    };
+    void fetchImages();
+  }, [editDialog.open, supabase]);
 
-      <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="relative w-full md:w-[300px]">
-            <Input type="text" placeholder="Search wines..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-10"/>
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"/>
-          </div>
-
-          <Select value={selectedFilter} onValueChange={setSelectedFilter}>
-            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filter by Category"/></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map(c=><SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-
-          <Select value={sortBy} onValueChange={(val:"name"|"price")=>setSortBy(val)}>
-            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Sort by"/></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="name">Name</SelectItem>
-              <SelectItem value="price">Price</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button variant="outline" size="icon" onClick={()=>setSortOrder(o=>o==="asc"?"desc":"asc")} aria-label={`Sort order: ${sortOrder==="asc"?"Ascending":"Descending"}`}>
-            {sortOrder==="asc"?"↑":"↓"}
+  // Render conditions
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[200px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="container p-6">
+        <Alert variant="destructive">
+          <AlertDescription>Failed to load wines or categories.</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+  if (!wines.length) {
+    return (
+      <div className="container p-6">
+        <Alert>
+          <AlertDescription>No wines found. Add one to get started.</AlertDescription>
+        </Alert>
+        <div className="mt-4">
+          <Button onClick={() => setIsDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Wine
           </Button>
         </div>
       </div>
+    );
+  }
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
-        {filteredAndSortedWines.map(wine=><WineCard key={wine.id} wine={wine} searchTerm={searchTerm} handleEdit={handleEdit}/>)}
+  // Final JSX
+  return (
+    <div className="container p-6">
+      <PageHeader heading="Wine List" text="Manage your restaurant&apos;s wine selection">
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Wine
+        </Button>
+      </PageHeader>
+
+      {/* Search & filter section */}
+      <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
+        <div className="relative w-full md:w-[300px]">
+          <Input
+            autoComplete="off"
+            spellCheck="false"
+            autoCorrect="off"
+            type="text"
+            placeholder="Search wines..."
+            value={localSearchTerm}
+            onChange={(e) => setLocalSearchTerm(e.target.value)}
+            className="w-full pl-10"
+          />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        </div>
+
+        {/* Category filter */}
+        <Select value={selectedFilter} onValueChange={setSelectedFilter}>
+          <SelectTrigger className="w-[180px]" aria-label="Filter by Category">
+            <SelectValue placeholder="Filter by Category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c.id} value={c.id.toString()}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Sort by */}
+        <Select value={sortBy} onValueChange={(val: "name" | "price") => setSortBy(val)}>
+          <SelectTrigger className="w-[180px]" aria-label="Sort by">
+            <SelectValue placeholder="Sort by" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="name">Name</SelectItem>
+            <SelectItem value="price">Price</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Sort order */}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))}
+          aria-label={`Sort order: ${sortOrder === "asc" ? "Ascending" : "Descending"}`}
+        >
+          {sortOrder === "asc" ? "↑" : "↓"}
+        </Button>
       </div>
 
+      {/* Wines grid */}
+      <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+        {filteredAndSortedWines.map((wine) => (
+          <WineCard key={wine.id} wine={wine} searchTerm={searchTerm} handleEdit={handleEdit} />
+        ))}
+      </div>
+
+      {/* Dialog for creating wine */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Wine</DialogTitle>
-            <DialogDescription>Add a new wine to your list with its details and pricing.</DialogDescription>
+            <DialogDescription>
+              Add a new wine to your list with its details and pricing.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2"><Label>Name</Label><Input value={newWine.name} onChange={e=>setNewWine({...newWine,name:e.target.value})} placeholder="Wine name"/></div>
-            <div className="grid gap-2"><Label>Description</Label><Input value={newWine.description} onChange={e=>setNewWine({...newWine,description:e.target.value})} placeholder="Wine description"/></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2"><Label>Bottle Price</Label><Input type="number" step="0.01" value={newWine.bottle_price} onChange={e=>setNewWine({...newWine,bottle_price:e.target.value})} placeholder="0.00"/></div>
-              <div className="grid gap-2"><Label>Glass Price (Optional)</Label><Input type="number" step="0.01" value={newWine.glass_price} onChange={e=>setNewWine({...newWine,glass_price:e.target.value})} placeholder="0.00"/></div>
+            <div className="grid gap-1">
+              <Label>
+                Name<span className="text-red-500 ml-1">*</span>
+              </Label>
+              <Input
+                autoComplete="off"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                value={newWine.name}
+                onChange={(e) => setNewWine({ ...newWine, name: e.target.value })}
+                placeholder="Wine name"
+              />
             </div>
-            <div className="grid gap-2">
+            <div className="grid gap-1">
+              <Label>Description</Label>
+              <Input
+                autoComplete="off"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                value={newWine.description}
+                onChange={(e) => setNewWine({ ...newWine, description: e.target.value })}
+                placeholder="Wine description"
+              />
+            </div>
+
+            {/* Price fields */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-1">
+                <Label>
+                  Bottle Price<span className="text-red-500 ml-1">*</span>
+                </Label>
+                <span className="text-sm text-muted-foreground">
+                  Price in EUR, e.g. 10.00
+                </span>
+                <Input
+                  autoComplete="off"
+                  spellCheck="false"
+                  autoCorrect="off"
+                  onFocus={removeHighlightOnFocus}
+                  type="number"
+                  step="0.01"
+                  value={newWine.bottle_price}
+                  onChange={(e) => setNewWine({ ...newWine, bottle_price: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label>Glass Price (Optional)</Label>
+                <Input
+                  autoComplete="off"
+                  spellCheck="false"
+                  autoCorrect="off"
+                  onFocus={removeHighlightOnFocus}
+                  type="number"
+                  step="0.01"
+                  value={newWine.glass_price}
+                  onChange={(e) => setNewWine({ ...newWine, glass_price: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            {/* Category selection */}
+            <div className="grid gap-1">
               <Label>Categories</Label>
-              <Select value={newWine.category_ids[0]?.toString()||""} onValueChange={val=>setNewWine({...newWine,category_ids:[...newWine.category_ids,parseInt(val)]})}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Select categories"/></SelectTrigger>
+              <span className="text-sm text-muted-foreground">
+                Select categories to classify the wine
+              </span>
+              <Select
+                value={newWine.category_ids[0]?.toString() || ""}
+                onValueChange={(val) =>
+                  setNewWine({
+                    ...newWine,
+                    category_ids: [...newWine.category_ids, parseInt(val)],
+                  })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select categories" />
+                </SelectTrigger>
                 <SelectContent>
-                  {categories.map(cat=>(
-                    <SelectItem key={cat.id} value={cat.id.toString()} disabled={newWine.category_ids.includes(cat.id)}>
+                  {categories.map((cat) => (
+                    <SelectItem
+                      key={cat.id}
+                      value={cat.id.toString()}
+                      disabled={newWine.category_ids.includes(cat.id)}
+                    >
                       {cat.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-
               <div className="flex flex-wrap gap-2 mt-2">
-                {newWine.category_ids.map(categoryId=>{
-                  const c=categories.find(ct=>ct.id===categoryId);
-                  return c?(
+                {newWine.category_ids.map((categoryId) => {
+                  const c = categories.find((ct) => ct.id === categoryId);
+                  return c ? (
                     <Badge key={c.id} variant="secondary" className="flex items-center gap-1">
                       {c.name}
-                      <button type="button" onClick={()=>setNewWine({...newWine,category_ids:newWine.category_ids.filter(id=>id!==categoryId)})} className="ml-1 hover:text-destructive" aria-label={`Remove category ${c.name}`}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewWine({
+                            ...newWine,
+                            category_ids: newWine.category_ids.filter((id) => id !== categoryId),
+                          })
+                        }
+                        className="ml-1 hover:text-destructive"
+                        aria-label={`Remove category &quot;${c.name}&quot;`}
+                      >
                         ×
                       </button>
                     </Badge>
-                  ):null;
+                  ) : null;
                 })}
               </div>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={()=>setIsDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreateWine}>{createWineMutation.isPending?"Creating...":"Create Wine"}</Button>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            {/* Use status === "pending" rather than .isLoading */}
+            <Button onClick={handleCreateWine} disabled={createWineMutation.status === "pending"}>
+              {createWineMutation.status === "pending" ? "Creating..." : "Create Wine"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editDialog.open} onOpenChange={open=>!open&&setEditDialog({open,wine:null})}>
+      {/* Dialog for editing wine */}
+      <Dialog open={editDialog.open} onOpenChange={(open) => !open && setEditDialog({ open, wine: null })}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Wine</DialogTitle>
-            <DialogDescription>Update the details of the wine.</DialogDescription>
+            <DialogDescription>
+              Update the details of the wine, including selecting a new image from the &quot;wines&quot; folder.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2"><Label>Name</Label><Input value={editForm.name} onChange={e=>setEditForm({...editForm,name:e.target.value})} placeholder="Wine name"/></div>
-            <div className="grid gap-2"><Label>Description</Label><Input value={editForm.description} onChange={e=>setEditForm({...editForm,description:e.target.value})} placeholder="Wine description"/></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2"><Label>Bottle Price</Label><Input type="number" step="0.01" value={editForm.bottle_price} onChange={e=>setEditForm({...editForm,bottle_price:e.target.value})} placeholder="0.00"/></div>
-              <div className="grid gap-2"><Label>Glass Price (Optional)</Label><Input type="number" step="0.01" value={editForm.glass_price} onChange={e=>setEditForm({...editForm,glass_price:e.target.value})} placeholder="0.00"/></div>
+            <div className="grid gap-1">
+              <Label>
+                Name<span className="text-red-500 ml-1">*</span>
+              </Label>
+              <Input
+                autoComplete="off"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                placeholder="Wine name"
+              />
             </div>
-            <div className="grid gap-2">
+            <div className="grid gap-1">
+              <Label>Description</Label>
+              <Input
+                autoComplete="off"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                placeholder="Wine description"
+              />
+            </div>
+
+            {/* Price fields in EUR */}
+            <div className="grid gap-1">
+              <Label>
+                Bottle Price<span className="text-red-500 ml-1">*</span>
+              </Label>
+              <span className="text-sm text-muted-foreground">Price in EUR, e.g. 10.00</span>
+              <Input
+                autoComplete="off"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                type="number"
+                step="0.01"
+                value={editForm.bottle_price}
+                onChange={(e) => setEditForm({ ...editForm, bottle_price: e.target.value })}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label>Glass Price (Optional)</Label>
+              <Input
+                autoComplete="off"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                type="number"
+                step="0.01"
+                value={editForm.glass_price}
+                onChange={(e) => setEditForm({ ...editForm, glass_price: e.target.value })}
+                placeholder="0.00"
+              />
+            </div>
+
+            {/* Category selection for edit */}
+            <div className="grid gap-1">
               <Label>Categories</Label>
-              <Select value={editForm.category_ids[0]?.toString()||""} onValueChange={val=>setEditForm({...editForm,category_ids:[...editForm.category_ids,parseInt(val)]})}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Select categories"/></SelectTrigger>
+              <span className="text-sm text-muted-foreground">
+                Select categories that fit this wine
+              </span>
+              <Select
+                value={editForm.category_ids[0]?.toString() || ""}
+                onValueChange={(val) =>
+                  setEditForm({
+                    ...editForm,
+                    category_ids: [...editForm.category_ids, parseInt(val)],
+                  })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select categories" />
+                </SelectTrigger>
                 <SelectContent>
-                  {categories.map(cat=>(
-                    <SelectItem key={cat.id} value={cat.id.toString()} disabled={editForm.category_ids.includes(cat.id)}>
+                  {categories.map((cat) => (
+                    <SelectItem
+                      key={cat.id}
+                      value={cat.id.toString()}
+                      disabled={editForm.category_ids.includes(cat.id)}
+                    >
                       {cat.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <div className="flex flex-wrap gap-2 mt-2">
-                {editForm.category_ids.map(categoryId=>{
-                  const c=categories.find(ct=>ct.id===categoryId);
-                  return c?(
+                {editForm.category_ids.map((categoryId) => {
+                  const c = categories.find((ct) => ct.id === categoryId);
+                  return c ? (
                     <Badge key={c.id} variant="secondary" className="flex items-center gap-1">
                       {c.name}
-                      <button type="button" onClick={()=>setEditForm({...editForm,category_ids:editForm.category_ids.filter(id=>id!==categoryId)})} className="ml-1 hover:text-destructive" aria-label={`Remove category ${c.name}`}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditForm({
+                            ...editForm,
+                            category_ids: editForm.category_ids.filter((id) => id !== categoryId),
+                          })
+                        }
+                        className="ml-1 hover:text-destructive"
+                        aria-label={`Remove category &quot;${c.name}&quot;`}
+                      >
                         ×
                       </button>
                     </Badge>
-                  ):null;
+                  ) : null;
                 })}
               </div>
             </div>
 
-            <div className="flex gap-4 pt-4 border-t">
-              <Button variant="outline" size="sm" className="flex-1" onClick={()=>editDialog.wine&&toggleWineStatus(editDialog.wine.id,editDialog.wine.active)}>
-                {editDialog.wine?.active?"Set Unavailable":"Set Available"}
-              </Button>
-              <Button variant="outline" size="sm" onClick={()=>editDialog.wine&&handleSelectImage(editDialog.wine.id)}>
-                <ImageIcon className="h-4 w-4 mr-2"/>Change Image
-              </Button>
+            {/* Image selection */}
+            <div className="grid gap-1 border-t pt-4">
+              <p className="text-sm font-semibold">Select Image</p>
+              <span className="text-sm text-muted-foreground">
+                Images are in the &quot;wines&quot; folder. Scroll if many images appear.
+              </span>
+              {wineImages.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No images found in the &quot;wines&quot; folder.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 max-h-[200px] overflow-y-auto">
+                  {wineImages.map((img) => {
+                    const pathValue = `wines/${img.name}`;
+                    return (
+                      <label key={img.name} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="image_path"
+                          value={pathValue}
+                          checked={editForm.image_path === pathValue}
+                          onChange={(e) => setEditForm({ ...editForm, image_path: e.target.value })}
+                        />
+                        <div className="flex items-center gap-2">
+                          <Image src={img.url} alt={img.name} width={50} height={50} />
+                          <span className="truncate text-sm">{img.name}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={()=>setEditDialog({open:false,wine:null})}>Cancel</Button>
-            <Button onClick={handleSaveEdit}>{updateWineMutation.isPending?"Saving...":"Save Changes"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Change Wine Image</DialogTitle>
-            <DialogDescription>Select a new image for the wine.</DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            <input type="file" accept="image/*" ref={fileInputRef} style={{display:"none"}} onChange={handleImageUpload}/>
-            <Button variant="outline" onClick={()=>fileInputRef.current?.click()} disabled={uploadImageMutation.isPending}>
-              {uploadImageMutation.isPending?"Uploading...":"Select Image"}
+          <DialogFooter className="space-x-2">
+            <Button variant="outline" onClick={() => setEditDialog({ open: false, wine: null })}>
+              Cancel
             </Button>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={()=>setIsImageDialogOpen(false)}>Cancel</Button>
+            {/* Use status === "pending" instead of .isLoading */}
+            <Button
+              onClick={handleSaveEdit}
+              disabled={updateWineMutation.status === "pending"}
+            >
+              {updateWineMutation.status === "pending" ? "Saving..." : "Save Changes"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3020,245 +3203,578 @@ export default function WinePage() {
 
 ```typescript
 "use client";
-import React,{useState,useMemo,useCallback,useTransition,useEffect}from"react";
-import{createClientComponentClient}from"@supabase/auth-helpers-nextjs";
-import Image from"next/image";
-import{Plus,Search,Edit}from"lucide-react";
-import{Button}from"@/components/ui/button";
-import{useToast}from"@/hooks/use-toast";
-import{Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle}from"@/components/ui/dialog";
-import{Input}from"@/components/ui/input";
-import{Label}from"@/components/ui/label";
-import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from"@/components/ui/select";
-import{Alert,AlertDescription}from"@/components/ui/alert";
-import{PageHeader}from"@/components/core/layout";
-import{Badge}from"@/components/ui/badge";
-import{MultiSelect}from"@/components/ui/multi-select";
-import{useQuery,useQueryClient}from"@tanstack/react-query";
 
-type Allergen={id:string;name:string;};
-type Category={id:string;name:string;};
-type RawMenuItemResponse={
-  id:string;name:string;description:string;price:number;category_id:number;image_path:string|null;active:boolean;
-  menu_categories:{id:string;name:string;}[];
-  menu_item_allergens:{allergens:{id:string;name:string;}[]}[];
+import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import Image from "next/image";
+import { Plus, Search, Edit } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PageHeader } from "@/components/core/layout";
+import { Badge } from "@/components/ui/badge";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
+
+type Allergen = { id: string; name: string };
+type MultiSelectProps = {
+  options: Allergen[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  placeholder?: string;
 };
-type MenuItem={
-  id:string;name:string;description:string;price:number;category_id:number;image_url:string|null;image_path:string|null;active:boolean;
-  category?:{id:string;name:string;}|null;
-  allergens?:Allergen[];
+
+// Dynamic imports for Dialog & MultiSelect
+const Dialog = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.Dialog));
+const DialogContent = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogContent));
+const DialogDescription = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogDescription));
+const DialogFooter = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogFooter));
+const DialogHeader = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogHeader));
+const DialogTitle = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogTitle));
+const MultiSelect = dynamic<MultiSelectProps>(() =>
+  import("@/components/ui/multi-select").then((mod) => mod.MultiSelect)
+);
+
+type Category = { id: string; name: string };
+type RawMenuItemResponse = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category_id: number;
+  image_path: string | null;
+  active: boolean;
+  menu_categories: { id: string; name: string }[];
+  menu_item_allergens: { allergens: { id: string; name: string }[] }[];
 };
-type NewMenuItem={name:string;description:string;price:string;category_id:string;active:boolean;allergen_ids:string[];};
-interface EditDialogState{open:boolean;item:MenuItem|null;}
-interface EditFormData{name:string;description:string;price:string;category_id:string;allergen_ids:string[];}
 
-export default function MenuPage(){
-  const supabase=createClientComponentClient();
-  const{toast}=useToast();
-  const queryClient=useQueryClient();
-  const[isDialogOpen,setIsDialogOpen]=useState(false);
-  const[newItem,setNewItem]=useState<NewMenuItem>({name:"",description:"",price:"",category_id:"",active:true,allergen_ids:[]});
-  const[editDialog,setEditDialog]=useState<EditDialogState>({open:false,item:null});
-  const[editForm,setEditForm]=useState<EditFormData>({name:"",description:"",price:"",category_id:"",allergen_ids:[]});
-  const[,startSearchTransition]=useTransition();
-  const[selectedFilter,setSelectedFilter]=useState("all");
-  const[searchTerm,setSearchTerm]=useState("");
-  const[localSearchTerm,setLocalSearchTerm]=useState(searchTerm);
+type MenuItem = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category_id: number;
+  image_url: string | null;
+  image_path: string | null;
+  active: boolean;
+  category?: { id: string; name: string } | null;
+  allergens?: Allergen[];
+};
 
-  useEffect(()=>{
-    const handler=setTimeout(()=>{startSearchTransition(()=>setSearchTerm(localSearchTerm));},300);
-    return()=>clearTimeout(handler);
-  },[localSearchTerm,startSearchTransition]);
+type NewMenuItem = {
+  name: string;
+  description: string;
+  price: string;
+  category_id: string;
+  active: boolean;
+  allergen_ids: string[];
+};
 
-  const getImageUrl=(path:string|null)=>path?`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/${path}`:null;
+interface EditDialogState {
+  open: boolean;
+  item: MenuItem | null;
+}
+interface EditFormData {
+  name: string;
+  description: string;
+  price: string;
+  category_id: string;
+  allergen_ids: string[];
+  image_path: string;
+}
 
-  const highlightText=useCallback((text:string,term:string)=>{
-    if(!term.trim())return text;
-    const regex=new RegExp(`(${term})`,"gi");
-    return text.split(regex).map((part,i)=>
-      regex.test(part)?<span key={i} className="bg-orange-500 text-white">{part}</span>:part
+export default function MenuPage() {
+  const supabase = createClientComponentClient();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newItem, setNewItem] = useState<NewMenuItem>({
+    name: "",
+    description: "",
+    price: "",
+    category_id: "",
+    active: true,
+    allergen_ids: [],
+  });
+  const [editDialog, setEditDialog] = useState<EditDialogState>({ open: false, item: null });
+  const [editForm, setEditForm] = useState<EditFormData>({
+    name: "",
+    description: "",
+    price: "",
+    category_id: "",
+    allergen_ids: [],
+    image_path: "",
+  });
+  const [selectedFilter, setSelectedFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
+
+  const [images, setImages] = useState<{ name: string; url: string }[]>([]);
+
+  // Debounce searchTerm updates
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchTerm(localSearchTerm);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [localSearchTerm]);
+
+  // Helper to construct the public URL for a Supabase Storage image
+  const getImageUrl = (path: string | null) =>
+    path
+      ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/${path}`
+      : null;
+
+  // Simple highlight function
+  const highlightText = useCallback((text: string, term: string) => {
+    if (!term.trim()) return text;
+    const lowerTerm = term.toLowerCase();
+    const lowerText = text.toLowerCase();
+    const index = lowerText.indexOf(lowerTerm);
+    if (index === -1) return text;
+    return (
+      <>
+        {text.slice(0, index)}
+        <span className="bg-orange-500 text-white">
+          {text.slice(index, index + term.length)}
+        </span>
+        {text.slice(index + term.length)}
+      </>
     );
-  },[]);
+  }, []);
 
-  const fetchAllergens=async()=>{
-    const{data,error}=await supabase.from("allergens").select("*").order("name");
-    if(error)throw error;return data as Allergen[];
+  // Fetch Allergens
+  const fetchAllergens = async () => {
+    const { data, error } = await supabase.from("allergens").select("*").order("name");
+    if (error) throw error;
+    return data as Allergen[];
   };
 
-  const fetchCategories=async()=>{
-    const{data,error}=await supabase.from("menu_categories").select("*").order("name");
-    if(error)throw error;return data as Category[];
+  // Fetch Categories
+  const fetchCategories = async () => {
+    const { data, error } = await supabase.from("menu_categories").select("*").order("name");
+    if (error) throw error;
+    return data as Category[];
   };
 
-  const fetchItems=async()=>{
-    const{data,error}=await supabase
+  // Fetch Menu Items
+  const fetchItems = async () => {
+    const { data, error } = await supabase
       .from("menu_items")
-      .select(`id,name,description,price,category_id,image_path,active,menu_categories (id,name),menu_item_allergens (allergens (id,name))`)
+      .select(
+        `id,name,description,price,category_id,image_path,active,
+         menu_categories(id,name),
+         menu_item_allergens(allergens(id,name))`
+      )
       .order("name");
-    if(error)throw error;
-    const raw=data as RawMenuItemResponse[];
-    return raw.map(i=>({
-      id:i.id,name:i.name,description:i.description,price:i.price,category_id:i.category_id,image_url:getImageUrl(i.image_path),image_path:i.image_path,active:i.active,
-      category:i.menu_categories[0]||null,
-      allergens:i.menu_item_allergens.flatMap(r=>r.allergens)
+    if (error) throw error;
+    const raw = data as RawMenuItemResponse[];
+    return raw.map((i) => ({
+      id: i.id,
+      name: i.name,
+      description: i.description,
+      price: i.price,
+      category_id: i.category_id,
+      image_url: getImageUrl(i.image_path),
+      image_path: i.image_path,
+      active: i.active,
+      category: i.menu_categories[0] || null,
+      allergens: i.menu_item_allergens.flatMap((r) => r.allergens),
     }));
   };
 
-  const{data:allergens=[],isLoading:allergensLoading,error:allergensError}=useQuery<Allergen[]>({queryKey:["allergens"],queryFn:fetchAllergens});
-  const{data:categories=[],isLoading:categoriesLoading,error:categoriesError}=useQuery<Category[]>({queryKey:["categories"],queryFn:fetchCategories});
-  const{data:items=[],isLoading:itemsLoading,error:itemsError}=useQuery<MenuItem[]>({queryKey:["items"],queryFn:fetchItems});
+  // React Query data
+  const {
+    data: allergens = [],
+    isLoading: allergensLoading,
+    error: allergensError,
+  } = useQuery<Allergen[]>({ queryKey: ["allergens"], queryFn: fetchAllergens });
 
-  const isLoading=allergensLoading||categoriesLoading||itemsLoading;
-  const error=allergensError||categoriesError||itemsError;
+  const {
+    data: categories = [],
+    isLoading: categoriesLoading,
+    error: categoriesError,
+  } = useQuery<Category[]>({ queryKey: ["categories"], queryFn: fetchCategories });
 
-  const filteredItems=useMemo(()=>{
-    if(!items)return[];
-    let f=items;
-    const s=searchTerm.toLowerCase().trim();
-    if(s)f=f.filter(i=>i.name.toLowerCase().includes(s)||i.description.toLowerCase().includes(s));
-    if(selectedFilter!=="all"){
-      const parsed=Number(selectedFilter);
-      f=f.filter(i=>(i.category?.id===selectedFilter)||i.category_id===parsed);
+  const {
+    data: items = [],
+    isLoading: itemsLoading,
+    error: itemsError,
+  } = useQuery<MenuItem[]>({ queryKey: ["items"], queryFn: fetchItems });
+
+  const isLoading = allergensLoading || categoriesLoading || itemsLoading;
+  const error = allergensError || categoriesError || itemsError;
+
+  // Filtered items
+  const filteredItems = useMemo(() => {
+    if (!items) return [];
+    let f = items;
+    const s = searchTerm.toLowerCase().trim();
+    if (s) {
+      f = f.filter(
+        (i) =>
+          (i.name && i.name.toLowerCase().includes(s)) ||
+          (i.description && i.description.toLowerCase().includes(s))
+      );
+    }
+    if (selectedFilter !== "all") {
+      // Compare IDs as strings
+      f = f.filter(
+        (i) => (i.category?.id === selectedFilter) || i.category_id.toString() === selectedFilter
+      );
     }
     return f;
-  },[items,selectedFilter,searchTerm]);
+  }, [items, selectedFilter, searchTerm]);
 
-  const handleCreateItem=async()=>{
-    try{
-      if(!newItem.name||!newItem.category_id||!newItem.price){toast({title:"Error",description:"Please fill in all required fields",variant:"destructive"});return;}
-      const priceValue=parseFloat(newItem.price);
-      if(isNaN(priceValue)||priceValue<0){toast({title:"Error",description:"Please enter a valid positive price.",variant:"destructive"});return;}
-      const{data:insertedItem,error:itemError}=await supabase.from("menu_items").insert({
-        name:newItem.name,description:newItem.description,price:priceValue,category_id:Number(newItem.category_id),active:newItem.active
-      }).select().single();
-      if(itemError)throw itemError;
-      if(newItem.allergen_ids.length>0){
-        const assign=newItem.allergen_ids.map(allergenId=>({menu_item_id:insertedItem.id,allergen_id:allergenId}));
-        const{error:assignmentError}=await supabase.from("menu_item_allergens").insert(assign);
-        if(assignmentError)throw assignmentError;
+  // Create new item
+  const handleCreateItem = async () => {
+    try {
+      // Basic validation
+      if (!newItem.name || !newItem.category_id || !newItem.price) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields",
+          variant: "destructive",
+        });
+        return;
       }
-      await queryClient.invalidateQueries({queryKey:["items"]});
+      const priceValue = parseFloat(newItem.price);
+      if (isNaN(priceValue) || priceValue < 0) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid positive price.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Insert the item
+      const { data: insertedItem, error: itemError } = await supabase
+        .from("menu_items")
+        .insert({
+          name: newItem.name,
+          description: newItem.description,
+          price: priceValue,
+          category_id: Number(newItem.category_id),
+          active: newItem.active,
+        })
+        .select()
+        .single();
+      if (itemError) throw itemError;
+
+      // Insert allergens if any
+      if (newItem.allergen_ids.length > 0) {
+        const assign = newItem.allergen_ids.map((allergenId) => ({
+          menu_item_id: insertedItem.id,
+          allergen_id: allergenId,
+        }));
+        const { error: assignmentError } = await supabase
+          .from("menu_item_allergens")
+          .insert(assign);
+        if (assignmentError) throw assignmentError;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["items"] });
       setIsDialogOpen(false);
-      setNewItem({name:"",description:"",price:"",category_id:"",active:true,allergen_ids:[]});
-      toast({title:"Success",description:"Menu item created successfully"});
-    }catch(e){
-      const msg=e instanceof Error?e.message:"Failed to create menu item";
-      console.error(e);
-      toast({title:"Error",description:msg,variant:"destructive"});
+      setNewItem({
+        name: "",
+        description: "",
+        price: "",
+        category_id: "",
+        active: true,
+        allergen_ids: [],
+      });
+      toast({ title: "Success", description: "Menu item created successfully" });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to create menu item";
+      toast({ title: "Error", description: msg, variant: "destructive" });
     }
   };
 
-  const handleEdit=useCallback((item:MenuItem)=>{
+  // Open edit dialog with item data
+  const handleEdit = useCallback((item: MenuItem) => {
     setEditForm({
-      name:item.name,
-      description:item.description,
-      price:item.price.toString(),
-      category_id:item.category_id.toString(),
-      allergen_ids:item.allergens?.map(a=>a.id)||[],
+      name: item.name || "",
+      description: item.description || "",
+      price: item.price.toString(),
+      category_id: item.category_id.toString(),
+      allergen_ids: item.allergens?.map((a) => a.id) || [],
+      image_path: item.image_path || "",
     });
-    setEditDialog({open:true,item});
-  },[]);
+    setEditDialog({ open: true, item });
+  }, []);
 
-  const handleSaveEdit=useCallback(async()=>{
-    if(!editDialog.item)return;
-    try{
-      if(!editForm.name||!editForm.category_id||!editForm.price){toast({title:"Error",description:"Please fill in all required fields.",variant:"destructive"});return;}
-      const priceValue=parseFloat(editForm.price);
-      if(isNaN(priceValue)||priceValue<0){toast({title:"Error",description:"Please enter a valid positive price.",variant:"destructive"});return;}
-      const categoryId=Number(editForm.category_id);
-      if(isNaN(categoryId)){toast({title:"Error",description:"Please select a valid category.",variant:"destructive"});return;}
-      const{error:itemError}=await supabase.from("menu_items").update({
-        name:editForm.name,description:editForm.description,price:priceValue,category_id:categoryId
-      }).eq("id",editDialog.item.id);
-      if(itemError)throw itemError;
-      const{error:deleteError}=await supabase.from("menu_item_allergens").delete().eq("menu_item_id",editDialog.item.id);
-      if(deleteError)throw deleteError;
-      if(editForm.allergen_ids.length>0){
-        const assign=editForm.allergen_ids.map(allergenId=>({menu_item_id:editDialog.item!.id,allergen_id:allergenId}));
-        const{error:assignmentError}=await supabase.from("menu_item_allergens").insert(assign);
-        if(assignmentError)throw assignmentError;
+  // Save item changes
+  const handleSaveEdit = useCallback(async () => {
+    if (!editDialog.item) return;
+    try {
+      // Basic validation
+      if (!editForm.name || !editForm.category_id || !editForm.price) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields.",
+          variant: "destructive",
+        });
+        return;
       }
-      await queryClient.invalidateQueries({queryKey:["items"]});
-      toast({title:"Success",description:"Menu item updated successfully."});
-      setEditDialog({open:false,item:null});
-    }catch(e){
-      const msg=e instanceof Error?e.message:"Failed to update menu item";
-      console.error(e);
-      toast({title:"Error",description:msg,variant:"destructive"});
+      const priceValue = parseFloat(editForm.price);
+      if (isNaN(priceValue) || priceValue < 0) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid positive price.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const categoryId = Number(editForm.category_id);
+      if (isNaN(categoryId)) {
+        toast({
+          title: "Error",
+          description: "Please select a valid category.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Update the item
+      const { error: itemError } = await supabase
+        .from("menu_items")
+        .update({
+          name: editForm.name,
+          description: editForm.description,
+          price: priceValue,
+          category_id: categoryId,
+          image_path: editForm.image_path || null,
+        })
+        .eq("id", editDialog.item.id);
+      if (itemError) throw itemError;
+
+      // Remove existing allergens for this item
+      const { error: deleteError } = await supabase
+        .from("menu_item_allergens")
+        .delete()
+        .eq("menu_item_id", editDialog.item.id);
+      if (deleteError) throw deleteError;
+
+      // Insert updated allergens
+      if (editForm.allergen_ids.length > 0) {
+        const assign = editForm.allergen_ids.map((allergenId) => ({
+          menu_item_id: editDialog.item!.id,
+          allergen_id: allergenId,
+        }));
+        const { error: assignmentError } = await supabase
+          .from("menu_item_allergens")
+          .insert(assign);
+        if (assignmentError) throw assignmentError;
+      }
+
+      // Refresh query
+      await queryClient.invalidateQueries({ queryKey: ["items"] });
+      toast({ title: "Success", description: "Menu item updated successfully." });
+      setEditDialog({ open: false, item: null });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to update menu item";
+      toast({ title: "Error", description: msg, variant: "destructive" });
     }
-  },[editDialog.item,editForm,supabase,toast,queryClient]);
+  }, [editDialog.item, editForm, supabase, toast, queryClient]);
 
-  if(isLoading)return<div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"/></div>;
-  if(error)return<div className="container p-6"><Alert variant="destructive"><AlertDescription>Failed to load data.</AlertDescription></Alert></div>;
-  if(!items||items.length===0)return<div className="container p-6"><Alert><AlertDescription>No menu items found.</AlertDescription></Alert><div className="mt-4"><Button onClick={()=>setIsDialogOpen(true)}>Add Your First Item</Button></div></div>;
+  // Fetch images for the chosen category in the edit dialog
+  useEffect(() => {
+    const fetchImages = async () => {
+      if (!editDialog.open || !editForm.category_id || categories.length === 0) {
+        setImages([]);
+        return;
+      }
+      const cat = categories.find((c) => c.id.toString() === editForm.category_id);
+      if (!cat) {
+        setImages([]);
+        return;
+      }
+      // Convert category name to folder-friendly format
+      const folderName = cat.name.toLowerCase().replace(/\s+/g, "-");
+      const { data: fileList, error } = await supabase.storage.from("menu").list(folderName);
+      if (error || !fileList || fileList.length === 0) {
+        setImages([]);
+        return;
+      }
+      const imageInfos = fileList
+        .filter((f) => f.name !== "placeholder.webp")
+        .map((file) => {
+          const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/${folderName}/${file.name}`;
+          return { name: file.name, url };
+        });
+      setImages(imageInfos);
+    };
 
-  return(
+    void fetchImages();
+  }, [editDialog.open, editForm.category_id, categories, supabase]);
+
+  // If still loading
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+  // If error
+  if (error) {
+    return (
+      <div className="container p-6">
+        <Alert variant="destructive">
+          <AlertDescription>Failed to load data.</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+  // If no items
+  if (!items || items.length === 0) {
+    return (
+      <div className="container p-6">
+        <Alert>
+          <AlertDescription>No menu items found.</AlertDescription>
+        </Alert>
+        <div className="mt-4">
+          <Button onClick={() => setIsDialogOpen(true)}>Add Your First Item</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Utility to remove highlight from input onFocus
+  const removeHighlightOnFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    e.target.value = "";
+    e.target.value = val;
+  };
+
+  return (
     <div className="container p-6">
       <PageHeader heading="Menu Items" text="Manage your restaurant's menu selection">
-        <Button onClick={()=>setIsDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4"/>
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
           Add Item
         </Button>
       </PageHeader>
 
+      {/* Search & Category Filter */}
       <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative w-full md:w-[300px]">
-            <Input type="text" placeholder="Search menu items..." value={localSearchTerm} onChange={e=>setLocalSearchTerm(e.target.value)} className="w-full pl-10"/>
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400"/>
+            <Input
+              autoComplete="new-password"
+              spellCheck="false"
+              autoCorrect="off"
+              type="text"
+              placeholder="Search menu items..."
+              value={localSearchTerm}
+              onChange={(e) => setLocalSearchTerm(e.target.value)}
+              className="w-full pl-10"
+            />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           </div>
-          <Select value={selectedFilter} onValueChange={value=>startSearchTransition(()=>{setSelectedFilter(value);})}>
-            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filter by Category"/></SelectTrigger>
+          <Select value={selectedFilter} onValueChange={(value) => setSelectedFilter(value)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Filter by Category" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              {categories.map(c=><SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              {categories.map((c) => (
+                <SelectItem key={c.id} value={c.id.toString()}>
+                  {c.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
       </div>
 
+      {/* Items grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8 relative">
-        {filteredItems.map(item=>(
-          <div key={item.id} className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm transition-shadow">
+        {filteredItems.map((item) => (
+          <div
+            key={item.id}
+            className="group relative flex flex-col bg-white border border-neutral-100 rounded-sm p-6 hover:shadow-sm transition-shadow"
+          >
+            {/* Edit button visible on hover */}
             <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-              <Button variant="secondary" size="sm" onClick={()=>handleEdit(item)} className="h-8 w-8 p-0" aria-label={`Edit ${item.name}`}>
-                <Edit className="h-4 w-4"/>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleEdit(item)}
+                className="h-8 w-8 p-0"
+                aria-label={`Edit ${item.name}`}
+              >
+                <Edit className="h-4 w-4" />
               </Button>
             </div>
 
+            {/* Image Container */}
             <div className="relative w-full pb-[100%] mb-4">
-              {item.image_url?(
+              {item.image_url ? (
                 <Image
                   src={item.image_url}
-                  alt={item.name}
+                  alt={item.name || ""}
                   fill
                   className="object-cover rounded-sm"
                   sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                   loading="lazy"
-                  onError={e=>{
-                    const t=e.target as HTMLImageElement;
-                    t.src=`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/placeholder.webp`;
+                  onError={(e) => {
+                    const t = e.target as HTMLImageElement;
+                    t.src = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/placeholder.webp`;
                   }}
                 />
-              ):(
+              ) : (
                 <div className="absolute inset-0 bg-neutral-100 flex items-center justify-center rounded-sm">
                   <span className="text-neutral-400">No image</span>
                 </div>
               )}
             </div>
+
+            {/* Category */}
             <div className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
               {item.category?.name}
             </div>
-            {item.name&&<h3 className="text-lg font-medium mb-2">{highlightText(item.name,searchTerm)}</h3>}
-            {item.description&&<p className="text-sm text-neutral-600 mb-4">{highlightText(item.description,searchTerm)}</p>}
+
+            {/* Name and Description with highlight */}
+            {item.name && (
+              <h3 className="text-lg font-medium mb-2">
+                {highlightText(item.name, searchTerm)}
+              </h3>
+            )}
+            {item.description && (
+              <p className="text-sm text-neutral-600 mb-4">
+                {highlightText(item.description, searchTerm)}
+              </p>
+            )}
+
+            {/* Allergens */}
             <div className="flex flex-wrap gap-1 mb-4">
-              {item.allergens?.map(a=><Badge key={a.id} variant="secondary" className="text-xs px-2 py-0.5 bg-neutral-100">{a.name}</Badge>)}
+              {item.allergens?.map((a) => (
+                <Badge key={a.id} variant="secondary" className="text-xs px-2 py-0.5 bg-neutral-100">
+                  {a.name}
+                </Badge>
+              ))}
             </div>
-            <div className="mt-auto font-medium text-lg">${item.price.toFixed(2)}</div>
+
+            {/* Price in Euros */}
+            <div className="mt-auto font-medium text-lg">
+              €{item.price.toFixed(2)}
+            </div>
           </div>
         ))}
       </div>
 
+      {/* Dialog for creating new items */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -3266,52 +3782,186 @@ export default function MenuPage(){
             <DialogDescription>Create a new menu item with details</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2"><Label>Name</Label><Input value={newItem.name} onChange={e=>setNewItem({...newItem,name:e.target.value})} placeholder="Menu item name"/></div>
-            <div className="grid gap-2"><Label>Price</Label><Input type="number" step="0.01" value={newItem.price} onChange={e=>setNewItem({...newItem,price:e.target.value})} placeholder="0.00"/></div>
+            <div className="grid gap-2">
+              <Label>Name</Label>
+              <Input
+                autoComplete="new-password"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                value={newItem.name}
+                onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                placeholder="Menu item name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Price</Label>
+              <Input
+                autoComplete="new-password"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                type="number"
+                step="0.01"
+                value={newItem.price}
+                onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                placeholder="0.00"
+              />
+            </div>
             <div className="grid gap-2">
               <Label>Category</Label>
-              <Select value={newItem.category_id} onValueChange={value=>setNewItem({...newItem,category_id:value})}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Select category"/></SelectTrigger>
-                <SelectContent>{categories.map(c=><SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+              <Select
+                value={newItem.category_id}
+                onValueChange={(value) => setNewItem({ ...newItem, category_id: value })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id.toString()}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2"><Label>Description</Label><Input value={newItem.description} onChange={e=>setNewItem({...newItem,description:e.target.value})} placeholder="Menu item description"/></div>
+            <div className="grid gap-2">
+              <Label>Description</Label>
+              <Input
+                autoComplete="new-password"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                value={newItem.description}
+                onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                placeholder="Menu item description"
+              />
+            </div>
             <div className="grid gap-2">
               <Label>Allergens</Label>
-              <MultiSelect options={allergens} selected={newItem.allergen_ids} onChange={ids=>setNewItem({...newItem,allergen_ids:ids})} placeholder="Select allergens"/>
+              <MultiSelect
+                options={allergens}
+                selected={newItem.allergen_ids}
+                onChange={(ids: string[]) => setNewItem({ ...newItem, allergen_ids: ids })}
+                placeholder="Select allergens"
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={()=>setIsDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
             <Button onClick={handleCreateItem}>Create Item</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editDialog.open} onOpenChange={open=>!open&&setEditDialog({open:false,item:null})}>
+      {/* Dialog for editing existing items */}
+      <Dialog open={editDialog.open} onOpenChange={(open) => !open && setEditDialog({ open: false, item: null })}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Menu Item</DialogTitle>
             <DialogDescription>Update the details of the selected menu item.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2"><Label>Name</Label><Input value={editForm.name} onChange={e=>setEditForm({...editForm,name:e.target.value})} placeholder="Menu item name"/></div>
-            <div className="grid gap-2"><Label>Description</Label><Input value={editForm.description} onChange={e=>setEditForm({...editForm,description:e.target.value})} placeholder="Menu item description"/></div>
-            <div className="grid gap-2"><Label>Price</Label><Input type="number" step="0.01" value={editForm.price} onChange={e=>setEditForm({...editForm,price:e.target.value})} placeholder="0.00"/></div>
+            <div className="grid gap-2">
+              <Label>Name</Label>
+              <Input
+                autoComplete="new-password"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                placeholder="Menu item name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Description</Label>
+              <Input
+                autoComplete="new-password"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                placeholder="Menu item description"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Price</Label>
+              <Input
+                autoComplete="new-password"
+                spellCheck="false"
+                autoCorrect="off"
+                onFocus={removeHighlightOnFocus}
+                type="number"
+                step="0.01"
+                value={editForm.price}
+                onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
+                placeholder="0.00"
+              />
+            </div>
             <div className="grid gap-2">
               <Label>Category</Label>
-              <Select value={editForm.category_id} onValueChange={value=>setEditForm({...editForm,category_id:value})}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Select category"/></SelectTrigger>
-                <SelectContent>{categories.map(c=><SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+              <Select
+                value={editForm.category_id}
+                onValueChange={(value) => setEditForm({ ...editForm, category_id: value })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id.toString()}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
             <div className="grid gap-2">
               <Label>Allergens</Label>
-              <MultiSelect options={allergens} selected={editForm.allergen_ids} onChange={ids=>setEditForm({...editForm,allergen_ids:ids})} placeholder="Select allergens"/>
+              <MultiSelect
+                options={allergens}
+                selected={editForm.allergen_ids}
+                onChange={(ids: string[]) => setEditForm({ ...editForm, allergen_ids: ids })}
+                placeholder="Select allergens"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Select Image</Label>
+              {images.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No images found for this category.</p>
+              ) : (
+                <div className="grid gap-2 max-h-[200px] overflow-y-auto">
+                  {images.map((img) => {
+                    const cat = categories.find((c) => c.id.toString() === editForm.category_id);
+                    const folderName = cat ? cat.name.toLowerCase().replace(/\s+/g, '-') : '';
+                    const pathValue = `${folderName}/${img.name}`;
+                    return (
+                      <div key={img.name} className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="image_path"
+                          value={pathValue}
+                          checked={editForm.image_path === pathValue}
+                          onChange={(e) => setEditForm({ ...editForm, image_path: e.target.value })}
+                        />
+                        <Image src={img.url} alt={img.name} width={50} height={50} />
+                        <span>{img.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={()=>setEditDialog({open:false,item:null})}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditDialog({ open: false, item: null })}>
+              Cancel
+            </Button>
             <Button onClick={handleSaveEdit}>Save Changes</Button>
           </DialogFooter>
         </DialogContent>
@@ -3328,229 +3978,16 @@ export default function MenuPage(){
 
 ```
 
-### app/dashboard/users/page.tsx
-
-```typescript
-
-"use client";
-
-import { useState, useEffect } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { UserPlus } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
-import { UsersTable, InviteUserDialog } from "@/components/features/users";
-import type { User, Role } from "@/types";
-
-export default function UsersPage() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
-  
-  const supabase = createClientComponentClient();
-  const { toast } = useToast();
-
-  // Fetch users
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-
-        setUsers(data || []);
-      } catch (error) {
-        console.error('Error fetching users:', error);
-        toast({
-          title: "Error",
-          description: "Failed to load users",
-          variant: "destructive",
-        });
-      }
-    };
-
-    fetchUsers();
-  }, [supabase, toast]);
-
-  // Handle user status toggle
-  const handleUserStatusChange = async (userId: string, isActive: boolean) => {
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ 
-          active: isActive,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', userId);
-
-      if (error) throw error;
-
-      setUsers((currentUsers) =>
-        currentUsers.map((user) =>
-          user.id === userId ? { ...user, active: isActive } : user
-        )
-      );
-
-      toast({
-        title: "Success",
-        description: `User ${isActive ? 'activated' : 'deactivated'} successfully.`,
-      });
-    } catch (error) {
-      console.error('Error updating user status:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update user status",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Handle user role change
-  const handleRoleChange = async (userId: string, newRole: Role) => {
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ 
-          role: newRole,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', userId);
-
-      if (error) throw error;
-
-      setUsers((currentUsers) =>
-        currentUsers.map((user) =>
-          user.id === userId ? { ...user, role: newRole } : user
-        )
-      );
-
-      toast({
-        title: "Success",
-        description: "User role updated successfully.",
-      });
-    } catch (error) {
-      console.error('Error updating user role:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update user role",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Handle user invitation
-  const handleInviteUser = async (email: string, role: Role) => {
-    try {
-      // Check if user already exists
-      const { data: existingUser, error: checkError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', email)
-        .single();
-
-      if (checkError && checkError.code !== 'PGRST116') throw checkError;
-      if (existingUser) {
-        toast({
-          title: "Error",
-          description: "This email is already registered",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Send invitation
-      const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
-        email,
-        { data: { role } }
-      );
-
-      if (inviteError) throw inviteError;
-
-      // Create user record
-      const { error: createError } = await supabase
-        .from('users')
-        .insert([{
-          email,
-          role,
-          active: false,
-          name: email.split('@')[0],
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }]);
-
-      if (createError) throw createError;
-
-      toast({
-        title: "Success",
-        description: "Invitation sent successfully",
-      });
-
-      setIsInviteDialogOpen(false);
-    } catch (error) {
-      console.error('Error inviting user:', error);
-      toast({
-        title: "Error",
-        description: "Failed to send invitation",
-        variant: "destructive",
-      });
-    }
-  };
-
-  return (
-    <div className="container mx-auto px-4">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Users</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage user access and permissions
-          </p>
-        </div>
-        <Button onClick={() => setIsInviteDialogOpen(true)}>
-          <UserPlus className="mr-2 h-4 w-4" />
-          Invite User
-        </Button>
-      </div>
-
-      <div className="space-y-4">
-        <UsersTable
-          users={users}
-          onStatusChange={handleUserStatusChange}
-          onRoleChange={handleRoleChange}
-        />
-
-        <InviteUserDialog
-          open={isInviteDialogOpen}
-          onOpenChange={setIsInviteDialogOpen}
-          onInvite={handleInviteUser}
-        />
-      </div>
-    </div>
-  );
-}
-```
-
 ### app/dashboard/layout.tsx
 
 ```typescript
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'; // Keep if needed due to session checks
 import { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
-import {
-  LayoutDashboard,
-  Users,
-  Settings,
-  LogOut,
-  ImageIcon,
-  MenuSquare,
-  ClipboardList,
-  Wine,
-  BookOpen, // Added BookOpen icon
-} from "lucide-react";
+import { LayoutDashboard, Users, Settings, LogOut, ImageIcon, MenuSquare, ClipboardList, Wine, BookOpen } from "lucide-react";
 import type { Database } from "@/types";
 
 export const metadata: Metadata = {
@@ -3565,29 +4002,24 @@ interface DashboardLayoutProps {
 export default async function DashboardLayout({ children }: DashboardLayoutProps) {
   const supabase = createServerComponentClient<Database>({ cookies });
 
-  const {
-    data: { session }
-  } = await supabase.auth.getSession();
-
+  const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
     redirect("/login");
   }
 
-  // Fetch user profile data
-  const { data: userProfile, error: profileError } = await supabase
+  const { data: userProfile } = await supabase
     .from("users")
     .select("role, name")
     .eq("id", session.user.id)
     .single();
 
-  if (profileError) {
-    console.error('Error fetching user profile:', profileError);
-    // Optionally, you can handle the error by redirecting or showing an error message
-  }
+  // If userProfile doesn't matter for some routes, consider conditional fetch or omit entirely.
+  // If userProfile is always needed:
+  const userName = userProfile?.name || session.user.email;
+  const userRole = userProfile?.role || 'user';
 
   return (
     <div className="flex min-h-screen">
-      {/* Sidebar */}
       <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-background">
         <div className="flex h-full flex-col">
           {/* Sidebar Header */}
@@ -3599,7 +4031,6 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
           {/* Navigation */}
           <nav className="flex-1 space-y-1 px-3 py-4">
-            {/* Dashboard Link */}
             <Link href="/dashboard">
               <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
                 <LayoutDashboard className="mr-2 h-4 w-4" />
@@ -3607,11 +4038,11 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
               </div>
             </Link>
 
-            {/* Menu Management Section */}
             <div className="pt-4">
               <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Menu Management
               </h2>
+              {/* Menu items */}
               <Link href="/dashboard/menu">
                 <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
                   <ClipboardList className="mr-2 h-4 w-4" />
@@ -3632,7 +4063,6 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
               </Link>
             </div>
 
-            {/* Blog Section - Newly Added */}
             <div className="pt-4">
               <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Blog
@@ -3645,7 +4075,6 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
               </Link>
             </div>
 
-            {/* Assets Section */}
             <div className="pt-4">
               <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Assets
@@ -3658,8 +4087,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
               </Link>
             </div>
 
-            {/* Admin Section - Only visible for admin users */}
-            {userProfile?.role === 'admin' && (
+            {userRole === 'admin' && (
               <div className="pt-4">
                 <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Admin
@@ -3684,8 +4112,8 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
           <div className="border-t p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">{userProfile?.name || session.user.email}</p>
-                <p className="text-xs text-muted-foreground capitalize">{userProfile?.role || 'user'}</p>
+                <p className="text-sm font-medium">{userName}</p>
+                <p className="text-xs text-muted-foreground capitalize">{userRole}</p>
               </div>
               <form action="/auth/signout" method="post">
                 <button
@@ -3716,79 +4144,40 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 ### app/dashboard/page.tsx
 
 ```typescript
-"use client";
+// Remove "use client"; we'll do server-side fetching
+import { cookies } from "next/headers";
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import type { Database } from "@/types";
+import { Card, PageHeader } from "@/components/core/layout";
+import { ClipboardList, Users, TrendingUp, Calendar } from "lucide-react";
 
-import { useState, useEffect } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Card } from "@/components/core/layout";
-import { PageHeader } from "@/components/core/layout";
-import {
-  ClipboardList,
-  Users,
-  TrendingUp,
-  Calendar,
-} from "lucide-react";
+export const dynamic = 'force-dynamic'; // If needed due to session
+export const revalidate = 60; // Revalidate every 60s if acceptable
 
-type DashboardStats = {
-  total_menu_items: number;
-  total_users: number;
-  daily_menus_active: number;
-  total_wine_items: number;
-};
+export default async function DashboardPage() {
+  const supabase = createServerComponentClient<Database>({ cookies });
 
-export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>({
-    total_menu_items: 0,
-    total_users: 0,
-    daily_menus_active: 0,
-    total_wine_items: 0,
-  });
-  const [isLoading, setIsLoading] = useState(true);
+  // Run queries in parallel
+  const [
+    { count: menuCount },
+    { count: usersCount },
+    { count: activeMenusCount },
+    { count: wineCount }
+  ] = await Promise.all([
+    supabase.from('menu_items').select('id', { count: 'exact', head: true }),
+    supabase.from('users').select('id', { count: 'exact', head: true }),
+    supabase.from('daily_menus').select('id', { count: 'exact', head: true }).eq('active', true),
+    supabase.from('wines').select('id', { count: 'exact', head: true }),
+  ]);
 
-  const supabase = createClientComponentClient();
+  const stats = {
+    total_menu_items: menuCount || 0,
+    total_users: usersCount || 0,
+    daily_menus_active: activeMenusCount || 0,
+    total_wine_items: wineCount || 0,
+  };
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        setIsLoading(true);
-
-        // Fetch menu items count
-        const { count: menuCount } = await supabase
-          .from('menu_items')
-          .select('*', { count: 'exact', head: true });
-
-        // Fetch users count
-        const { count: usersCount } = await supabase
-          .from('users')
-          .select('*', { count: 'exact', head: true });
-
-        // Fetch active daily menus
-        const { count: activeMenusCount } = await supabase
-          .from('daily_menus')
-          .select('*', { count: 'exact', head: true })
-          .eq('active', true);
-
-        // Fetch wine items count
-        const { count: wineCount } = await supabase
-          .from('wines')
-          .select('*', { count: 'exact', head: true });
-
-        setStats({
-          total_menu_items: menuCount || 0,
-          total_users: usersCount || 0,
-          daily_menus_active: activeMenusCount || 0,
-          total_wine_items: wineCount || 0,
-        });
-      } catch (error) {
-        console.error('Error fetching dashboard stats:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchStats();
-  }, [supabase]);
-
+  // No isLoading state needed, data is ready at render time
   return (
     <div className="p-6">
       <PageHeader
@@ -3804,9 +4193,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Menu Items</p>
-              <h3 className="text-2xl font-bold">
-                {isLoading ? "..." : stats.total_menu_items}
-              </h3>
+              <h3 className="text-2xl font-bold">{stats.total_menu_items}</h3>
             </div>
           </div>
         </Card>
@@ -3818,9 +4205,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Active Menus</p>
-              <h3 className="text-2xl font-bold">
-                {isLoading ? "..." : stats.daily_menus_active}
-              </h3>
+              <h3 className="text-2xl font-bold">{stats.daily_menus_active}</h3>
             </div>
           </div>
         </Card>
@@ -3832,9 +4217,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Wine Selection</p>
-              <h3 className="text-2xl font-bold">
-                {isLoading ? "..." : stats.total_wine_items}
-              </h3>
+              <h3 className="text-2xl font-bold">{stats.total_wine_items}</h3>
             </div>
           </div>
         </Card>
@@ -3846,9 +4229,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Total Users</p>
-              <h3 className="text-2xl font-bold">
-                {isLoading ? "..." : stats.total_users}
-              </h3>
+              <h3 className="text-2xl font-bold">{stats.total_users}</h3>
             </div>
           </div>
         </Card>
@@ -3860,6 +4241,7 @@ export default function DashboardPage() {
     </div>
   );
 }
+
 ```
 
 ### app/global.css
@@ -4008,11 +4390,9 @@ export default function DashboardPage() {
 ```typescript
 import type { Metadata, Viewport } from "next";
 import { Lato } from "next/font/google";
-import { cookies } from "next/headers";
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Providers } from "./providers"; 
 import { Toaster } from "@/components/ui/toaster";
-import "./global.css";
-import { Providers } from "./providers"; // <-- Import the Providers here
+import "./global.css"; // Tailwind & global styles
 
 const lato = Lato({
   subsets: ['latin'],
@@ -4059,15 +4439,7 @@ interface RootLayoutProps {
 }
 
 export default async function RootLayout({ children }: RootLayoutProps) {
-  // Initialize the Supabase client
-  const supabase = createServerComponentClient({ cookies });
-
-  try {
-    // Check if we have a session
-    await supabase.auth.getSession();
-  } catch (error) {
-    console.error('Error fetching session:', error);
-  }
+  // Removed supabase session fetch since layout doesn’t seem to need it.
 
   return (
     <html 
@@ -4081,6 +4453,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
           <main className="relative flex min-h-screen flex-col">
             {children}
           </main>
+          {/* If Toaster is always needed, keep it. Otherwise, consider moving it into specific pages */}
           <Toaster />
         </Providers>
       </body>
@@ -4104,41 +4477,35 @@ export const revalidate = 0;
 export default async function HomePage() {
   const supabase = createServerComponentClient<Database>({ cookies });
 
+  // If there's an error, just redirect without logging to console
   try {
-    // Check auth status
     const {
       data: { session },
     } = await supabase.auth.getSession();
 
-    // Redirect based on auth status
     if (!session) {
       redirect("/login");
-    } else {
-      // Get user profile
-      const { data: profile } = await supabase
-        .from('users')
-        .select('role, active')
-        .eq('id', session.user.id)
-        .single();
-
-      // Check if user is active
-      if (profile && !profile.active) {
-        // Sign out inactive users
-        await supabase.auth.signOut();
-        redirect("/login?error=Account%20is%20inactive");
-      }
-
-      // Redirect to dashboard for active users
-      redirect("/dashboard");
     }
-  } catch (error) {
-    console.error('Error in root page:', error);
+
+    const { data: profile } = await supabase
+      .from('users')
+      .select('active') // only select what we need
+      .eq('id', session.user.id)
+      .single();
+
+    if (profile && !profile.active) {
+      await supabase.auth.signOut();
+      redirect("/login?error=Account%20is%20inactive");
+    }
+
+    redirect("/dashboard");
+  } catch {
     redirect("/login?error=Something%20went%20wrong");
   }
 
-  // This return is technically unreachable but satisfies TypeScript
-  return null;
+  return null; // unreachable, satisfies TypeScript
 }
+
 ```
 
 ### app/providers.tsx
