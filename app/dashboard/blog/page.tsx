@@ -72,21 +72,18 @@ interface BaseBlogContent {
   type: string; // "doc" or "html"
 }
 
-/** TiptapDoc extends the base interface and JSONContent, with a fixed type: "doc". */
 interface TiptapDoc extends BaseBlogContent, JSONContent {
   type: "doc";
 }
 
-/** RawHTML extends the base interface; type is "html" plus an html string. */
 interface RawHTML extends BaseBlogContent {
   type: "html";
   html: string;
 }
 
-/** A union type for blog content (either TiptapDoc or RawHTML, or null). */
 type BlogContent = TiptapDoc | RawHTML | null;
 
-/** Type guards */
+// Type guards
 function isTiptapDoc(content: BlogContent): content is TiptapDoc {
   return !!content && content.type === "doc";
 }
@@ -94,10 +91,7 @@ function isRawHtml(content: BlogContent): content is RawHTML {
   return !!content && content.type === "html";
 }
 
-/** Create RawHTML with the type discriminator "html". */
-
-
-/** Recursively extract plain text from Tiptap JSON. */
+/** Recursively extract text from Tiptap. */
 function extractTiptapText(node: JSONContent): string {
   let text = "";
   if (typeof node.text === "string") {
@@ -111,21 +105,18 @@ function extractTiptapText(node: JSONContent): string {
   return text.trim();
 }
 
-/** Filter options in the blog listing UI. */
 type FilterOptions = {
   status: "all" | "published" | "draft";
-  author: string; // e.g. "all" or a specific name/email
+  author: string; 
   sortBy: "newest" | "oldest" | "title";
 };
 
-/** Basic author info from 'users' table. */
-type AuthorInfo = {
+interface AuthorInfo {
   id: string;
   name: string | null;
   email: string;
-};
+}
 
-/** Main BlogPost shape (assuming columns exist in 'blog_posts'). */
 interface BlogPost {
   id: string;
   title: string;
@@ -141,14 +132,13 @@ interface BlogPost {
 }
 
 /* ---------------------------------------------------------------------
-   2) The Blog Page Component
+   2) The Blog Page Component (Listing)
 ---------------------------------------------------------------------- */
 
 export default function BlogPage() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // For searching & filtering
   const [searchQuery, setSearchQuery] = useState("");
   const [deletePost, setDeletePost] = useState<BlogPost | null>(null);
   const [filters, setFilters] = useState<FilterOptions>({
@@ -157,14 +147,10 @@ export default function BlogPage() {
     sortBy: "newest",
   });
 
-  // Initialize Supabase + Toast + Router
   const supabase = createClientComponentClient();
   const { toast } = useToast();
   const router = useRouter();
 
-  /**
-   * Utility: Given Tiptap or HTML content, returns a short text snippet for preview.
-   */
   const getContentPreview = (c: BlogContent) => {
     if (!c) return "";
     if (isTiptapDoc(c)) {
@@ -176,15 +162,11 @@ export default function BlogPage() {
     return "";
   };
 
-  /* ---------------------------------------------------------------------
-     3) Fetch All Blog Posts on Mount
-  ---------------------------------------------------------------------- */
+  // Fetch posts on mount
   useEffect(() => {
     (async () => {
       try {
         setIsLoading(true);
-
-        // Query 'blog_posts' table
         const { data, error } = await supabase
           .from("blog_posts")
           .select(
@@ -200,16 +182,14 @@ export default function BlogPage() {
           });
           return;
         }
-
         if (!data) {
           setPosts([]);
           return;
         }
 
-        // Cast them to BlogPost[]
         const postsData = data as BlogPost[];
 
-        // Optionally fetch authors if needed
+        // (Optional) fetch authors
         const authorIds = postsData.map((p) => p.author_id).filter(Boolean);
         let authorsData: AuthorInfo[] | undefined;
         if (authorIds.length > 0) {
@@ -218,9 +198,7 @@ export default function BlogPage() {
             .select("id, name, email")
             .in("id", authorIds);
 
-          if (authorsError) {
-            console.error("Authors fetch error:", authorsError);
-          }
+          if (authorsError) console.error("Authors fetch error:", authorsError);
           if (aData) {
             authorsData = aData.map((u) => ({
               id: u.id,
@@ -230,15 +208,14 @@ export default function BlogPage() {
           }
         }
 
-        // Merge author info into each post
         setPosts(
           postsData.map((p) => ({
             ...p,
             author_info: authorsData?.filter((a) => a.id === p.author_id) || [],
           }))
         );
-      } catch (e) {
-        console.error(e);
+      } catch (err) {
+        console.error(err);
         toast({
           title: "Error",
           description: "An error occurred while loading posts",
@@ -250,12 +227,9 @@ export default function BlogPage() {
     })();
   }, [supabase, toast]);
 
-  /* ---------------------------------------------------------------------
-     4) Deletion Logic
-  ---------------------------------------------------------------------- */
+  // Deletion
   const handleDeletePost = async () => {
     if (!deletePost) return;
-
     const { error } = await supabase
       .from("blog_posts")
       .delete()
@@ -269,16 +243,12 @@ export default function BlogPage() {
       });
       return;
     }
-
-    // If successful, remove from local state
     toast({ title: "Success", description: "Post deleted successfully" });
     setPosts((current) => current.filter((x) => x.id !== deletePost.id));
     setDeletePost(null);
   };
 
-  /* ---------------------------------------------------------------------
-     5) Filtering, Searching, Sorting
-  ---------------------------------------------------------------------- */
+  // Filtering
   const uniqueAuthors = useMemo(() => {
     return Array.from(
       new Set(
@@ -294,11 +264,9 @@ export default function BlogPage() {
   const filteredPosts = useMemo(() => {
     return posts
       .filter((p) => {
-        // Search in title
         const s = searchQuery.toLowerCase();
         const matchesSearch = p.title.toLowerCase().includes(s);
 
-        // Published vs. draft
         const matchesStatus =
           filters.status === "all"
             ? true
@@ -306,7 +274,6 @@ export default function BlogPage() {
             ? p.published
             : !p.published;
 
-        // Author
         const matchesAuthor =
           filters.author === "all"
             ? true
@@ -336,12 +303,8 @@ export default function BlogPage() {
       });
   }, [posts, filters, searchQuery]);
 
-  /* ---------------------------------------------------------------------
-     6) Render
-  ---------------------------------------------------------------------- */
   return (
     <div className="p-6">
-      {/* Page Heading */}
       <PageHeader heading="Blog Posts" text="Create and manage your blog content">
         <Button onClick={() => router.push("/dashboard/blog/new")}>
           <Plus className="mr-2 h-4 w-4" />
@@ -349,9 +312,8 @@ export default function BlogPage() {
         </Button>
       </PageHeader>
 
-      {/* Filters Row */}
+      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        {/* Search input */}
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -362,7 +324,6 @@ export default function BlogPage() {
           />
         </div>
 
-        {/* Status filter */}
         <Select
           value={filters.status}
           onValueChange={(val) =>
@@ -382,7 +343,6 @@ export default function BlogPage() {
           </SelectContent>
         </Select>
 
-        {/* Author filter */}
         <Select
           value={filters.author}
           onValueChange={(val) =>
@@ -402,7 +362,6 @@ export default function BlogPage() {
           </SelectContent>
         </Select>
 
-        {/* Sort filter */}
         <Select
           value={filters.sortBy}
           onValueChange={(val) =>
@@ -423,7 +382,6 @@ export default function BlogPage() {
         </Select>
       </div>
 
-      {/* Active filter chips */}
       {(filters.status !== "all" || filters.author !== "all" || searchQuery) && (
         <div className="flex flex-wrap gap-2 mb-4">
           {filters.status !== "all" && (
@@ -440,7 +398,7 @@ export default function BlogPage() {
         </div>
       )}
 
-      {/* Main content: loading / no posts / list */}
+      {/* Main content */}
       {isLoading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -460,7 +418,6 @@ export default function BlogPage() {
               key={post.id}
               className="group relative flex gap-4 p-4 bg-card border rounded-lg hover:shadow-md transition-shadow"
             >
-              {/* If there's a featured image */}
               {post.featured_image_url && (
                 <div className="relative h-32 w-32 rounded-md overflow-hidden bg-muted shrink-0">
                   <Image
@@ -474,7 +431,6 @@ export default function BlogPage() {
               )}
 
               <div className="flex flex-col flex-1 min-w-0">
-                {/* Title + published/draft badge */}
                 <div className="flex items-center gap-2 mb-2">
                   <h3 className="font-medium truncate">{post.title}</h3>
                   <Badge variant={post.published ? "default" : "secondary"}>
@@ -482,15 +438,11 @@ export default function BlogPage() {
                   </Badge>
                 </div>
 
-                {/* Post metadata */}
                 <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
-                  {/* Created date */}
                   <div className="flex items-center gap-1">
                     <Calendar className="h-4 w-4" />
                     {format(new Date(post.created_at), "MMM d, yyyy")}
                   </div>
-
-                  {/* Author info, if present */}
                   {post.author_info?.[0] && (
                     <>
                       <span>•</span>
@@ -501,8 +453,6 @@ export default function BlogPage() {
                       </span>
                     </>
                   )}
-
-                  {/* If updated date is different from created date */}
                   {post.updated_at && post.updated_at !== post.created_at && (
                     <>
                       <span>•</span>
@@ -514,15 +464,14 @@ export default function BlogPage() {
                   )}
                 </div>
 
-                {/* Short preview from Tiptap or HTML content */}
                 {post.content && (
                   <p className="text-sm text-muted-foreground line-clamp-2">
                     {getContentPreview(post.content)}
                   </p>
                 )}
 
-                {/* Action buttons: View (if published), Edit, Delete */}
                 <div className="flex items-center gap-2 mt-4">
+                  {/* "View" button goes to /blog/slug */}
                   {post.published && (
                     <Button
                       variant="outline"
@@ -555,7 +504,6 @@ export default function BlogPage() {
         </div>
       )}
 
-      {/* Confirmation dialog for deleting a post */}
       <AlertDialog open={!!deletePost} onOpenChange={() => setDeletePost(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -577,7 +525,6 @@ export default function BlogPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Quick Stats section */}
       <div className="mt-8 p-4 border rounded-lg bg-card">
         <h3 className="font-medium mb-4">Quick Stats</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -585,21 +532,18 @@ export default function BlogPage() {
             <div className="text-sm text-muted-foreground">Total Posts</div>
             <div className="text-2xl font-bold">{posts.length}</div>
           </div>
-
           <div className="p-4 border rounded-md">
             <div className="text-sm text-muted-foreground">Published</div>
             <div className="text-2xl font-bold">
               {posts.filter((p) => p.published).length}
             </div>
           </div>
-
           <div className="p-4 border rounded-md">
             <div className="text-sm text-muted-foreground">Drafts</div>
             <div className="text-2xl font-bold">
               {posts.filter((p) => !p.published).length}
             </div>
           </div>
-
           <div className="p-4 border rounded-md">
             <div className="text-sm text-muted-foreground">Authors</div>
             <div className="text-2xl font-bold">{uniqueAuthors.length}</div>

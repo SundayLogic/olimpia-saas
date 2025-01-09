@@ -45,7 +45,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-// Dynamically import Tiptap UI components
+// Dynamically import Tiptap UI
 const EditorContent = dynamic(
   () => import("@tiptap/react").then((mod) => mod.EditorContent),
   { ssr: false }
@@ -56,7 +56,7 @@ const BubbleMenu = dynamic(
 );
 
 /* ---------------------------------------------------------------------
-   1) Types & Schema
+   1) Types & Helpers
 ---------------------------------------------------------------------- */
 
 /** Base interface for 'type' property. */
@@ -64,21 +64,21 @@ interface BaseBlogContent {
   type: string; // "doc" or "html"
 }
 
-/** TiptapDoc extends the base interface and JSONContent, with type "doc". */
+/** TiptapDoc extends BaseBlogContent and JSONContent, with type "doc". */
 interface TiptapDoc extends BaseBlogContent, JSONContent {
   type: "doc";
 }
 
-/** RawHTML extends the base interface; type is "html" plus an html string. */
+/** RawHTML extends BaseBlogContent, type is "html" plus an html string. */
 interface RawHTML extends BaseBlogContent {
   type: "html";
   html: string;
 }
 
-/** Union for blog content. */
+/** Union for blog content (Tiptap or HTML). */
 type BlogContent = TiptapDoc | RawHTML | null;
 
-/** Type guards. */
+// Type guards
 function isTiptapDoc(content: BlogContent): content is TiptapDoc {
   return !!content && content.type === "doc";
 }
@@ -86,9 +86,7 @@ function isRawHtml(content: BlogContent): content is RawHTML {
   return !!content && content.type === "html";
 }
 
-/** Create RawHTML with type "html". */
-
-/** Convert HTML to a Tiptap doc with type "doc". */
+/** Example: convert raw HTML => Tiptap doc if you want to edit as Tiptap. */
 function convertHTMLToTiptap(html: string): TiptapDoc {
   const stripped = html.replace(/<[^>]+>/g, "");
   return {
@@ -102,23 +100,23 @@ function convertHTMLToTiptap(html: string): TiptapDoc {
   };
 }
 
-type BlogStatus = "draft" | "published" | "scheduled";
+/** We only allow "draft" or "published" now. */
+type BlogStatus = "draft" | "published";
+
 type AutoSaveState = {
   lastSaved: Date | null;
   saving: boolean;
   error: string | null;
 };
 
-/** Our schema for form data. */
+/** Our form schema with just draft or published, no tags, no scheduled. */
 const schema = z.object({
   title: z.string().min(1, { message: "Title is required" }),
   content: z.custom<JSONContent>((val) => !!val, {
     message: "Content is required",
   }),
   meta_description: z.string().optional(),
-  status: z.enum(["draft", "published", "scheduled"]),
-  published_at: z.string().optional(),
-  tags: z.array(z.string()).default([]),
+  status: z.enum(["draft", "published"]), // Only draft or published
 });
 
 type FormData = z.infer<typeof schema>;
@@ -142,7 +140,7 @@ export default function Page() {
     error: null,
   });
 
-  // Check if we're creating a new post
+  // Determine if new post
   const isNew = params.id === "new";
 
   // React Hook Form
@@ -150,41 +148,34 @@ export default function Page() {
     resolver: zodResolver(schema),
     defaultValues: {
       title: "",
-      content: {
-        type: "doc",
-        content: [{ type: "paragraph" }],
-      },
+      content: { type: "doc", content: [{ type: "paragraph" }] },
       meta_description: "",
       status: "draft",
-      tags: [],
     },
   });
 
   const status = form.watch("status");
-  const publishedAt = form.watch("published_at");
   const metaDescription = form.watch("meta_description") || "";
-  const tags = form.watch("tags");
 
-  // Tiptap Editor
+  // Tiptap Editor setup
   const editor = useEditor({
     extensions: [StarterKit, ImageExt, LinkExt],
     content: form.watch("content"), // Tiptap doc
     editorProps: {
       attributes: {
-        class:
-          "prose prose-lg max-w-none focus:outline-none [&_*]:outline-none",
+        class: "prose prose-lg max-w-none focus:outline-none [&_*]:outline-none",
         spellcheck: "false",
       },
       handleDOMEvents: {
         focus: (view: EditorView, ev: Event) => {
-          ev.preventDefault(); // optionally block focusing
+          // optionally block focusing
+          ev.preventDefault();
           return false;
         },
       },
     },
     onUpdate: ({ editor: e }) => {
       if (!isPreview) {
-        // Each text update => store & auto-save
         const updatedContent = e.getJSON();
         form.setValue("content", updatedContent);
         void autoSavePost({ ...form.getValues(), content: updatedContent });
@@ -192,7 +183,7 @@ export default function Page() {
     },
   });
 
-  // Toggle edit mode if in preview
+  // If in preview => disable editing
   useEffect(() => {
     if (editor) editor.setEditable(!isPreview);
   }, [isPreview, editor]);
@@ -202,28 +193,23 @@ export default function Page() {
     if (editor) setIsEditorReady(true);
   }, [editor]);
 
-  // Cleanup
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (editor && !editor.isDestroyed) {
-        try {
-          editor.commands.clearContent();
-          editor.destroy();
-        } catch {
-          /* no-op */
-        }
+        editor.commands.clearContent();
+        editor.destroy();
       }
     };
   }, [editor]);
 
-  // Auto-save (only if editing an existing post)
+  // Auto-save for existing post
   const autoSavePost = useCallback(
     async (data: FormData) => {
       if (!isNew && isEditorReady) {
         try {
           setAutoSave((p) => ({ ...p, saving: true }));
 
-          // Update content & updated_at in DB
           const { error } = await supabase
             .from("blog_posts")
             .update({
@@ -249,10 +235,10 @@ export default function Page() {
         }
       }
     },
-    [isNew, isEditorReady, supabase, params.id, form]
+    [isNew, isEditorReady, supabase, params.id]
   );
 
-  // Fetch existing post if editing
+  // Fetch existing post if not new
   useEffect(() => {
     const fetchPost = async () => {
       if (isNew) return;
@@ -267,28 +253,23 @@ export default function Page() {
 
         if (error) throw error;
         if (post && editor && !editor.isDestroyed) {
-          const content: BlogContent = post.content;
-          if (isTiptapDoc(content)) {
-            // If Tiptap, load it directly
+          // If Tiptap doc
+          if (isTiptapDoc(post.content)) {
             form.reset({
               title: post.title,
-              content,
+              content: post.content,
               meta_description: post.meta_description || "",
-              status: (post.status || "draft") as BlogStatus,
-              published_at: post.published_at || "",
-              tags: post.tags || [],
+              status: post.status === "published" ? "published" : "draft",
             });
-            editor.commands.setContent(content);
-          } else if (isRawHtml(content)) {
-            // If raw HTML => convert to Tiptap
-            const converted = convertHTMLToTiptap(content.html);
+            editor.commands.setContent(post.content);
+          } else if (isRawHtml(post.content)) {
+            // Convert raw HTML => Tiptap doc
+            const converted = convertHTMLToTiptap(post.content.html);
             form.reset({
               title: post.title,
               content: converted,
               meta_description: post.meta_description || "",
-              status: (post.status || "draft") as BlogStatus,
-              published_at: post.published_at || "",
-              tags: post.tags || [],
+              status: post.status === "published" ? "published" : "draft",
             });
             editor.commands.setContent(converted);
           }
@@ -296,7 +277,8 @@ export default function Page() {
       } catch (err) {
         toast({
           title: "Error",
-          description: err instanceof Error ? err.message : "Failed to load post",
+          description:
+            err instanceof Error ? err.message : "Failed to load blog post",
           variant: "destructive",
         });
       } finally {
@@ -304,31 +286,27 @@ export default function Page() {
       }
     };
 
-    if (editor && isEditorReady) {
+    if (!isNew && editor && isEditorReady) {
       void fetchPost();
     }
-  }, [isNew, params.id, supabase, form, editor, toast, isEditorReady]);
+  }, [isNew, supabase, editor, isEditorReady, params.id, toast, form]);
 
-  // Final "Save" (Create or Update)
+  // On final Save => create or update
   const onSubmit = async (values: FormData) => {
     try {
       setIsLoading(true);
 
-      // Get user info
       const { data: userData, error: userErr } = await supabase.auth.getUser();
       if (userErr) throw userErr;
       if (!userData?.user) throw new Error("No user found");
 
-      // Build final object
       const postData = {
         title: values.title,
         slug: slugify(values.title, { lower: true, strict: true }),
         content: values.content,
         meta_description: values.meta_description,
         status: values.status,
-        published_at: values.status === "scheduled" ? values.published_at : null,
         published: values.status === "published",
-        tags: values.tags,
         author_id: userData.user.id,
         updated_at: new Date().toISOString(),
       };
@@ -343,32 +321,28 @@ export default function Page() {
               created_at: new Date().toISOString(),
             },
           ]);
+
         if (createErr) throw createErr;
 
-        toast({
-          title: "Success",
-          description: "Blog post created successfully",
-        });
+        toast({ title: "Success", description: "Blog post created successfully" });
       } else {
         // Update existing
         const { error: updateErr } = await supabase
           .from("blog_posts")
           .update(postData)
           .eq("id", params.id);
+
         if (updateErr) throw updateErr;
 
-        toast({
-          title: "Success",
-          description: "Blog post updated successfully",
-        });
+        toast({ title: "Success", description: "Blog post updated successfully" });
       }
 
-      // Return to posts list
+      // Return to listing
       router.push("/dashboard/blog");
     } catch (err) {
       toast({
         title: "Error",
-        description: err instanceof Error ? err.message : "Failed to save post",
+        description: err instanceof Error ? err.message : "Failed to save blog post",
         variant: "destructive",
       });
     } finally {
@@ -381,7 +355,7 @@ export default function Page() {
   ---------------------------------------------------------------------- */
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      {/* Top bar: auto-save info, preview toggle, etc. */}
+      {/* Top bar with auto-save info, preview toggle */}
       <div className="border-b p-4 flex items-center justify-between bg-card">
         <div className="flex items-center space-x-4">
           {autoSave.lastSaved && (
@@ -392,12 +366,12 @@ export default function Page() {
           )}
         </div>
         <div className="flex items-center space-x-2">
+          {/* Toggle preview */}
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setIsPreview((p) => !p)}
             disabled={!isEditorReady}
-            aria-label="Toggle Preview"
+            onClick={() => setIsPreview((p) => !p)}
           >
             {isPreview ? (
               <>
@@ -415,16 +389,15 @@ export default function Page() {
             variant="ghost"
             size="sm"
             onClick={() => setShowSidebar(!showSidebar)}
-            aria-label="Toggle Sidebar"
           >
             <Settings className="w-4 h-4" />
           </Button>
         </div>
       </div>
 
-      {/* Main content area */}
+      {/* Main layout */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left: Tiptap editor */}
+        {/* Left: Tiptap Editor */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-6 space-y-8">
             {/* Title input */}
@@ -508,193 +481,164 @@ export default function Page() {
               </div>
             )}
 
-            {/* Editor region */}
+            {/* Main editor region */}
             {!isEditorReady ? (
               <div className="flex items-center justify-center min-h-[300px]">
                 <Loader2 className="h-8 w-8 animate-spin" />
               </div>
             ) : (
               <div className="min-h-[300px]">
-                <div className="relative">
-                  {editor && (
-                    <EditorContent
-                      editor={editor}
-                      className={cn(
-                        "prose prose-lg max-w-none",
-                        "[&_.ProseMirror]:min-h-[300px]",
-                        "[&_.ProseMirror]:outline-none",
-                        "[&_.ProseMirror_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]",
-                        "[&_.ProseMirror_p.is-editor-empty:first-child]:before:text-muted-foreground/60",
-                        "[&_.ProseMirror_p.is-editor-empty:first-child]:before:float-left",
-                        "[&_.ProseMirror_p.is-editor-empty:first-child]:before:pointer-events-none",
-                        "[&_.ProseMirror_::selection]:bg-primary/10",
-                        "[&_.ProseMirror-selectednode]:outline-none",
-                        "[&_.ProseMirror_h1]:text-3xl",
-                        "[&_.ProseMirror_h2]:text-2xl",
-                        "[&_.ProseMirror_h3]:text-xl",
-                        "[&_.ProseMirror_h1,h2,h3,h4,h5,h6]:font-bold",
-                        "[&_.ProseMirror_blockquote]:border-l-4",
-                        "[&_.ProseMirror_blockquote]:border-muted",
-                        "[&_.ProseMirror_blockquote]:pl-4",
-                        "[&_.ProseMirror_blockquote]:italic",
-                        "[&_.ProseMirror_pre]:bg-muted",
-                        "[&_.ProseMirror_pre]:p-4",
-                        "[&_.ProseMirror_pre]:rounded-md",
-                        "[&_.ProseMirror_pre]:font-mono",
-                        "[&_.ProseMirror_pre]:text-sm",
-                        "[&_.ProseMirror_code]:bg-muted",
-                        "[&_.ProseMirror_code]:px-1.5",
-                        "[&_.ProseMirror_code]:py-0.5",
-                        "[&_.ProseMirror_code]:rounded-sm",
-                        "[&_.ProseMirror_code]:font-mono",
-                        "[&_.ProseMirror_code]:text-sm",
-                        "[&_.ProseMirror_img]:rounded-md",
-                        "[&_.ProseMirror_img]:max-w-full",
-                        "[&_.ProseMirror_img]:h-auto",
-                        "[&_.ProseMirror_a]:text-primary",
-                        "[&_.ProseMirror_a]:underline",
-                        "[&_.ProseMirror_a:hover]:text-primary/80",
-                        isPreview ? "pointer-events-none opacity-70" : ""
-                      )}
-                    />
-                  )}
+                {editor && (
+                  <EditorContent
+                    editor={editor}
+                    className={cn(
+                      "prose prose-lg max-w-none",
+                      "[&_.ProseMirror]:min-h-[300px]",
+                      "[&_.ProseMirror]:outline-none",
+                      isPreview ? "pointer-events-none opacity-70" : ""
+                    )}
+                  />
+                )}
 
-                  {/* Bubble Menu for formatting */}
-                  {editor && !isPreview && (
-                    <BubbleMenu
-                      editor={editor}
-                      tippyOptions={{ duration: 100 }}
-                      className="flex items-center space-x-1 rounded-lg bg-background shadow-lg border p-1"
+                {/* Bubble Menu for formatting */}
+                {editor && !isPreview && (
+                  <BubbleMenu
+                    editor={editor}
+                    tippyOptions={{ duration: 100 }}
+                    className="flex items-center space-x-1 rounded-lg bg-background shadow-lg border p-1"
+                  >
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        editor.chain().focus().toggleBold().run()
+                      }
+                      className={cn(
+                        "hover:bg-accent/50",
+                        editor.isActive("bold") ? "bg-accent" : ""
+                      )}
+                      aria-label="Bold"
                     >
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => editor.chain().focus().toggleBold().run()}
-                        className={cn(
-                          "hover:bg-accent/50",
-                          editor.isActive("bold") ? "bg-accent" : ""
-                        )}
-                        aria-label="Bold"
-                      >
-                        <Bold className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          editor.chain().focus().toggleItalic().run()
+                      <Bold className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        editor.chain().focus().toggleItalic().run()
+                      }
+                      className={cn(
+                        "hover:bg-accent/50",
+                        editor.isActive("italic") ? "bg-accent" : ""
+                      )}
+                      aria-label="Italic"
+                    >
+                      <Italic className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        editor.chain().focus().toggleCode().run()
+                      }
+                      className={cn(
+                        "hover:bg-accent/50",
+                        editor.isActive("code") ? "bg-accent" : ""
+                      )}
+                      aria-label="Code"
+                    >
+                      <Code className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        editor.chain().focus().toggleHeading({ level: 2 }).run()
+                      }
+                      className={cn(
+                        "hover:bg-accent/50",
+                        editor.isActive("heading", { level: 2 })
+                          ? "bg-accent"
+                          : ""
+                      )}
+                      aria-label="Heading"
+                    >
+                      <HeadingIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        editor.chain().focus().toggleBlockquote().run()
+                      }
+                      className={cn(
+                        "hover:bg-accent/50",
+                        editor.isActive("blockquote") ? "bg-accent" : ""
+                      )}
+                      aria-label="Blockquote"
+                    >
+                      <Quote className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        editor.chain().focus().toggleBulletList().run()
+                      }
+                      className={cn(
+                        "hover:bg-accent/50",
+                        editor.isActive("bulletList") ? "bg-accent" : ""
+                      )}
+                      aria-label="Bullet List"
+                    >
+                      <List className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const url = window.prompt("Enter URL");
+                        if (url) {
+                          editor.chain().focus().setLink({ href: url }).run();
                         }
-                        className={cn(
-                          "hover:bg-accent/50",
-                          editor.isActive("italic") ? "bg-accent" : ""
-                        )}
-                        aria-label="Italic"
-                      >
-                        <Italic className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => editor.chain().focus().toggleCode().run()}
-                        className={cn(
-                          "hover:bg-accent/50",
-                          editor.isActive("code") ? "bg-accent" : ""
-                        )}
-                        aria-label="Code"
-                      >
-                        <Code className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          editor.chain().focus().toggleHeading({ level: 2 }).run()
+                      }}
+                      className={cn(
+                        "hover:bg-accent/50",
+                        editor.isActive("link") ? "bg-accent" : ""
+                      )}
+                      aria-label="Add Link"
+                    >
+                      <LinkIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const url = window.prompt("Enter image URL");
+                        if (url) {
+                          editor.chain().focus().setImage({ src: url }).run();
                         }
-                        className={cn(
-                          "hover:bg-accent/50",
-                          editor.isActive("heading", { level: 2 })
-                            ? "bg-accent"
-                            : ""
-                        )}
-                        aria-label="Heading"
-                      >
-                        <HeadingIcon className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          editor.chain().focus().toggleBlockquote().run()
-                        }
-                        className={cn(
-                          "hover:bg-accent/50",
-                          editor.isActive("blockquote") ? "bg-accent" : ""
-                        )}
-                        aria-label="Blockquote"
-                      >
-                        <Quote className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          editor.chain().focus().toggleBulletList().run()
-                        }
-                        className={cn(
-                          "hover:bg-accent/50",
-                          editor.isActive("bulletList") ? "bg-accent" : ""
-                        )}
-                        aria-label="Bullet List"
-                      >
-                        <List className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const url = window.prompt("Enter URL");
-                          if (url) {
-                            editor.chain().focus().setLink({ href: url }).run();
-                          }
-                        }}
-                        className={cn(
-                          "hover:bg-accent/50",
-                          editor.isActive("link") ? "bg-accent" : ""
-                        )}
-                        aria-label="Add Link"
-                      >
-                        <LinkIcon className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const url = window.prompt("Enter image URL");
-                          if (url) {
-                            editor.chain().focus().setImage({ src: url }).run();
-                          }
-                        }}
-                        className={cn(
-                          "hover:bg-accent/50",
-                          editor.isActive("image") ? "bg-accent" : ""
-                        )}
-                        aria-label="Add Image"
-                      >
-                        <ImageIcon className="h-4 w-4" />
-                      </Button>
-                    </BubbleMenu>
-                  )}
-                </div>
+                      }}
+                      className={cn(
+                        "hover:bg-accent/50",
+                        editor.isActive("image") ? "bg-accent" : ""
+                      )}
+                      aria-label="Add Image"
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                    </Button>
+                  </BubbleMenu>
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Right: Sidebar with status, meta, tags */}
+        {/* Right: Sidebar with status & meta desc (tags removed) */}
         {showSidebar && (
           <div className="w-80 border-l bg-card overflow-y-auto">
             <div className="p-4 space-y-6">
-              {/* Status */}
+              {/* Status: only draft or published */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Status</label>
                 <Select
@@ -707,25 +651,9 @@ export default function Page() {
                   <SelectContent>
                     <SelectItem value="draft">Draft</SelectItem>
                     <SelectItem value="published">Published</SelectItem>
-                    <SelectItem value="scheduled">Scheduled</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* Publish date if scheduled */}
-              {status === "scheduled" && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Publish Date</label>
-                  <Input
-                    type="datetime-local"
-                    value={publishedAt || ""}
-                    onChange={(e) =>
-                      form.setValue("published_at", e.target.value)
-                    }
-                    disabled={isPreview}
-                  />
-                </div>
-              )}
 
               {/* Meta description */}
               <div className="space-y-2">
@@ -739,31 +667,6 @@ export default function Page() {
                   className="h-20"
                   disabled={isPreview}
                 />
-              </div>
-
-              {/* Tags */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Tags</label>
-                <Select
-                  value={tags.join(",")}
-                  onValueChange={(v) =>
-                    form.setValue(
-                      "tags",
-                      v.split(",").filter(Boolean)
-                    )
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select tags" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["tech", "food", "travel", "lifestyle"].map((tag) => (
-                      <SelectItem key={tag} value={tag}>
-                        {tag.charAt(0).toUpperCase() + tag.slice(1)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
             </div>
           </div>
@@ -806,23 +709,12 @@ export default function Page() {
               </>
             ) : status === "published" ? (
               "Publish"
-            ) : status === "scheduled" ? (
-              "Schedule"
             ) : (
               "Save Draft"
             )}
           </Button>
         </div>
       </div>
-
-      {/* Warning if scheduled but no date */}
-      {status === "scheduled" && !publishedAt && (
-        <div className="border-t bg-yellow-50 dark:bg-yellow-900/10 p-2 text-center">
-          <span className="text-sm text-yellow-800 dark:text-yellow-200">
-            Please select a publication date for scheduled posts
-          </span>
-        </div>
-      )}
 
       {/* Tiptap global styling */}
       <style jsx global>{`
