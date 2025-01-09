@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
 import { useEditor } from "@tiptap/react";
 import { EditorView } from "@tiptap/pm/view";
-
 import StarterKit from "@tiptap/starter-kit";
 import ImageExt from "@tiptap/extension-image";
 import LinkExt from "@tiptap/extension-link";
@@ -59,26 +58,18 @@ const BubbleMenu = dynamic(
    1) Types & Helpers
 ---------------------------------------------------------------------- */
 
-/** Base interface for 'type' property. */
 interface BaseBlogContent {
   type: string; // "doc" or "html"
 }
-
-/** TiptapDoc extends BaseBlogContent and JSONContent, with type "doc". */
 interface TiptapDoc extends BaseBlogContent, JSONContent {
   type: "doc";
 }
-
-/** RawHTML extends BaseBlogContent, type is "html" plus an html string. */
 interface RawHTML extends BaseBlogContent {
   type: "html";
   html: string;
 }
-
-/** Union for blog content (Tiptap or HTML). */
 type BlogContent = TiptapDoc | RawHTML | null;
 
-// Type guards
 function isTiptapDoc(content: BlogContent): content is TiptapDoc {
   return !!content && content.type === "doc";
 }
@@ -86,7 +77,6 @@ function isRawHtml(content: BlogContent): content is RawHTML {
   return !!content && content.type === "html";
 }
 
-/** Example: convert raw HTML => Tiptap doc if you want to edit as Tiptap. */
 function convertHTMLToTiptap(html: string): TiptapDoc {
   const stripped = html.replace(/<[^>]+>/g, "");
   return {
@@ -100,7 +90,6 @@ function convertHTMLToTiptap(html: string): TiptapDoc {
   };
 }
 
-/** We only allow "draft" or "published" now. */
 type BlogStatus = "draft" | "published";
 
 type AutoSaveState = {
@@ -109,20 +98,18 @@ type AutoSaveState = {
   error: string | null;
 };
 
-/** Our form schema with just draft or published, no tags, no scheduled. */
 const schema = z.object({
   title: z.string().min(1, { message: "Title is required" }),
   content: z.custom<JSONContent>((val) => !!val, {
     message: "Content is required",
   }),
   meta_description: z.string().optional(),
-  status: z.enum(["draft", "published"]), // Only draft or published
+  status: z.enum(["draft", "published"]),
 });
-
 type FormData = z.infer<typeof schema>;
 
 /* ---------------------------------------------------------------------
-   2) The Editor Page Component
+   2) Editor Page
 ---------------------------------------------------------------------- */
 export default function Page() {
   const params = useParams();
@@ -140,10 +127,8 @@ export default function Page() {
     error: null,
   });
 
-  // Determine if new post
-  const isNew = params.id === "new";
+  const isNew = params.id === "new"; // Are we making a new post?
 
-  // React Hook Form
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -157,10 +142,9 @@ export default function Page() {
   const status = form.watch("status");
   const metaDescription = form.watch("meta_description") || "";
 
-  // Tiptap Editor setup
   const editor = useEditor({
     extensions: [StarterKit, ImageExt, LinkExt],
-    content: form.watch("content"), // Tiptap doc
+    content: form.watch("content"),
     editorProps: {
       attributes: {
         class: "prose prose-lg max-w-none focus:outline-none [&_*]:outline-none",
@@ -168,7 +152,6 @@ export default function Page() {
       },
       handleDOMEvents: {
         focus: (view: EditorView, ev: Event) => {
-          // optionally block focusing
           ev.preventDefault();
           return false;
         },
@@ -183,17 +166,14 @@ export default function Page() {
     },
   });
 
-  // If in preview => disable editing
   useEffect(() => {
     if (editor) editor.setEditable(!isPreview);
   }, [isPreview, editor]);
 
-  // Mark editor as ready
   useEffect(() => {
     if (editor) setIsEditorReady(true);
   }, [editor]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (editor && !editor.isDestroyed) {
@@ -203,13 +183,11 @@ export default function Page() {
     };
   }, [editor]);
 
-  // Auto-save for existing post
   const autoSavePost = useCallback(
     async (data: FormData) => {
       if (!isNew && isEditorReady) {
         try {
           setAutoSave((p) => ({ ...p, saving: true }));
-
           const { error } = await supabase
             .from("blog_posts")
             .update({
@@ -238,7 +216,7 @@ export default function Page() {
     [isNew, isEditorReady, supabase, params.id]
   );
 
-  // Fetch existing post if not new
+  // *** The fetch effect with "shim" for missing type
   useEffect(() => {
     const fetchPost = async () => {
       if (isNew) return;
@@ -252,26 +230,46 @@ export default function Page() {
           .single();
 
         if (error) throw error;
+
+        console.log("Fetched blog post from Supabase:", post);
+
         if (post && editor && !editor.isDestroyed) {
-          // If Tiptap doc
-          if (isTiptapDoc(post.content)) {
+          let content = post.content as any;
+          // If there's an .html property => treat it as raw HTML
+          if (content && typeof content.html === "string" && !content.type) {
+            content = { type: "html", html: content.html };
+          }
+          // If there's a top-level .content array => treat it as Tiptap doc
+          else if (content && content.content && Array.isArray(content.content) && !content.type) {
+            content.type = "doc";
+          }
+
+          if (isTiptapDoc(content)) {
             form.reset({
               title: post.title,
-              content: post.content,
-              meta_description: post.meta_description || "",
-              status: post.status === "published" ? "published" : "draft",
+              content,
+              meta_description: post.meta_description ?? "",
+              status: post.published ? "published" : "draft",
             });
-            editor.commands.setContent(post.content);
-          } else if (isRawHtml(post.content)) {
-            // Convert raw HTML => Tiptap doc
-            const converted = convertHTMLToTiptap(post.content.html);
+            editor.commands.setContent(content);
+          } else if (isRawHtml(content)) {
+            const converted = convertHTMLToTiptap(content.html);
             form.reset({
               title: post.title,
               content: converted,
-              meta_description: post.meta_description || "",
-              status: post.status === "published" ? "published" : "draft",
+              meta_description: post.meta_description ?? "",
+              status: post.published ? "published" : "draft",
             });
             editor.commands.setContent(converted);
+          } else {
+            console.warn("Unrecognized content format, using empty doc.");
+            form.reset({
+              title: post.title,
+              content: { type: "doc", content: [] },
+              meta_description: post.meta_description ?? "",
+              status: post.published ? "published" : "draft",
+            });
+            editor.commands.setContent({ type: "doc", content: [] });
           }
         }
       } catch (err) {
@@ -291,7 +289,6 @@ export default function Page() {
     }
   }, [isNew, supabase, editor, isEditorReady, params.id, toast, form]);
 
-  // On final Save => create or update
   const onSubmit = async (values: FormData) => {
     try {
       setIsLoading(true);
@@ -312,7 +309,6 @@ export default function Page() {
       };
 
       if (isNew) {
-        // Insert new
         const { error: createErr } = await supabase
           .from("blog_posts")
           .insert([
@@ -321,23 +317,19 @@ export default function Page() {
               created_at: new Date().toISOString(),
             },
           ]);
-
         if (createErr) throw createErr;
 
         toast({ title: "Success", description: "Blog post created successfully" });
       } else {
-        // Update existing
         const { error: updateErr } = await supabase
           .from("blog_posts")
           .update(postData)
           .eq("id", params.id);
-
         if (updateErr) throw updateErr;
 
         toast({ title: "Success", description: "Blog post updated successfully" });
       }
 
-      // Return to listing
       router.push("/dashboard/blog");
     } catch (err) {
       toast({
@@ -350,9 +342,6 @@ export default function Page() {
     }
   };
 
-  /* ---------------------------------------------------------------------
-     3) Render
-  ---------------------------------------------------------------------- */
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Top bar with auto-save info, preview toggle */}
@@ -366,7 +355,6 @@ export default function Page() {
           )}
         </div>
         <div className="flex items-center space-x-2">
-          {/* Toggle preview */}
           <Button
             variant="ghost"
             size="sm"
@@ -409,7 +397,7 @@ export default function Page() {
               disabled={isPreview}
             />
 
-            {/* Simple toolbar if not preview */}
+            {/* Simple toolbar */}
             {!isPreview && (
               <div className="flex items-center gap-2 py-2 mb-4 border-b">
                 <Button
@@ -422,7 +410,6 @@ export default function Page() {
                     "hover:bg-accent/50",
                     editor?.isActive("heading", { level: 1 }) ? "bg-accent" : ""
                   )}
-                  aria-label="H1"
                 >
                   H1
                 </Button>
@@ -436,7 +423,6 @@ export default function Page() {
                     "hover:bg-accent/50",
                     editor?.isActive("heading", { level: 2 }) ? "bg-accent" : ""
                   )}
-                  aria-label="H2"
                 >
                   H2
                 </Button>
@@ -448,7 +434,6 @@ export default function Page() {
                     "hover:bg-accent/50",
                     editor?.isActive("paragraph") ? "bg-accent" : ""
                   )}
-                  aria-label="Paragraph"
                 >
                   P
                 </Button>
@@ -460,7 +445,6 @@ export default function Page() {
                     "hover:bg-accent/50",
                     editor?.isActive("bold") ? "bg-accent" : ""
                   )}
-                  aria-label="Bold"
                 >
                   B
                 </Button>
@@ -474,14 +458,13 @@ export default function Page() {
                     "hover:bg-accent/50",
                     editor?.isActive("bulletList") ? "bg-accent" : ""
                   )}
-                  aria-label="Bullet List"
                 >
                   • List
                 </Button>
               </div>
             )}
 
-            {/* Main editor region */}
+            {/* Editor region */}
             {!isEditorReady ? (
               <div className="flex items-center justify-center min-h-[300px]">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -500,7 +483,7 @@ export default function Page() {
                   />
                 )}
 
-                {/* Bubble Menu for formatting */}
+                {/* Bubble Menu for inline formatting */}
                 {editor && !isPreview && (
                   <BubbleMenu
                     editor={editor}
@@ -510,42 +493,33 @@ export default function Page() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() =>
-                        editor.chain().focus().toggleBold().run()
-                      }
+                      onClick={() => editor.chain().focus().toggleBold().run()}
                       className={cn(
                         "hover:bg-accent/50",
                         editor.isActive("bold") ? "bg-accent" : ""
                       )}
-                      aria-label="Bold"
                     >
                       <Bold className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() =>
-                        editor.chain().focus().toggleItalic().run()
-                      }
+                      onClick={() => editor.chain().focus().toggleItalic().run()}
                       className={cn(
                         "hover:bg-accent/50",
                         editor.isActive("italic") ? "bg-accent" : ""
                       )}
-                      aria-label="Italic"
                     >
                       <Italic className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() =>
-                        editor.chain().focus().toggleCode().run()
-                      }
+                      onClick={() => editor.chain().focus().toggleCode().run()}
                       className={cn(
                         "hover:bg-accent/50",
                         editor.isActive("code") ? "bg-accent" : ""
                       )}
-                      aria-label="Code"
                     >
                       <Code className="h-4 w-4" />
                     </Button>
@@ -561,7 +535,6 @@ export default function Page() {
                           ? "bg-accent"
                           : ""
                       )}
-                      aria-label="Heading"
                     >
                       <HeadingIcon className="h-4 w-4" />
                     </Button>
@@ -575,7 +548,6 @@ export default function Page() {
                         "hover:bg-accent/50",
                         editor.isActive("blockquote") ? "bg-accent" : ""
                       )}
-                      aria-label="Blockquote"
                     >
                       <Quote className="h-4 w-4" />
                     </Button>
@@ -589,7 +561,6 @@ export default function Page() {
                         "hover:bg-accent/50",
                         editor.isActive("bulletList") ? "bg-accent" : ""
                       )}
-                      aria-label="Bullet List"
                     >
                       <List className="h-4 w-4" />
                     </Button>
@@ -606,7 +577,6 @@ export default function Page() {
                         "hover:bg-accent/50",
                         editor.isActive("link") ? "bg-accent" : ""
                       )}
-                      aria-label="Add Link"
                     >
                       <LinkIcon className="h-4 w-4" />
                     </Button>
@@ -623,7 +593,6 @@ export default function Page() {
                         "hover:bg-accent/50",
                         editor.isActive("image") ? "bg-accent" : ""
                       )}
-                      aria-label="Add Image"
                     >
                       <ImageIcon className="h-4 w-4" />
                     </Button>
@@ -634,11 +603,10 @@ export default function Page() {
           </div>
         </div>
 
-        {/* Right: Sidebar with status & meta desc (tags removed) */}
+        {/* Sidebar with status & meta desc */}
         {showSidebar && (
           <div className="w-80 border-l bg-card overflow-y-auto">
             <div className="p-4 space-y-6">
-              {/* Status: only draft or published */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Status</label>
                 <Select
@@ -655,7 +623,6 @@ export default function Page() {
                 </Select>
               </div>
 
-              {/* Meta description */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Meta Description</label>
                 <Textarea
@@ -716,7 +683,6 @@ export default function Page() {
         </div>
       </div>
 
-      {/* Tiptap global styling */}
       <style jsx global>{`
         .ProseMirror > * + * {
           margin-top: 0.75em;

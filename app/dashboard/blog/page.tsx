@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/core/layout";
 
-// Dynamically imported UI components
+// Dynamically imported UI components for dialogs
 const AlertDialog = dynamic(() =>
   import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialog)
 );
@@ -31,9 +31,7 @@ const AlertDialogTitle = dynamic(() =>
   import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogTitle)
 );
 const AlertDialogDescription = dynamic(() =>
-  import("@/components/ui/alert-dialog").then(
-    (mod) => mod.AlertDialogDescription
-  )
+  import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogDescription)
 );
 const AlertDialogFooter = dynamic(() =>
   import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogFooter)
@@ -131,10 +129,6 @@ interface BlogPost {
   author_info?: AuthorInfo[];
 }
 
-/* ---------------------------------------------------------------------
-   2) The Blog Page Component (Listing)
----------------------------------------------------------------------- */
-
 export default function BlogPage() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -151,6 +145,7 @@ export default function BlogPage() {
   const { toast } = useToast();
   const router = useRouter();
 
+  // For searching & filtering
   const getContentPreview = (c: BlogContent) => {
     if (!c) return "";
     if (isTiptapDoc(c)) {
@@ -187,9 +182,8 @@ export default function BlogPage() {
           return;
         }
 
+        // Optionally fetch authors
         const postsData = data as BlogPost[];
-
-        // (Optional) fetch authors
         const authorIds = postsData.map((p) => p.author_id).filter(Boolean);
         let authorsData: AuthorInfo[] | undefined;
         if (authorIds.length > 0) {
@@ -339,7 +333,7 @@ export default function BlogPage() {
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="published">Published</SelectItem>
-            <SelectItem value="draft">Drafts</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
           </SelectContent>
         </Select>
 
@@ -382,7 +376,10 @@ export default function BlogPage() {
         </Select>
       </div>
 
-      {(filters.status !== "all" || filters.author !== "all" || searchQuery) && (
+      {/* Filter summary badges, optionally */}
+      {(filters.status !== "all" ||
+        filters.author !== "all" ||
+        searchQuery) && (
         <div className="flex flex-wrap gap-2 mb-4">
           {filters.status !== "all" && (
             <Badge variant="secondary" className="capitalize">
@@ -471,7 +468,7 @@ export default function BlogPage() {
                 )}
 
                 <div className="flex items-center gap-2 mt-4">
-                  {/* "View" button goes to /blog/slug */}
+                  {/* "View" button goes to /blog/[slug], for published posts only */}
                   {post.published && (
                     <Button
                       variant="outline"
@@ -482,6 +479,7 @@ export default function BlogPage() {
                       View
                     </Button>
                   )}
+                  {/* Edit button -> /dashboard/blog/[id] */}
                   <Button
                     variant="outline"
                     size="sm"
@@ -525,6 +523,7 @@ export default function BlogPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Quick Stats */}
       <div className="mt-8 p-4 border rounded-lg bg-card">
         <h3 className="font-medium mb-4">Quick Stats</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
