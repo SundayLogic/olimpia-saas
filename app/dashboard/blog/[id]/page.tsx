@@ -44,7 +44,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-// Dynamically import Tiptap UI
+// Dynamically import Tiptap UI components
 const EditorContent = dynamic(
   () => import("@tiptap/react").then((mod) => mod.EditorContent),
   { ssr: false }
@@ -58,25 +58,35 @@ const BubbleMenu = dynamic(
    1) Types & Helpers
 ---------------------------------------------------------------------- */
 
-interface BaseBlogContent {
-  type: string; // "doc" or "html"
+/** Potential Tiptap doc shape (no `any`). */
+interface TiptapDoc extends JSONContent {
+  type?: "doc"; // optional, we may add it if missing
 }
-interface TiptapDoc extends BaseBlogContent, JSONContent {
-  type: "doc";
-}
-interface RawHTML extends BaseBlogContent {
-  type: "html";
+
+/** Potential Raw HTML shape. */
+interface RawHTML {
   html: string;
-}
-type BlogContent = TiptapDoc | RawHTML | null;
-
-function isTiptapDoc(content: BlogContent): content is TiptapDoc {
-  return !!content && content.type === "doc";
-}
-function isRawHtml(content: BlogContent): content is RawHTML {
-  return !!content && content.type === "html";
+  type?: "html"; // optional, we may add it if missing
 }
 
+
+/** Type guard to see if object is Tiptap doc. */
+function isTiptapDoc(content: unknown): content is TiptapDoc {
+  if (typeof content !== "object" || content === null) return false;
+  const doc = content as TiptapDoc;
+  return Array.isArray(doc.content); // simplest check
+}
+
+/** Type guard to see if object is HTML-based. */
+function isRawHtml(content: unknown): content is RawHTML {
+  if (typeof content !== "object" || content === null) return false;
+  return (
+    "html" in content &&
+    typeof (content as RawHTML).html === "string"
+  );
+}
+
+/** Convert raw HTML => naive Tiptap doc. */
 function convertHTMLToTiptap(html: string): TiptapDoc {
   const stripped = html.replace(/<[^>]+>/g, "");
   return {
@@ -90,6 +100,7 @@ function convertHTMLToTiptap(html: string): TiptapDoc {
   };
 }
 
+/** We only allow "draft" or "published". */
 type BlogStatus = "draft" | "published";
 
 type AutoSaveState = {
@@ -98,6 +109,7 @@ type AutoSaveState = {
   error: string | null;
 };
 
+/** Zod schema for the form. */
 const schema = z.object({
   title: z.string().min(1, { message: "Title is required" }),
   content: z.custom<JSONContent>((val) => !!val, {
@@ -109,7 +121,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 /* ---------------------------------------------------------------------
-   2) Editor Page
+   2) The Editor Page
 ---------------------------------------------------------------------- */
 export default function Page() {
   const params = useParams();
@@ -117,6 +129,7 @@ export default function Page() {
   const { toast } = useToast();
   const supabase = createClientComponentClient();
 
+  // Local states
   const [isLoading, setIsLoading] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -127,8 +140,10 @@ export default function Page() {
     error: null,
   });
 
-  const isNew = params.id === "new"; // Are we making a new post?
+  /** Are we making a new post (id === "new") or editing existing? */
+  const isNew = params.id === "new";
 
+  // React Hook Form
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -142,9 +157,10 @@ export default function Page() {
   const status = form.watch("status");
   const metaDescription = form.watch("meta_description") || "";
 
+  // Tiptap Editor
   const editor = useEditor({
     extensions: [StarterKit, ImageExt, LinkExt],
-    content: form.watch("content"),
+    content: form.watch("content"), // get from RHF
     editorProps: {
       attributes: {
         class: "prose prose-lg max-w-none focus:outline-none [&_*]:outline-none",
@@ -152,12 +168,14 @@ export default function Page() {
       },
       handleDOMEvents: {
         focus: (view: EditorView, ev: Event) => {
+          // Prevent focusing Tiptap?
           ev.preventDefault();
           return false;
         },
       },
     },
     onUpdate: ({ editor: e }) => {
+      // On each keystroke => update `form.values.content`
       if (!isPreview) {
         const updatedContent = e.getJSON();
         form.setValue("content", updatedContent);
@@ -166,14 +184,17 @@ export default function Page() {
     },
   });
 
+  // Toggle preview
   useEffect(() => {
     if (editor) editor.setEditable(!isPreview);
   }, [isPreview, editor]);
 
+  // Mark editor as ready
   useEffect(() => {
     if (editor) setIsEditorReady(true);
   }, [editor]);
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (editor && !editor.isDestroyed) {
@@ -183,8 +204,10 @@ export default function Page() {
     };
   }, [editor]);
 
+  // Auto-Save logic for existing post
   const autoSavePost = useCallback(
     async (data: FormData) => {
+      // only if post is existing (not new) and editor is ready
       if (!isNew && isEditorReady) {
         try {
           setAutoSave((p) => ({ ...p, saving: true }));
@@ -216,10 +239,11 @@ export default function Page() {
     [isNew, isEditorReady, supabase, params.id]
   );
 
-  // *** The fetch effect with "shim" for missing type
+  // Fetch existing post if not new
   useEffect(() => {
     const fetchPost = async () => {
       if (isNew) return;
+
       try {
         setIsLoading(true);
 
@@ -230,30 +254,47 @@ export default function Page() {
           .single();
 
         if (error) throw error;
-
         console.log("Fetched blog post from Supabase:", post);
 
+        // If we got a post, parse content
         if (post && editor && !editor.isDestroyed) {
-          let content = post.content as any;
-          // If there's an .html property => treat it as raw HTML
-          if (content && typeof content.html === "string" && !content.type) {
-            content = { type: "html", html: content.html };
-          }
-          // If there's a top-level .content array => treat it as Tiptap doc
-          else if (content && content.content && Array.isArray(content.content) && !content.type) {
-            content.type = "doc";
+          let contentVal: unknown = post.content;
+
+          // If missing a `type` field, let's guess
+          if (typeof contentVal === "object" && contentVal !== null) {
+            if (!("type" in contentVal)) {
+              // If there's .html => treat as raw
+              if (
+                "html" in contentVal &&
+                typeof (contentVal as RawHTML).html === "string"
+              ) {
+                contentVal = {
+                  type: "html",
+                  html: (contentVal as RawHTML).html,
+                };
+              }
+              // If there's .content => treat as doc
+              else if (
+                "content" in contentVal &&
+                Array.isArray((contentVal as TiptapDoc).content)
+              ) {
+                (contentVal as TiptapDoc).type = "doc";
+              }
+            }
           }
 
-          if (isTiptapDoc(content)) {
+          // Now we can do final checks
+          if (isTiptapDoc(contentVal)) {
             form.reset({
               title: post.title,
-              content,
+              content: contentVal,
               meta_description: post.meta_description ?? "",
               status: post.published ? "published" : "draft",
             });
-            editor.commands.setContent(content);
-          } else if (isRawHtml(content)) {
-            const converted = convertHTMLToTiptap(content.html);
+            editor.commands.setContent(contentVal);
+          } else if (isRawHtml(contentVal)) {
+            // raw HTML => convert
+            const converted = convertHTMLToTiptap(contentVal.html);
             form.reset({
               title: post.title,
               content: converted,
@@ -262,7 +303,7 @@ export default function Page() {
             });
             editor.commands.setContent(converted);
           } else {
-            console.warn("Unrecognized content format, using empty doc.");
+            // fallback empty doc
             form.reset({
               title: post.title,
               content: { type: "doc", content: [] },
@@ -289,6 +330,7 @@ export default function Page() {
     }
   }, [isNew, supabase, editor, isEditorReady, params.id, toast, form]);
 
+  // Final Save => create or update
   const onSubmit = async (values: FormData) => {
     try {
       setIsLoading(true);
@@ -309,6 +351,7 @@ export default function Page() {
       };
 
       if (isNew) {
+        // Insert new
         const { error: createErr } = await supabase
           .from("blog_posts")
           .insert([
@@ -321,10 +364,12 @@ export default function Page() {
 
         toast({ title: "Success", description: "Blog post created successfully" });
       } else {
+        // Update existing
         const { error: updateErr } = await supabase
           .from("blog_posts")
           .update(postData)
           .eq("id", params.id);
+
         if (updateErr) throw updateErr;
 
         toast({ title: "Success", description: "Blog post updated successfully" });
@@ -344,7 +389,7 @@ export default function Page() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      {/* Top bar with auto-save info, preview toggle */}
+      {/* Top bar with auto-save info & preview toggle */}
       <div className="border-b p-4 flex items-center justify-between bg-card">
         <div className="flex items-center space-x-4">
           {autoSave.lastSaved && (
@@ -355,6 +400,7 @@ export default function Page() {
           )}
         </div>
         <div className="flex items-center space-x-2">
+          {/* Toggle preview */}
           <Button
             variant="ghost"
             size="sm"
@@ -388,7 +434,7 @@ export default function Page() {
         {/* Left: Tiptap Editor */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-6 space-y-8">
-            {/* Title input */}
+            {/* Title */}
             <Input
               type="text"
               placeholder="Post title"
@@ -397,7 +443,7 @@ export default function Page() {
               disabled={isPreview}
             />
 
-            {/* Simple toolbar */}
+            {/* Simple toolbar if not preview */}
             {!isPreview && (
               <div className="flex items-center gap-2 py-2 mb-4 border-b">
                 <Button
@@ -464,7 +510,7 @@ export default function Page() {
               </div>
             )}
 
-            {/* Editor region */}
+            {/* Main editor region */}
             {!isEditorReady ? (
               <div className="flex items-center justify-center min-h-[300px]">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -504,7 +550,9 @@ export default function Page() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => editor.chain().focus().toggleItalic().run()}
+                      onClick={() =>
+                        editor.chain().focus().toggleItalic().run()
+                      }
                       className={cn(
                         "hover:bg-accent/50",
                         editor.isActive("italic") ? "bg-accent" : ""
@@ -603,10 +651,11 @@ export default function Page() {
           </div>
         </div>
 
-        {/* Sidebar with status & meta desc */}
+        {/* Right: Sidebar (Status & Meta Desc) */}
         {showSidebar && (
           <div className="w-80 border-l bg-card overflow-y-auto">
             <div className="p-4 space-y-6">
+              {/* Status */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Status</label>
                 <Select
@@ -623,6 +672,7 @@ export default function Page() {
                 </Select>
               </div>
 
+              {/* Meta Description */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Meta Description</label>
                 <Textarea
@@ -640,7 +690,7 @@ export default function Page() {
         )}
       </div>
 
-      {/* Bottom bar: auto-save status, Save/Cancel */}
+      {/* Bottom bar: finalize actions */}
       <div className="border-t bg-card p-4 flex justify-between items-center">
         <div className="text-sm text-muted-foreground">
           {autoSave.saving && (
@@ -683,6 +733,7 @@ export default function Page() {
         </div>
       </div>
 
+      {/* Tiptap global styling */}
       <style jsx global>{`
         .ProseMirror > * + * {
           margin-top: 0.75em;

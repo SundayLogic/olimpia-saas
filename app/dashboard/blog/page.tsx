@@ -10,14 +10,13 @@ import Image from "next/image";
 // Icons
 import { Plus, Search, Eye, Trash2, Calendar } from "lucide-react";
 
-// UI Components
+// UI
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/core/layout";
 
-// Dynamically imported UI components for dialogs
 const AlertDialog = dynamic(() =>
   import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialog)
 );
@@ -60,52 +59,71 @@ const SelectValue = dynamic(() =>
 );
 
 /* ---------------------------------------------------------------------
-   1) Type Definitions & Helpers
+   1) Types & Helpers
 ---------------------------------------------------------------------- */
 
 import type { JSONContent } from "@tiptap/react";
 
-/** Base interface for our content's "type" discriminator. */
-interface BaseBlogContent {
-  type: string; // "doc" or "html"
+/** Tiptap doc shape. */
+interface TiptapDoc extends JSONContent {
+  type?: "doc";
 }
 
-interface TiptapDoc extends BaseBlogContent, JSONContent {
-  type: "doc";
-}
-
-interface RawHTML extends BaseBlogContent {
-  type: "html";
+/** If content is HTML-based. */
+interface RawHTML {
   html: string;
+  type?: "html";
 }
 
 type BlogContent = TiptapDoc | RawHTML | null;
 
-// Type guards
-function isTiptapDoc(content: BlogContent): content is TiptapDoc {
-  return !!content && content.type === "doc";
+/** Distinguish Tiptap doc from HTML object. */
+function hasHtml(obj: unknown): obj is RawHTML {
+  return (
+    typeof obj === "object" &&
+    obj !== null &&
+    "html" in obj &&
+    typeof (obj as { html: unknown }).html === "string"
+  );
 }
-function isRawHtml(content: BlogContent): content is RawHTML {
-  return !!content && content.type === "html";
+function hasTiptapContent(obj: unknown): obj is TiptapDoc {
+  return (
+    typeof obj === "object" &&
+    obj !== null &&
+    "content" in obj &&
+    Array.isArray((obj as TiptapDoc).content)
+  );
 }
 
-/** Recursively extract text from Tiptap. */
-function extractTiptapText(node: JSONContent): string {
-  let text = "";
-  if (typeof node.text === "string") {
-    text += node.text;
+/** Extract minimal preview text. */
+function extractText(c: BlogContent): string {
+  if (!c) return "";
+  // If it's raw HTML
+  if (hasHtml(c)) {
+    const stripped = c.html.replace(/<[^>]+>/g, "");
+    return stripped.slice(0, 100);
   }
-  if (Array.isArray(node.content)) {
-    for (const child of node.content) {
-      text += " " + extractTiptapText(child);
-    }
+  // If it's a Tiptap doc
+  if (hasTiptapContent(c)) {
+    let text = "";
+    c.content?.forEach((node) => {
+      // node is JSONContent
+      if (node.type === "paragraph" && Array.isArray(node.content)) {
+        node.content.forEach((child) => {
+          if (child.type === "text" && typeof child.text === "string") {
+            text += child.text + " ";
+          }
+        });
+      }
+    });
+    return text.slice(0, 100);
   }
-  return text.trim();
+  return "";
 }
 
 type FilterOptions = {
   status: "all" | "published" | "draft";
-  author: string; 
+  author: string;
   sortBy: "newest" | "oldest" | "title";
 };
 
@@ -145,19 +163,7 @@ export default function BlogPage() {
   const { toast } = useToast();
   const router = useRouter();
 
-  // For searching & filtering
-  const getContentPreview = (c: BlogContent) => {
-    if (!c) return "";
-    if (isTiptapDoc(c)) {
-      return extractTiptapText(c).slice(0, 100);
-    } else if (isRawHtml(c)) {
-      const stripped = c.html.replace(/<[^>]+>/g, "");
-      return stripped.slice(0, 100);
-    }
-    return "";
-  };
-
-  // Fetch posts on mount
+  // Fetch posts
   useEffect(() => {
     (async () => {
       try {
@@ -182,9 +188,9 @@ export default function BlogPage() {
           return;
         }
 
+        const rawPosts = data as BlogPost[];
         // Optionally fetch authors
-        const postsData = data as BlogPost[];
-        const authorIds = postsData.map((p) => p.author_id).filter(Boolean);
+        const authorIds = rawPosts.map((p) => p.author_id).filter(Boolean);
         let authorsData: AuthorInfo[] | undefined;
         if (authorIds.length > 0) {
           const { data: aData, error: authorsError } = await supabase
@@ -192,7 +198,9 @@ export default function BlogPage() {
             .select("id, name, email")
             .in("id", authorIds);
 
-          if (authorsError) console.error("Authors fetch error:", authorsError);
+          if (authorsError) {
+            console.error("Authors fetch error:", authorsError);
+          }
           if (aData) {
             authorsData = aData.map((u) => ({
               id: u.id,
@@ -203,7 +211,7 @@ export default function BlogPage() {
         }
 
         setPosts(
-          postsData.map((p) => ({
+          rawPosts.map((p) => ({
             ...p,
             author_info: authorsData?.filter((a) => a.id === p.author_id) || [],
           }))
@@ -221,7 +229,7 @@ export default function BlogPage() {
     })();
   }, [supabase, toast]);
 
-  // Deletion
+  // Delete logic
   const handleDeletePost = async () => {
     if (!deletePost) return;
     const { error } = await supabase
@@ -238,7 +246,7 @@ export default function BlogPage() {
       return;
     }
     toast({ title: "Success", description: "Post deleted successfully" });
-    setPosts((current) => current.filter((x) => x.id !== deletePost.id));
+    setPosts((cur) => cur.filter((x) => x.id !== deletePost.id));
     setDeletePost(null);
   };
 
@@ -376,10 +384,7 @@ export default function BlogPage() {
         </Select>
       </div>
 
-      {/* Filter summary badges, optionally */}
-      {(filters.status !== "all" ||
-        filters.author !== "all" ||
-        searchQuery) && (
+      {(filters.status !== "all" || filters.author !== "all" || searchQuery) && (
         <div className="flex flex-wrap gap-2 mb-4">
           {filters.status !== "all" && (
             <Badge variant="secondary" className="capitalize">
@@ -463,12 +468,11 @@ export default function BlogPage() {
 
                 {post.content && (
                   <p className="text-sm text-muted-foreground line-clamp-2">
-                    {getContentPreview(post.content)}
+                    {extractText(post.content)}
                   </p>
                 )}
 
                 <div className="flex items-center gap-2 mt-4">
-                  {/* "View" button goes to /blog/[slug], for published posts only */}
                   {post.published && (
                     <Button
                       variant="outline"
@@ -479,7 +483,6 @@ export default function BlogPage() {
                       View
                     </Button>
                   )}
-                  {/* Edit button -> /dashboard/blog/[id] */}
                   <Button
                     variant="outline"
                     size="sm"
