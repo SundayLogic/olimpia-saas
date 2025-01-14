@@ -127,35 +127,35 @@ export type Database = {
 
       // ===== Added daily_menus and daily_menu_items Tables =====
       daily_menus: {
-  Row: {
-    id: string;
-    date: string;
-    repeat_pattern: "none" | "weekly" | "monthly";
-    active: boolean;
-    scheduled_for: string;
-    created_at: string;
-    daily_menu_items?: {
-      id: string;
-      course_name: string;
-      course_type: "first" | "second";
-      display_order: number;
-      daily_menu_id: string;
-    }[];
-  };
-  Insert: {
-    date: string;
-    repeat_pattern?: "none" | "weekly" | "monthly";
-    active?: boolean;
-    scheduled_for: string;
-    created_at?: string;
-  };
-  Update: {
-    date?: string;
-    repeat_pattern?: "none" | "weekly" | "monthly";
-    active?: boolean;
-    scheduled_for?: string;
-  };
-};
+        Row: {
+          id: string;
+          date: string;
+          repeat_pattern: "none" | "weekly" | "monthly";
+          active: boolean;
+          scheduled_for: string;
+          created_at: string;
+          daily_menu_items?: {
+            id: string;
+            course_name: string;
+            course_type: "first" | "second";
+            display_order: number;
+            daily_menu_id: string;
+          }[];
+        };
+        Insert: {
+          date: string;
+          repeat_pattern?: "none" | "weekly" | "monthly";
+          active?: boolean;
+          scheduled_for: string;
+          created_at?: string;
+        };
+        Update: {
+          date?: string;
+          repeat_pattern?: "none" | "weekly" | "monthly";
+          active?: boolean;
+          scheduled_for?: string;
+        };
+      };
 
       daily_menu_items: {
         Row: {
@@ -246,6 +246,47 @@ export type Database = {
         };
       };
       // ===== End of New Tables =====
+
+      // ===== Add blog_posts Table =====
+      blog_posts: {
+        Row: {
+          id: string;
+          title: string;
+          slug: string;
+          published: boolean;
+          created_at: string;
+          updated_at: string | null;
+          content: unknown; // e.g. JSON or text type
+          featured_image_url: string | null;
+          featured_image_alt: string | null;
+          author_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          slug?: string;
+          published?: boolean;
+          created_at?: string;
+          updated_at?: string | null;
+          content?: unknown;
+          featured_image_url?: string | null;
+          featured_image_alt?: string | null;
+          author_id?: string | null;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          slug?: string;
+          published?: boolean;
+          created_at?: string;
+          updated_at?: string | null;
+          content?: unknown;
+          featured_image_url?: string | null;
+          featured_image_alt?: string | null;
+          author_id?: string | null;
+        };
+      };
+      // ===== End blog_posts Table =====
     };
     Views: {
       [_ in never]: never;
@@ -675,6 +716,6 @@ export function createFormControl(initialValue: unknown = ''): FormControl {
 
 export function isFormValid(controls: FormControls): boolean {
   return Object.values(controls).every(
-    control => !control.error && control.touched
+    (control) => !control.error && control.touched
   );
 }
