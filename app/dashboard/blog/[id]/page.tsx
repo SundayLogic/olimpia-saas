@@ -32,6 +32,7 @@ import {
   Heading as HeadingIcon,
 } from "lucide-react";
 
+import Image from "next/image"; // For showing featured image
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,7 +45,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-// Dynamically import Tiptap UI components
+/** Dynamically import Tiptap UI components */
 const EditorContent = dynamic(
   () => import("@tiptap/react").then((mod) => mod.EditorContent),
   { ssr: false }
@@ -58,25 +59,31 @@ const BubbleMenu = dynamic(
    1) Types & Helpers
 ---------------------------------------------------------------------- */
 
+/** Potential Tiptap doc shape (no `any`). */
 interface TiptapDoc extends JSONContent {
   type?: "doc";
 }
 
+/** Potential Raw HTML shape. */
 interface RawHTML {
   html: string;
   type?: "html";
 }
 
+/** Type guard to see if object is Tiptap doc. */
 function isTiptapDoc(content: unknown): content is TiptapDoc {
   if (typeof content !== "object" || content === null) return false;
-  return Array.isArray((content as TiptapDoc).content);
+  const doc = content as TiptapDoc;
+  return Array.isArray(doc.content);
 }
 
+/** Type guard to see if object is HTML-based. */
 function isRawHtml(content: unknown): content is RawHTML {
   if (typeof content !== "object" || content === null) return false;
-  return "html" in content && typeof (content as RawHTML).html === "string";
+  return "html" in (content as Record<string, unknown>);
 }
 
+/** Convert raw HTML => naive Tiptap doc. */
 function convertHTMLToTiptap(html: string): TiptapDoc {
   const stripped = html.replace(/<[^>]+>/g, "");
   return {
@@ -90,6 +97,7 @@ function convertHTMLToTiptap(html: string): TiptapDoc {
   };
 }
 
+/** We only allow "draft" or "published". */
 type BlogStatus = "draft" | "published";
 
 type AutoSaveState = {
@@ -98,6 +106,7 @@ type AutoSaveState = {
   error: string | null;
 };
 
+/** Zod schema for the form. */
 const schema = z.object({
   title: z.string().min(1, { message: "Title is required" }),
   content: z.custom<JSONContent>((val) => !!val, {
@@ -118,6 +127,7 @@ export default function Page() {
   const { toast } = useToast();
   const supabase = createClientComponentClient();
 
+  // Local states
   const [isLoading, setIsLoading] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -130,6 +140,10 @@ export default function Page() {
 
   /** Are we making a new post (id === "new") or editing existing? */
   const isNew = params.id === "new";
+
+  // For displaying the featured image
+  const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null);
+  const [featuredImageAlt, setFeaturedImageAlt] = useState<string | null>(null);
 
   // React Hook Form
   const form = useForm<FormData>({
@@ -156,23 +170,23 @@ export default function Page() {
       },
       handleDOMEvents: {
         focus: (view: EditorView, ev: Event) => {
-          // Optional: if you need to prevent focusing Tiptap
+          // Prevent focusing Tiptap?
           ev.preventDefault();
           return false;
         },
       },
     },
     onUpdate: ({ editor: e }) => {
-      // On each keystroke => update content in form + auto-save
       if (!isPreview) {
         const updatedContent = e.getJSON();
         form.setValue("content", updatedContent);
+        // Auto-save the content
         void autoSavePost({ ...form.getValues(), content: updatedContent });
       }
     },
   });
 
-  // Toggle preview mode
+  // Toggle preview
   useEffect(() => {
     if (editor) editor.setEditable(!isPreview);
   }, [isPreview, editor]);
@@ -192,15 +206,14 @@ export default function Page() {
     };
   }, [editor]);
 
-  /* ---------------------------------------------------------------------
-     3) Auto-Save for existing posts (only content)
-  --------------------------------------------------------------------- */
+  // Auto-Save logic for existing post
   const autoSavePost = useCallback(
     async (data: FormData) => {
       if (!isNew && isEditorReady) {
         try {
           setAutoSave((p) => ({ ...p, saving: true }));
 
+          // Only update content in auto-save
           const updatePayload = {
             content: data.content,
             updated_at: new Date().toISOString(),
@@ -243,9 +256,7 @@ export default function Page() {
     [isNew, isEditorReady, supabase, params.id]
   );
 
-  /* ---------------------------------------------------------------------
-     4) Fetch existing post if editing
-  --------------------------------------------------------------------- */
+  // Fetch existing post if not new
   useEffect(() => {
     const fetchPost = async () => {
       if (isNew) return;
@@ -253,64 +264,61 @@ export default function Page() {
       try {
         setIsLoading(true);
 
+        // IMPORTANT: Make sure to select the columns you need, including featured_image_url & alt
         const { data: post, error } = await supabase
           .from("blog_posts")
-          .select("*")
+          .select(
+            "id, title, content, meta_description, published, created_at, updated_at, author_id, featured_image_url, featured_image_alt"
+          )
           .eq("id", params.id)
           .single();
 
         if (error) throw error;
         console.log("Fetched blog post from Supabase:", post);
 
-        if (post && editor && !editor.isDestroyed) {
-          let contentVal: unknown = post.content;
+        if (post) {
+          // Save featured image
+          setFeaturedImageUrl(post.featured_image_url);
+          setFeaturedImageAlt(post.featured_image_alt);
 
-          // If missing a `type`, attempt to detect
+          // If we got a post, parse content
+          let contentVal: unknown = post.content;
           if (typeof contentVal === "object" && contentVal !== null) {
-            if (!("type" in contentVal) && "html" in contentVal) {
-              contentVal = {
-                type: "html",
-                html: (contentVal as RawHTML).html,
-              };
-            } else if (
-              !("type" in contentVal) &&
-              "content" in contentVal &&
-              Array.isArray((contentVal as TiptapDoc).content)
-            ) {
-              (contentVal as TiptapDoc).type = "doc";
+            if (!("type" in contentVal)) {
+              // If there's .html => treat as raw
+              if (isRawHtml(contentVal)) {
+                contentVal = {
+                  type: "html",
+                  html: contentVal.html,
+                };
+              }
+              // If there's .content => treat as doc
+              else if (isTiptapDoc(contentVal)) {
+                (contentVal as TiptapDoc).type = "doc";
+              }
             }
           }
 
-          // Determine final content format
+          // Now final check
+          let finalContent: JSONContent;
           if (isTiptapDoc(contentVal)) {
-            form.reset({
-              title: post.title,
-              content: contentVal,
-              meta_description: post.meta_description ?? "",
-              status: post.published ? "published" : "draft",
-            });
-            editor.commands.setContent(contentVal);
+            finalContent = contentVal;
           } else if (isRawHtml(contentVal)) {
-            const converted = convertHTMLToTiptap(contentVal.html);
-            form.reset({
-              title: post.title,
-              content: converted,
-              meta_description: post.meta_description ?? "",
-              status: post.published ? "published" : "draft",
-            });
-            editor.commands.setContent(converted);
+            finalContent = convertHTMLToTiptap(contentVal.html);
           } else {
-            // fallback to empty doc
-            form.reset({
-              title: post.title,
-              content: { type: "doc", content: [] },
-              meta_description: post.meta_description ?? "",
-              status: post.published ? "published" : "draft",
-            });
-            editor.commands.setContent({ type: "doc", content: [] });
+            finalContent = { type: "doc", content: [] };
           }
+
+          form.reset({
+            title: post.title,
+            content: finalContent,
+            meta_description: post.meta_description ?? "",
+            status: post.published ? "published" : "draft",
+          });
+          editor?.commands.setContent(finalContent);
         }
       } catch (err) {
+        console.error(err);
         toast({
           title: "Error",
           description:
@@ -327,9 +335,7 @@ export default function Page() {
     }
   }, [isNew, supabase, editor, isEditorReady, params.id, toast, form]);
 
-  /* ---------------------------------------------------------------------
-     5) Final save => create or update
-  --------------------------------------------------------------------- */
+  // Final Save => create or update
   const onSubmit = async (values: FormData) => {
     try {
       setIsLoading(true);
@@ -359,7 +365,7 @@ export default function Page() {
         meta_description: values.meta_description || null,
         published: values.status === "published",
         updated_at: new Date().toISOString(),
-        // Include author_id in all cases
+        // Ensure author_id is always set
         author_id: isNew
           ? userData.user.id
           : currentPost?.author_id || userData.user.id,
@@ -383,7 +389,10 @@ export default function Page() {
         console.log("Insert response:", { data: insertData, error: createErr });
 
         if (createErr) throw createErr;
-        toast({ title: "Success", description: "Blog post created successfully" });
+        toast({
+          title: "Success",
+          description: "Blog post created successfully",
+        });
       } else {
         // Update existing post
         const { data: updateData, error: updateErr } = await supabase
@@ -395,12 +404,14 @@ export default function Page() {
         console.log("Update response:", { data: updateData, error: updateErr });
 
         if (updateErr) throw updateErr;
-        toast({ title: "Success", description: "Blog post updated successfully" });
+        toast({
+          title: "Success",
+          description: "Blog post updated successfully",
+        });
       }
 
-      // Delay a bit to ensure the toast is visible
+      // Add a small delay to ensure toast is visible
       await new Promise((resolve) => setTimeout(resolve, 1000));
-
       router.push("/dashboard/blog");
     } catch (err) {
       console.error("Save error:", err);
@@ -415,9 +426,6 @@ export default function Page() {
     }
   };
 
-  /* ---------------------------------------------------------------------
-     6) Render
-  --------------------------------------------------------------------- */
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Top bar with auto-save info & preview toggle */}
@@ -431,6 +439,7 @@ export default function Page() {
           )}
         </div>
         <div className="flex items-center space-x-2">
+          {/* Toggle preview */}
           <Button
             variant="ghost"
             size="sm"
@@ -473,7 +482,7 @@ export default function Page() {
               disabled={isPreview}
             />
 
-            {/* Simple toolbar if not previewing */}
+            {/* Simple toolbar if not preview */}
             {!isPreview && (
               <div className="flex items-center gap-2 py-2 mb-4 border-b">
                 <Button
@@ -540,7 +549,7 @@ export default function Page() {
               </div>
             )}
 
-            {/* Editor region */}
+            {/* Main editor region */}
             {!isEditorReady ? (
               <div className="flex items-center justify-center min-h-[300px]">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -569,9 +578,7 @@ export default function Page() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() =>
-                        editor.chain().focus().toggleBold().run()
-                      }
+                      onClick={() => editor.chain().focus().toggleBold().run()}
                       className={cn(
                         "hover:bg-accent/50",
                         editor.isActive("bold") ? "bg-accent" : ""
@@ -683,16 +690,41 @@ export default function Page() {
           </div>
         </div>
 
-        {/* Right: Sidebar (Status & Meta Desc) */}
+        {/* Right: Sidebar (Status & Meta Desc + Featured Image) */}
         {showSidebar && (
           <div className="w-80 border-l bg-card overflow-y-auto">
             <div className="p-4 space-y-6">
+
+              {/* Featured Image Display */}
+              <div>
+                <label className="text-sm font-medium mb-2 inline-block">
+                  Featured Image
+                </label>
+                {featuredImageUrl ? (
+                  <div className="relative w-full h-48 mb-2 rounded-md overflow-hidden bg-muted">
+                    <Image
+                      src={featuredImageUrl}
+                      alt={featuredImageAlt || "Featured image"}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No featured image
+                  </p>
+                )}
+              </div>
+
               {/* Status */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Status</label>
                 <Select
                   value={status}
-                  onValueChange={(v) => form.setValue("status", v as BlogStatus)}
+                  onValueChange={(v) =>
+                    form.setValue("status", v as BlogStatus)
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select status" />
