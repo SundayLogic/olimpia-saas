@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2025-01-09 20:09:15
+Generated on: 2025-01-14 12:30:20
 
 ## Documented Directories:
 - app/
@@ -662,7 +662,6 @@ import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
 import { useEditor } from "@tiptap/react";
 import { EditorView } from "@tiptap/pm/view";
-
 import StarterKit from "@tiptap/starter-kit";
 import ImageExt from "@tiptap/extension-image";
 import LinkExt from "@tiptap/extension-link";
@@ -695,7 +694,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-// Dynamically import Tiptap UI
+// Dynamically import Tiptap UI components
 const EditorContent = dynamic(
   () => import("@tiptap/react").then((mod) => mod.EditorContent),
   { ssr: false }
@@ -709,34 +708,35 @@ const BubbleMenu = dynamic(
    1) Types & Helpers
 ---------------------------------------------------------------------- */
 
-/** Base interface for 'type' property. */
-interface BaseBlogContent {
-  type: string; // "doc" or "html"
+/** Potential Tiptap doc shape (no `any`). */
+interface TiptapDoc extends JSONContent {
+  type?: "doc"; // optional, we may add it if missing
 }
 
-/** TiptapDoc extends BaseBlogContent and JSONContent, with type "doc". */
-interface TiptapDoc extends BaseBlogContent, JSONContent {
-  type: "doc";
-}
-
-/** RawHTML extends BaseBlogContent, type is "html" plus an html string. */
-interface RawHTML extends BaseBlogContent {
-  type: "html";
+/** Potential Raw HTML shape. */
+interface RawHTML {
   html: string;
+  type?: "html"; // optional, we may add it if missing
 }
 
-/** Union for blog content (Tiptap or HTML). */
-type BlogContent = TiptapDoc | RawHTML | null;
 
-// Type guards
-function isTiptapDoc(content: BlogContent): content is TiptapDoc {
-  return !!content && content.type === "doc";
-}
-function isRawHtml(content: BlogContent): content is RawHTML {
-  return !!content && content.type === "html";
+/** Type guard to see if object is Tiptap doc. */
+function isTiptapDoc(content: unknown): content is TiptapDoc {
+  if (typeof content !== "object" || content === null) return false;
+  const doc = content as TiptapDoc;
+  return Array.isArray(doc.content); // simplest check
 }
 
-/** Example: convert raw HTML => Tiptap doc if you want to edit as Tiptap. */
+/** Type guard to see if object is HTML-based. */
+function isRawHtml(content: unknown): content is RawHTML {
+  if (typeof content !== "object" || content === null) return false;
+  return (
+    "html" in content &&
+    typeof (content as RawHTML).html === "string"
+  );
+}
+
+/** Convert raw HTML => naive Tiptap doc. */
 function convertHTMLToTiptap(html: string): TiptapDoc {
   const stripped = html.replace(/<[^>]+>/g, "");
   return {
@@ -750,7 +750,7 @@ function convertHTMLToTiptap(html: string): TiptapDoc {
   };
 }
 
-/** We only allow "draft" or "published" now. */
+/** We only allow "draft" or "published". */
 type BlogStatus = "draft" | "published";
 
 type AutoSaveState = {
@@ -759,20 +759,19 @@ type AutoSaveState = {
   error: string | null;
 };
 
-/** Our form schema with just draft or published, no tags, no scheduled. */
+/** Zod schema for the form. */
 const schema = z.object({
   title: z.string().min(1, { message: "Title is required" }),
   content: z.custom<JSONContent>((val) => !!val, {
     message: "Content is required",
   }),
   meta_description: z.string().optional(),
-  status: z.enum(["draft", "published"]), // Only draft or published
+  status: z.enum(["draft", "published"]),
 });
-
 type FormData = z.infer<typeof schema>;
 
 /* ---------------------------------------------------------------------
-   2) The Editor Page Component
+   2) The Editor Page
 ---------------------------------------------------------------------- */
 export default function Page() {
   const params = useParams();
@@ -780,6 +779,7 @@ export default function Page() {
   const { toast } = useToast();
   const supabase = createClientComponentClient();
 
+  // Local states
   const [isLoading, setIsLoading] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -790,7 +790,7 @@ export default function Page() {
     error: null,
   });
 
-  // Determine if new post
+  /** Are we making a new post (id === "new") or editing existing? */
   const isNew = params.id === "new";
 
   // React Hook Form
@@ -807,10 +807,10 @@ export default function Page() {
   const status = form.watch("status");
   const metaDescription = form.watch("meta_description") || "";
 
-  // Tiptap Editor setup
+  // Tiptap Editor
   const editor = useEditor({
     extensions: [StarterKit, ImageExt, LinkExt],
-    content: form.watch("content"), // Tiptap doc
+    content: form.watch("content"), // get from RHF
     editorProps: {
       attributes: {
         class: "prose prose-lg max-w-none focus:outline-none [&_*]:outline-none",
@@ -818,13 +818,14 @@ export default function Page() {
       },
       handleDOMEvents: {
         focus: (view: EditorView, ev: Event) => {
-          // optionally block focusing
+          // Prevent focusing Tiptap?
           ev.preventDefault();
           return false;
         },
       },
     },
     onUpdate: ({ editor: e }) => {
+      // On each keystroke => update `form.values.content`
       if (!isPreview) {
         const updatedContent = e.getJSON();
         form.setValue("content", updatedContent);
@@ -833,7 +834,7 @@ export default function Page() {
     },
   });
 
-  // If in preview => disable editing
+  // Toggle preview
   useEffect(() => {
     if (editor) editor.setEditable(!isPreview);
   }, [isPreview, editor]);
@@ -853,13 +854,13 @@ export default function Page() {
     };
   }, [editor]);
 
-  // Auto-save for existing post
+  // Auto-Save logic for existing post
   const autoSavePost = useCallback(
     async (data: FormData) => {
+      // only if post is existing (not new) and editor is ready
       if (!isNew && isEditorReady) {
         try {
           setAutoSave((p) => ({ ...p, saving: true }));
-
           const { error } = await supabase
             .from("blog_posts")
             .update({
@@ -892,6 +893,7 @@ export default function Page() {
   useEffect(() => {
     const fetchPost = async () => {
       if (isNew) return;
+
       try {
         setIsLoading(true);
 
@@ -902,26 +904,63 @@ export default function Page() {
           .single();
 
         if (error) throw error;
+        console.log("Fetched blog post from Supabase:", post);
+
+        // If we got a post, parse content
         if (post && editor && !editor.isDestroyed) {
-          // If Tiptap doc
-          if (isTiptapDoc(post.content)) {
+          let contentVal: unknown = post.content;
+
+          // If missing a `type` field, let's guess
+          if (typeof contentVal === "object" && contentVal !== null) {
+            if (!("type" in contentVal)) {
+              // If there's .html => treat as raw
+              if (
+                "html" in contentVal &&
+                typeof (contentVal as RawHTML).html === "string"
+              ) {
+                contentVal = {
+                  type: "html",
+                  html: (contentVal as RawHTML).html,
+                };
+              }
+              // If there's .content => treat as doc
+              else if (
+                "content" in contentVal &&
+                Array.isArray((contentVal as TiptapDoc).content)
+              ) {
+                (contentVal as TiptapDoc).type = "doc";
+              }
+            }
+          }
+
+          // Now we can do final checks
+          if (isTiptapDoc(contentVal)) {
             form.reset({
               title: post.title,
-              content: post.content,
-              meta_description: post.meta_description || "",
-              status: post.status === "published" ? "published" : "draft",
+              content: contentVal,
+              meta_description: post.meta_description ?? "",
+              status: post.published ? "published" : "draft",
             });
-            editor.commands.setContent(post.content);
-          } else if (isRawHtml(post.content)) {
-            // Convert raw HTML => Tiptap doc
-            const converted = convertHTMLToTiptap(post.content.html);
+            editor.commands.setContent(contentVal);
+          } else if (isRawHtml(contentVal)) {
+            // raw HTML => convert
+            const converted = convertHTMLToTiptap(contentVal.html);
             form.reset({
               title: post.title,
               content: converted,
-              meta_description: post.meta_description || "",
-              status: post.status === "published" ? "published" : "draft",
+              meta_description: post.meta_description ?? "",
+              status: post.published ? "published" : "draft",
             });
             editor.commands.setContent(converted);
+          } else {
+            // fallback empty doc
+            form.reset({
+              title: post.title,
+              content: { type: "doc", content: [] },
+              meta_description: post.meta_description ?? "",
+              status: post.published ? "published" : "draft",
+            });
+            editor.commands.setContent({ type: "doc", content: [] });
           }
         }
       } catch (err) {
@@ -941,7 +980,7 @@ export default function Page() {
     }
   }, [isNew, supabase, editor, isEditorReady, params.id, toast, form]);
 
-  // On final Save => create or update
+  // Final Save => create or update
   const onSubmit = async (values: FormData) => {
     try {
       setIsLoading(true);
@@ -971,7 +1010,6 @@ export default function Page() {
               created_at: new Date().toISOString(),
             },
           ]);
-
         if (createErr) throw createErr;
 
         toast({ title: "Success", description: "Blog post created successfully" });
@@ -987,7 +1025,6 @@ export default function Page() {
         toast({ title: "Success", description: "Blog post updated successfully" });
       }
 
-      // Return to listing
       router.push("/dashboard/blog");
     } catch (err) {
       toast({
@@ -1000,12 +1037,9 @@ export default function Page() {
     }
   };
 
-  /* ---------------------------------------------------------------------
-     3) Render
-  ---------------------------------------------------------------------- */
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      {/* Top bar with auto-save info, preview toggle */}
+      {/* Top bar with auto-save info & preview toggle */}
       <div className="border-b p-4 flex items-center justify-between bg-card">
         <div className="flex items-center space-x-4">
           {autoSave.lastSaved && (
@@ -1050,7 +1084,7 @@ export default function Page() {
         {/* Left: Tiptap Editor */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-6 space-y-8">
-            {/* Title input */}
+            {/* Title */}
             <Input
               type="text"
               placeholder="Post title"
@@ -1072,7 +1106,6 @@ export default function Page() {
                     "hover:bg-accent/50",
                     editor?.isActive("heading", { level: 1 }) ? "bg-accent" : ""
                   )}
-                  aria-label="H1"
                 >
                   H1
                 </Button>
@@ -1086,7 +1119,6 @@ export default function Page() {
                     "hover:bg-accent/50",
                     editor?.isActive("heading", { level: 2 }) ? "bg-accent" : ""
                   )}
-                  aria-label="H2"
                 >
                   H2
                 </Button>
@@ -1098,7 +1130,6 @@ export default function Page() {
                     "hover:bg-accent/50",
                     editor?.isActive("paragraph") ? "bg-accent" : ""
                   )}
-                  aria-label="Paragraph"
                 >
                   P
                 </Button>
@@ -1110,7 +1141,6 @@ export default function Page() {
                     "hover:bg-accent/50",
                     editor?.isActive("bold") ? "bg-accent" : ""
                   )}
-                  aria-label="Bold"
                 >
                   B
                 </Button>
@@ -1124,7 +1154,6 @@ export default function Page() {
                     "hover:bg-accent/50",
                     editor?.isActive("bulletList") ? "bg-accent" : ""
                   )}
-                  aria-label="Bullet List"
                 >
                   • List
                 </Button>
@@ -1150,7 +1179,7 @@ export default function Page() {
                   />
                 )}
 
-                {/* Bubble Menu for formatting */}
+                {/* Bubble Menu for inline formatting */}
                 {editor && !isPreview && (
                   <BubbleMenu
                     editor={editor}
@@ -1160,14 +1189,11 @@ export default function Page() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() =>
-                        editor.chain().focus().toggleBold().run()
-                      }
+                      onClick={() => editor.chain().focus().toggleBold().run()}
                       className={cn(
                         "hover:bg-accent/50",
                         editor.isActive("bold") ? "bg-accent" : ""
                       )}
-                      aria-label="Bold"
                     >
                       <Bold className="h-4 w-4" />
                     </Button>
@@ -1181,21 +1207,17 @@ export default function Page() {
                         "hover:bg-accent/50",
                         editor.isActive("italic") ? "bg-accent" : ""
                       )}
-                      aria-label="Italic"
                     >
                       <Italic className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() =>
-                        editor.chain().focus().toggleCode().run()
-                      }
+                      onClick={() => editor.chain().focus().toggleCode().run()}
                       className={cn(
                         "hover:bg-accent/50",
                         editor.isActive("code") ? "bg-accent" : ""
                       )}
-                      aria-label="Code"
                     >
                       <Code className="h-4 w-4" />
                     </Button>
@@ -1211,7 +1233,6 @@ export default function Page() {
                           ? "bg-accent"
                           : ""
                       )}
-                      aria-label="Heading"
                     >
                       <HeadingIcon className="h-4 w-4" />
                     </Button>
@@ -1225,7 +1246,6 @@ export default function Page() {
                         "hover:bg-accent/50",
                         editor.isActive("blockquote") ? "bg-accent" : ""
                       )}
-                      aria-label="Blockquote"
                     >
                       <Quote className="h-4 w-4" />
                     </Button>
@@ -1239,7 +1259,6 @@ export default function Page() {
                         "hover:bg-accent/50",
                         editor.isActive("bulletList") ? "bg-accent" : ""
                       )}
-                      aria-label="Bullet List"
                     >
                       <List className="h-4 w-4" />
                     </Button>
@@ -1256,7 +1275,6 @@ export default function Page() {
                         "hover:bg-accent/50",
                         editor.isActive("link") ? "bg-accent" : ""
                       )}
-                      aria-label="Add Link"
                     >
                       <LinkIcon className="h-4 w-4" />
                     </Button>
@@ -1273,7 +1291,6 @@ export default function Page() {
                         "hover:bg-accent/50",
                         editor.isActive("image") ? "bg-accent" : ""
                       )}
-                      aria-label="Add Image"
                     >
                       <ImageIcon className="h-4 w-4" />
                     </Button>
@@ -1284,11 +1301,11 @@ export default function Page() {
           </div>
         </div>
 
-        {/* Right: Sidebar with status & meta desc (tags removed) */}
+        {/* Right: Sidebar (Status & Meta Desc) */}
         {showSidebar && (
           <div className="w-80 border-l bg-card overflow-y-auto">
             <div className="p-4 space-y-6">
-              {/* Status: only draft or published */}
+              {/* Status */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Status</label>
                 <Select
@@ -1305,7 +1322,7 @@ export default function Page() {
                 </Select>
               </div>
 
-              {/* Meta description */}
+              {/* Meta Description */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Meta Description</label>
                 <Textarea
@@ -1323,7 +1340,7 @@ export default function Page() {
         )}
       </div>
 
-      {/* Bottom bar: auto-save status, Save/Cancel */}
+      {/* Bottom bar: finalize actions */}
       <div className="border-t bg-card p-4 flex justify-between items-center">
         <div className="text-sm text-muted-foreground">
           {autoSave.saving && (
@@ -1409,14 +1426,13 @@ import Image from "next/image";
 // Icons
 import { Plus, Search, Eye, Trash2, Calendar } from "lucide-react";
 
-// UI Components
+// UI
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/core/layout";
 
-// Dynamically imported UI components
 const AlertDialog = dynamic(() =>
   import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialog)
 );
@@ -1430,9 +1446,7 @@ const AlertDialogTitle = dynamic(() =>
   import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogTitle)
 );
 const AlertDialogDescription = dynamic(() =>
-  import("@/components/ui/alert-dialog").then(
-    (mod) => mod.AlertDialogDescription
-  )
+  import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogDescription)
 );
 const AlertDialogFooter = dynamic(() =>
   import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogFooter)
@@ -1461,52 +1475,71 @@ const SelectValue = dynamic(() =>
 );
 
 /* ---------------------------------------------------------------------
-   1) Type Definitions & Helpers
+   1) Types & Helpers
 ---------------------------------------------------------------------- */
 
 import type { JSONContent } from "@tiptap/react";
 
-/** Base interface for our content's "type" discriminator. */
-interface BaseBlogContent {
-  type: string; // "doc" or "html"
+/** Tiptap doc shape. */
+interface TiptapDoc extends JSONContent {
+  type?: "doc";
 }
 
-interface TiptapDoc extends BaseBlogContent, JSONContent {
-  type: "doc";
-}
-
-interface RawHTML extends BaseBlogContent {
-  type: "html";
+/** If content is HTML-based. */
+interface RawHTML {
   html: string;
+  type?: "html";
 }
 
 type BlogContent = TiptapDoc | RawHTML | null;
 
-// Type guards
-function isTiptapDoc(content: BlogContent): content is TiptapDoc {
-  return !!content && content.type === "doc";
+/** Distinguish Tiptap doc from HTML object. */
+function hasHtml(obj: unknown): obj is RawHTML {
+  return (
+    typeof obj === "object" &&
+    obj !== null &&
+    "html" in obj &&
+    typeof (obj as { html: unknown }).html === "string"
+  );
 }
-function isRawHtml(content: BlogContent): content is RawHTML {
-  return !!content && content.type === "html";
+function hasTiptapContent(obj: unknown): obj is TiptapDoc {
+  return (
+    typeof obj === "object" &&
+    obj !== null &&
+    "content" in obj &&
+    Array.isArray((obj as TiptapDoc).content)
+  );
 }
 
-/** Recursively extract text from Tiptap. */
-function extractTiptapText(node: JSONContent): string {
-  let text = "";
-  if (typeof node.text === "string") {
-    text += node.text;
+/** Extract minimal preview text. */
+function extractText(c: BlogContent): string {
+  if (!c) return "";
+  // If it's raw HTML
+  if (hasHtml(c)) {
+    const stripped = c.html.replace(/<[^>]+>/g, "");
+    return stripped.slice(0, 100);
   }
-  if (Array.isArray(node.content)) {
-    for (const child of node.content) {
-      text += " " + extractTiptapText(child);
-    }
+  // If it's a Tiptap doc
+  if (hasTiptapContent(c)) {
+    let text = "";
+    c.content?.forEach((node) => {
+      // node is JSONContent
+      if (node.type === "paragraph" && Array.isArray(node.content)) {
+        node.content.forEach((child) => {
+          if (child.type === "text" && typeof child.text === "string") {
+            text += child.text + " ";
+          }
+        });
+      }
+    });
+    return text.slice(0, 100);
   }
-  return text.trim();
+  return "";
 }
 
 type FilterOptions = {
   status: "all" | "published" | "draft";
-  author: string; 
+  author: string;
   sortBy: "newest" | "oldest" | "title";
 };
 
@@ -1530,10 +1563,6 @@ interface BlogPost {
   author_info?: AuthorInfo[];
 }
 
-/* ---------------------------------------------------------------------
-   2) The Blog Page Component (Listing)
----------------------------------------------------------------------- */
-
 export default function BlogPage() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1550,18 +1579,7 @@ export default function BlogPage() {
   const { toast } = useToast();
   const router = useRouter();
 
-  const getContentPreview = (c: BlogContent) => {
-    if (!c) return "";
-    if (isTiptapDoc(c)) {
-      return extractTiptapText(c).slice(0, 100);
-    } else if (isRawHtml(c)) {
-      const stripped = c.html.replace(/<[^>]+>/g, "");
-      return stripped.slice(0, 100);
-    }
-    return "";
-  };
-
-  // Fetch posts on mount
+  // Fetch posts
   useEffect(() => {
     (async () => {
       try {
@@ -1586,10 +1604,9 @@ export default function BlogPage() {
           return;
         }
 
-        const postsData = data as BlogPost[];
-
-        // (Optional) fetch authors
-        const authorIds = postsData.map((p) => p.author_id).filter(Boolean);
+        const rawPosts = data as BlogPost[];
+        // Optionally fetch authors
+        const authorIds = rawPosts.map((p) => p.author_id).filter(Boolean);
         let authorsData: AuthorInfo[] | undefined;
         if (authorIds.length > 0) {
           const { data: aData, error: authorsError } = await supabase
@@ -1597,7 +1614,9 @@ export default function BlogPage() {
             .select("id, name, email")
             .in("id", authorIds);
 
-          if (authorsError) console.error("Authors fetch error:", authorsError);
+          if (authorsError) {
+            console.error("Authors fetch error:", authorsError);
+          }
           if (aData) {
             authorsData = aData.map((u) => ({
               id: u.id,
@@ -1608,7 +1627,7 @@ export default function BlogPage() {
         }
 
         setPosts(
-          postsData.map((p) => ({
+          rawPosts.map((p) => ({
             ...p,
             author_info: authorsData?.filter((a) => a.id === p.author_id) || [],
           }))
@@ -1626,7 +1645,7 @@ export default function BlogPage() {
     })();
   }, [supabase, toast]);
 
-  // Deletion
+  // Delete logic
   const handleDeletePost = async () => {
     if (!deletePost) return;
     const { error } = await supabase
@@ -1643,7 +1662,7 @@ export default function BlogPage() {
       return;
     }
     toast({ title: "Success", description: "Post deleted successfully" });
-    setPosts((current) => current.filter((x) => x.id !== deletePost.id));
+    setPosts((cur) => cur.filter((x) => x.id !== deletePost.id));
     setDeletePost(null);
   };
 
@@ -1738,7 +1757,7 @@ export default function BlogPage() {
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="published">Published</SelectItem>
-            <SelectItem value="draft">Drafts</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
           </SelectContent>
         </Select>
 
@@ -1865,12 +1884,11 @@ export default function BlogPage() {
 
                 {post.content && (
                   <p className="text-sm text-muted-foreground line-clamp-2">
-                    {getContentPreview(post.content)}
+                    {extractText(post.content)}
                   </p>
                 )}
 
                 <div className="flex items-center gap-2 mt-4">
-                  {/* "View" button goes to /blog/slug */}
                   {post.published && (
                     <Button
                       variant="outline"
@@ -1924,6 +1942,7 @@ export default function BlogPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Quick Stats */}
       <div className="mt-8 p-4 border rounded-lg bg-card">
         <h3 className="font-medium mb-4">Quick Stats</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

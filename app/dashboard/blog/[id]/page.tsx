@@ -44,7 +44,9 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-// Dynamically import Tiptap UI components
+/* ---------------------------------------------------------------------
+   Dynamically import Tiptap UI components
+---------------------------------------------------------------------- */
 const EditorContent = dynamic(
   () => import("@tiptap/react").then((mod) => mod.EditorContent),
   { ssr: false }
@@ -60,30 +62,25 @@ const BubbleMenu = dynamic(
 
 /** Potential Tiptap doc shape (no `any`). */
 interface TiptapDoc extends JSONContent {
-  type?: "doc"; // optional, we may add it if missing
+  type?: "doc";
 }
 
 /** Potential Raw HTML shape. */
 interface RawHTML {
   html: string;
-  type?: "html"; // optional, we may add it if missing
+  type?: "html";
 }
 
-
-/** Type guard to see if object is Tiptap doc. */
+/** Type guard to see if object is a Tiptap doc. */
 function isTiptapDoc(content: unknown): content is TiptapDoc {
   if (typeof content !== "object" || content === null) return false;
-  const doc = content as TiptapDoc;
-  return Array.isArray(doc.content); // simplest check
+  return Array.isArray((content as TiptapDoc).content);
 }
 
 /** Type guard to see if object is HTML-based. */
 function isRawHtml(content: unknown): content is RawHTML {
   if (typeof content !== "object" || content === null) return false;
-  return (
-    "html" in content &&
-    typeof (content as RawHTML).html === "string"
-  );
+  return "html" in content && typeof (content as RawHTML).html === "string";
 }
 
 /** Convert raw HTML => naive Tiptap doc. */
@@ -123,6 +120,7 @@ type FormData = z.infer<typeof schema>;
 /* ---------------------------------------------------------------------
    2) The Editor Page
 ---------------------------------------------------------------------- */
+
 export default function Page() {
   const params = useParams();
   const router = useRouter();
@@ -141,7 +139,7 @@ export default function Page() {
   });
 
   /** Are we making a new post (id === "new") or editing existing? */
-  const isNew = params.id === "new";
+  const isNew: boolean = params.id === "new";
 
   // React Hook Form
   const form = useForm<FormData>({
@@ -168,17 +166,18 @@ export default function Page() {
       },
       handleDOMEvents: {
         focus: (view: EditorView, ev: Event) => {
-          // Prevent focusing Tiptap?
+          // Prevent focusing Tiptap if desired
           ev.preventDefault();
           return false;
         },
       },
     },
     onUpdate: ({ editor: e }) => {
-      // On each keystroke => update `form.values.content`
+      // On each keystroke => update `form.values.content` & auto-save
       if (!isPreview) {
         const updatedContent = e.getJSON();
         form.setValue("content", updatedContent);
+        // Trigger auto-save with updated data
         void autoSavePost({ ...form.getValues(), content: updatedContent });
       }
     },
@@ -204,13 +203,16 @@ export default function Page() {
     };
   }, [editor]);
 
-  // Auto-Save logic for existing post
+  // ----------------------------------------------------------------
+  // Auto-Save logic for existing post (only updates content)
+  // ----------------------------------------------------------------
   const autoSavePost = useCallback(
     async (data: FormData) => {
-      // only if post is existing (not new) and editor is ready
       if (!isNew && isEditorReady) {
         try {
           setAutoSave((p) => ({ ...p, saving: true }));
+
+          // Only update content in auto-save
           const { error } = await supabase
             .from("blog_posts")
             .update({
@@ -219,7 +221,13 @@ export default function Page() {
             })
             .eq("id", params.id);
 
-          if (error) throw error;
+          if (error) {
+            console.error("Auto-save update error details:", {
+              error,
+              postId: params.id,
+            });
+            throw error;
+          }
 
           setAutoSave({
             lastSaved: new Date(),
@@ -227,7 +235,7 @@ export default function Page() {
             error: null,
           });
         } catch (err) {
-          console.error(err);
+          console.error("Auto-save error:", err);
           setAutoSave((p) => ({
             ...p,
             saving: false,
@@ -236,14 +244,21 @@ export default function Page() {
         }
       }
     },
-    [isNew, isEditorReady, supabase, params.id]
+    [
+      isNew,
+      isEditorReady,
+      supabase,
+      params.id,
+      // We omit `form` from dependencies (not referenced directly here).
+    ]
   );
 
+  // ----------------------------------------------------------------
   // Fetch existing post if not new
+  // ----------------------------------------------------------------
   useEffect(() => {
     const fetchPost = async () => {
       if (isNew) return;
-
       try {
         setIsLoading(true);
 
@@ -262,24 +277,20 @@ export default function Page() {
 
           // If missing a `type` field, let's guess
           if (typeof contentVal === "object" && contentVal !== null) {
-            if (!("type" in contentVal)) {
-              // If there's .html => treat as raw
-              if (
-                "html" in contentVal &&
-                typeof (contentVal as RawHTML).html === "string"
-              ) {
-                contentVal = {
-                  type: "html",
-                  html: (contentVal as RawHTML).html,
-                };
-              }
-              // If there's .content => treat as doc
-              else if (
-                "content" in contentVal &&
-                Array.isArray((contentVal as TiptapDoc).content)
-              ) {
-                (contentVal as TiptapDoc).type = "doc";
-              }
+            // If there's .html => treat as raw
+            if (!("type" in contentVal) && "html" in contentVal) {
+              contentVal = {
+                type: "html",
+                html: (contentVal as RawHTML).html,
+              };
+            }
+            // If there's .content => treat as doc
+            else if (
+              !("type" in contentVal) &&
+              "content" in contentVal &&
+              Array.isArray((contentVal as TiptapDoc).content)
+            ) {
+              (contentVal as TiptapDoc).type = "doc";
             }
           }
 
@@ -330,7 +341,9 @@ export default function Page() {
     }
   }, [isNew, supabase, editor, isEditorReady, params.id, toast, form]);
 
-  // Final Save => create or update
+  // ----------------------------------------------------------------
+  // Final Save => create or update (handles status => published)
+  // ----------------------------------------------------------------
   const onSubmit = async (values: FormData) => {
     try {
       setIsLoading(true);
@@ -339,47 +352,57 @@ export default function Page() {
       if (userErr) throw userErr;
       if (!userData?.user) throw new Error("No user found");
 
+      // Convert status to a published boolean
+      const published = values.status === "published";
+
+      // Build postData
       const postData = {
         title: values.title,
         slug: slugify(values.title, { lower: true, strict: true }),
         content: values.content,
-        meta_description: values.meta_description,
-        status: values.status,
-        published: values.status === "published",
-        author_id: userData.user.id,
+        meta_description: values.meta_description || null,
+        published,
         updated_at: new Date().toISOString(),
       };
 
       if (isNew) {
-        // Insert new
+        // For new posts, include author_id and created_at
         const { error: createErr } = await supabase
           .from("blog_posts")
           .insert([
             {
               ...postData,
+              author_id: userData.user.id,
               created_at: new Date().toISOString(),
             },
           ]);
-        if (createErr) throw createErr;
 
-        toast({ title: "Success", description: "Blog post created successfully" });
+        if (createErr) throw createErr;
+        toast({
+          title: "Success",
+          description: "Blog post created successfully",
+        });
       } else {
-        // Update existing
+        // For updates, don't overwrite author_id
         const { error: updateErr } = await supabase
           .from("blog_posts")
           .update(postData)
           .eq("id", params.id);
 
         if (updateErr) throw updateErr;
-
-        toast({ title: "Success", description: "Blog post updated successfully" });
+        toast({
+          title: "Success",
+          description: "Blog post updated successfully",
+        });
       }
 
       router.push("/dashboard/blog");
     } catch (err) {
+      console.error("Save error:", err);
       toast({
         title: "Error",
-        description: err instanceof Error ? err.message : "Failed to save blog post",
+        description:
+          err instanceof Error ? err.message : "Failed to save blog post",
         variant: "destructive",
       });
     } finally {
@@ -399,6 +422,7 @@ export default function Page() {
             </span>
           )}
         </div>
+
         <div className="flex items-center space-x-2">
           {/* Toggle preview */}
           <Button
