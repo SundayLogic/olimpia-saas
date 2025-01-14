@@ -44,9 +44,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-/* ---------------------------------------------------------------------
-   Dynamically import Tiptap UI components
----------------------------------------------------------------------- */
+// Dynamically import Tiptap UI components
 const EditorContent = dynamic(
   () => import("@tiptap/react").then((mod) => mod.EditorContent),
   { ssr: false }
@@ -60,30 +58,25 @@ const BubbleMenu = dynamic(
    1) Types & Helpers
 ---------------------------------------------------------------------- */
 
-/** Potential Tiptap doc shape (no `any`). */
 interface TiptapDoc extends JSONContent {
   type?: "doc";
 }
 
-/** Potential Raw HTML shape. */
 interface RawHTML {
   html: string;
   type?: "html";
 }
 
-/** Type guard to see if object is a Tiptap doc. */
 function isTiptapDoc(content: unknown): content is TiptapDoc {
   if (typeof content !== "object" || content === null) return false;
   return Array.isArray((content as TiptapDoc).content);
 }
 
-/** Type guard to see if object is HTML-based. */
 function isRawHtml(content: unknown): content is RawHTML {
   if (typeof content !== "object" || content === null) return false;
   return "html" in content && typeof (content as RawHTML).html === "string";
 }
 
-/** Convert raw HTML => naive Tiptap doc. */
 function convertHTMLToTiptap(html: string): TiptapDoc {
   const stripped = html.replace(/<[^>]+>/g, "");
   return {
@@ -97,7 +90,6 @@ function convertHTMLToTiptap(html: string): TiptapDoc {
   };
 }
 
-/** We only allow "draft" or "published". */
 type BlogStatus = "draft" | "published";
 
 type AutoSaveState = {
@@ -106,7 +98,6 @@ type AutoSaveState = {
   error: string | null;
 };
 
-/** Zod schema for the form. */
 const schema = z.object({
   title: z.string().min(1, { message: "Title is required" }),
   content: z.custom<JSONContent>((val) => !!val, {
@@ -127,7 +118,6 @@ export default function Page() {
   const { toast } = useToast();
   const supabase = createClientComponentClient();
 
-  // Local states
   const [isLoading, setIsLoading] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -139,7 +129,7 @@ export default function Page() {
   });
 
   /** Are we making a new post (id === "new") or editing existing? */
-  const isNew: boolean = params.id === "new";
+  const isNew = params.id === "new";
 
   // React Hook Form
   const form = useForm<FormData>({
@@ -158,7 +148,7 @@ export default function Page() {
   // Tiptap Editor
   const editor = useEditor({
     extensions: [StarterKit, ImageExt, LinkExt],
-    content: form.watch("content"), // get from RHF
+    content: form.watch("content"),
     editorProps: {
       attributes: {
         class: "prose prose-lg max-w-none focus:outline-none [&_*]:outline-none",
@@ -166,24 +156,23 @@ export default function Page() {
       },
       handleDOMEvents: {
         focus: (view: EditorView, ev: Event) => {
-          // Prevent focusing Tiptap if desired
+          // Optional: if you need to prevent focusing Tiptap
           ev.preventDefault();
           return false;
         },
       },
     },
     onUpdate: ({ editor: e }) => {
-      // On each keystroke => update `form.values.content` & auto-save
+      // On each keystroke => update content in form + auto-save
       if (!isPreview) {
         const updatedContent = e.getJSON();
         form.setValue("content", updatedContent);
-        // Trigger auto-save with updated data
         void autoSavePost({ ...form.getValues(), content: updatedContent });
       }
     },
   });
 
-  // Toggle preview
+  // Toggle preview mode
   useEffect(() => {
     if (editor) editor.setEditable(!isPreview);
   }, [isPreview, editor]);
@@ -203,23 +192,30 @@ export default function Page() {
     };
   }, [editor]);
 
-  // ----------------------------------------------------------------
-  // Auto-Save logic for existing post (only updates content)
-  // ----------------------------------------------------------------
+  /* ---------------------------------------------------------------------
+     3) Auto-Save for existing posts (only content)
+  --------------------------------------------------------------------- */
   const autoSavePost = useCallback(
     async (data: FormData) => {
       if (!isNew && isEditorReady) {
         try {
           setAutoSave((p) => ({ ...p, saving: true }));
 
-          // Only update content in auto-save
-          const { error } = await supabase
+          const updatePayload = {
+            content: data.content,
+            updated_at: new Date().toISOString(),
+          };
+
+          console.log("AutoSave - Attempting to save:", updatePayload);
+          console.log("AutoSave - Post ID:", params.id);
+
+          const { data: updateData, error } = await supabase
             .from("blog_posts")
-            .update({
-              content: data.content,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", params.id);
+            .update(updatePayload)
+            .eq("id", params.id)
+            .select();
+
+          console.log("AutoSave - Response:", { data: updateData, error });
 
           if (error) {
             console.error("Auto-save update error details:", {
@@ -244,21 +240,16 @@ export default function Page() {
         }
       }
     },
-    [
-      isNew,
-      isEditorReady,
-      supabase,
-      params.id,
-      // We omit `form` from dependencies (not referenced directly here).
-    ]
+    [isNew, isEditorReady, supabase, params.id]
   );
 
-  // ----------------------------------------------------------------
-  // Fetch existing post if not new
-  // ----------------------------------------------------------------
+  /* ---------------------------------------------------------------------
+     4) Fetch existing post if editing
+  --------------------------------------------------------------------- */
   useEffect(() => {
     const fetchPost = async () => {
       if (isNew) return;
+
       try {
         setIsLoading(true);
 
@@ -271,21 +262,17 @@ export default function Page() {
         if (error) throw error;
         console.log("Fetched blog post from Supabase:", post);
 
-        // If we got a post, parse content
         if (post && editor && !editor.isDestroyed) {
           let contentVal: unknown = post.content;
 
-          // If missing a `type` field, let's guess
+          // If missing a `type`, attempt to detect
           if (typeof contentVal === "object" && contentVal !== null) {
-            // If there's .html => treat as raw
             if (!("type" in contentVal) && "html" in contentVal) {
               contentVal = {
                 type: "html",
                 html: (contentVal as RawHTML).html,
               };
-            }
-            // If there's .content => treat as doc
-            else if (
+            } else if (
               !("type" in contentVal) &&
               "content" in contentVal &&
               Array.isArray((contentVal as TiptapDoc).content)
@@ -294,7 +281,7 @@ export default function Page() {
             }
           }
 
-          // Now we can do final checks
+          // Determine final content format
           if (isTiptapDoc(contentVal)) {
             form.reset({
               title: post.title,
@@ -304,7 +291,6 @@ export default function Page() {
             });
             editor.commands.setContent(contentVal);
           } else if (isRawHtml(contentVal)) {
-            // raw HTML => convert
             const converted = convertHTMLToTiptap(contentVal.html);
             form.reset({
               title: post.title,
@@ -314,7 +300,7 @@ export default function Page() {
             });
             editor.commands.setContent(converted);
           } else {
-            // fallback empty doc
+            // fallback to empty doc
             form.reset({
               title: post.title,
               content: { type: "doc", content: [] },
@@ -341,9 +327,9 @@ export default function Page() {
     }
   }, [isNew, supabase, editor, isEditorReady, params.id, toast, form]);
 
-  // ----------------------------------------------------------------
-  // Final Save => create or update (handles status => published)
-  // ----------------------------------------------------------------
+  /* ---------------------------------------------------------------------
+     5) Final save => create or update
+  --------------------------------------------------------------------- */
   const onSubmit = async (values: FormData) => {
     try {
       setIsLoading(true);
@@ -352,8 +338,18 @@ export default function Page() {
       if (userErr) throw userErr;
       if (!userData?.user) throw new Error("No user found");
 
-      // Convert status to a published boolean
-      const published = values.status === "published";
+      // Get the current post if it exists
+      let currentPost = null;
+      if (!isNew) {
+        const { data: postData, error: postErr } = await supabase
+          .from("blog_posts")
+          .select("*")
+          .eq("id", params.id)
+          .single();
+
+        if (postErr) throw postErr;
+        currentPost = postData;
+      }
 
       // Build postData
       const postData = {
@@ -361,40 +357,49 @@ export default function Page() {
         slug: slugify(values.title, { lower: true, strict: true }),
         content: values.content,
         meta_description: values.meta_description || null,
-        published,
+        published: values.status === "published",
         updated_at: new Date().toISOString(),
+        // Include author_id in all cases
+        author_id: isNew
+          ? userData.user.id
+          : currentPost?.author_id || userData.user.id,
       };
 
+      console.log("Saving post with data:", postData);
+
       if (isNew) {
-        // For new posts, include author_id and created_at
-        const { error: createErr } = await supabase
+        // Insert new post
+        const { data: insertData, error: createErr } = await supabase
           .from("blog_posts")
           .insert([
             {
               ...postData,
-              author_id: userData.user.id,
               created_at: new Date().toISOString(),
             },
-          ]);
+          ])
+          .select()
+          .single();
+
+        console.log("Insert response:", { data: insertData, error: createErr });
 
         if (createErr) throw createErr;
-        toast({
-          title: "Success",
-          description: "Blog post created successfully",
-        });
+        toast({ title: "Success", description: "Blog post created successfully" });
       } else {
-        // For updates, don't overwrite author_id
-        const { error: updateErr } = await supabase
+        // Update existing post
+        const { data: updateData, error: updateErr } = await supabase
           .from("blog_posts")
           .update(postData)
-          .eq("id", params.id);
+          .eq("id", params.id)
+          .select();
+
+        console.log("Update response:", { data: updateData, error: updateErr });
 
         if (updateErr) throw updateErr;
-        toast({
-          title: "Success",
-          description: "Blog post updated successfully",
-        });
+        toast({ title: "Success", description: "Blog post updated successfully" });
       }
+
+      // Delay a bit to ensure the toast is visible
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       router.push("/dashboard/blog");
     } catch (err) {
@@ -410,6 +415,9 @@ export default function Page() {
     }
   };
 
+  /* ---------------------------------------------------------------------
+     6) Render
+  --------------------------------------------------------------------- */
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Top bar with auto-save info & preview toggle */}
@@ -422,9 +430,7 @@ export default function Page() {
             </span>
           )}
         </div>
-
         <div className="flex items-center space-x-2">
-          {/* Toggle preview */}
           <Button
             variant="ghost"
             size="sm"
@@ -467,7 +473,7 @@ export default function Page() {
               disabled={isPreview}
             />
 
-            {/* Simple toolbar if not preview */}
+            {/* Simple toolbar if not previewing */}
             {!isPreview && (
               <div className="flex items-center gap-2 py-2 mb-4 border-b">
                 <Button
@@ -534,7 +540,7 @@ export default function Page() {
               </div>
             )}
 
-            {/* Main editor region */}
+            {/* Editor region */}
             {!isEditorReady ? (
               <div className="flex items-center justify-center min-h-[300px]">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -563,7 +569,9 @@ export default function Page() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => editor.chain().focus().toggleBold().run()}
+                      onClick={() =>
+                        editor.chain().focus().toggleBold().run()
+                      }
                       className={cn(
                         "hover:bg-accent/50",
                         editor.isActive("bold") ? "bg-accent" : ""
