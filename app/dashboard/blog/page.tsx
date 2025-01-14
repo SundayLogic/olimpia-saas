@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import Image from "next/image";
 
 // Icons
-import { Plus, Search, Eye, Trash2, Calendar } from "lucide-react";
+import { Plus, Search, Trash2, Calendar } from "lucide-react";
 
 // UI
 import { Button } from "@/components/ui/button";
@@ -95,7 +95,7 @@ function hasTiptapContent(obj: unknown): obj is TiptapDoc {
   );
 }
 
-/** Extract minimal preview text. */
+/** Extract minimal preview text (first 100 chars). */
 function extractText(c: BlogContent): string {
   if (!c) return "";
   // If it's raw HTML
@@ -107,7 +107,6 @@ function extractText(c: BlogContent): string {
   if (hasTiptapContent(c)) {
     let text = "";
     c.content?.forEach((node) => {
-      // node is JSONContent
       if (node.type === "paragraph" && Array.isArray(node.content)) {
         node.content.forEach((child) => {
           if (child.type === "text" && typeof child.text === "string") {
@@ -347,9 +346,7 @@ export default function BlogPage() {
 
         <Select
           value={filters.author}
-          onValueChange={(val) =>
-            setFilters((prev) => ({ ...prev, author: val }))
-          }
+          onValueChange={(val) => setFilters((prev) => ({ ...prev, author: val }))}
         >
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by Author" />
@@ -472,17 +469,9 @@ export default function BlogPage() {
                   </p>
                 )}
 
+                {/* Action buttons (View is REMOVED) */}
                 <div className="flex items-center gap-2 mt-4">
-                  {post.published && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => router.push(`/blog/${post.slug}`)}
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      View
-                    </Button>
-                  )}
+                  {/* Removed the "View" button */}
                   <Button
                     variant="outline"
                     size="sm"
@@ -505,6 +494,7 @@ export default function BlogPage() {
         </div>
       )}
 
+      {/* Delete confirmation dialog */}
       <AlertDialog open={!!deletePost} onOpenChange={() => setDeletePost(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
