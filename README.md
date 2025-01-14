@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2025-01-14 12:30:20
+Generated on: 2025-01-14 19:12:15
 
 ## Documented Directories:
 - app/
@@ -682,6 +682,7 @@ import {
   Heading as HeadingIcon,
 } from "lucide-react";
 
+import Image from "next/image"; // For showing featured image
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -694,7 +695,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-// Dynamically import Tiptap UI components
+/** Dynamically import Tiptap UI components */
 const EditorContent = dynamic(
   () => import("@tiptap/react").then((mod) => mod.EditorContent),
   { ssr: false }
@@ -710,30 +711,26 @@ const BubbleMenu = dynamic(
 
 /** Potential Tiptap doc shape (no `any`). */
 interface TiptapDoc extends JSONContent {
-  type?: "doc"; // optional, we may add it if missing
+  type?: "doc";
 }
 
 /** Potential Raw HTML shape. */
 interface RawHTML {
   html: string;
-  type?: "html"; // optional, we may add it if missing
+  type?: "html";
 }
-
 
 /** Type guard to see if object is Tiptap doc. */
 function isTiptapDoc(content: unknown): content is TiptapDoc {
   if (typeof content !== "object" || content === null) return false;
   const doc = content as TiptapDoc;
-  return Array.isArray(doc.content); // simplest check
+  return Array.isArray(doc.content);
 }
 
 /** Type guard to see if object is HTML-based. */
 function isRawHtml(content: unknown): content is RawHTML {
   if (typeof content !== "object" || content === null) return false;
-  return (
-    "html" in content &&
-    typeof (content as RawHTML).html === "string"
-  );
+  return "html" in (content as Record<string, unknown>);
 }
 
 /** Convert raw HTML => naive Tiptap doc. */
@@ -773,6 +770,7 @@ type FormData = z.infer<typeof schema>;
 /* ---------------------------------------------------------------------
    2) The Editor Page
 ---------------------------------------------------------------------- */
+
 export default function Page() {
   const params = useParams();
   const router = useRouter();
@@ -793,6 +791,10 @@ export default function Page() {
   /** Are we making a new post (id === "new") or editing existing? */
   const isNew = params.id === "new";
 
+  // For displaying the featured image
+  const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null);
+  const [featuredImageAlt, setFeaturedImageAlt] = useState<string | null>(null);
+
   // React Hook Form
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -810,7 +812,7 @@ export default function Page() {
   // Tiptap Editor
   const editor = useEditor({
     extensions: [StarterKit, ImageExt, LinkExt],
-    content: form.watch("content"), // get from RHF
+    content: form.watch("content"),
     editorProps: {
       attributes: {
         class: "prose prose-lg max-w-none focus:outline-none [&_*]:outline-none",
@@ -825,10 +827,10 @@ export default function Page() {
       },
     },
     onUpdate: ({ editor: e }) => {
-      // On each keystroke => update `form.values.content`
       if (!isPreview) {
         const updatedContent = e.getJSON();
         form.setValue("content", updatedContent);
+        // Auto-save the content
         void autoSavePost({ ...form.getValues(), content: updatedContent });
       }
     },
@@ -857,19 +859,34 @@ export default function Page() {
   // Auto-Save logic for existing post
   const autoSavePost = useCallback(
     async (data: FormData) => {
-      // only if post is existing (not new) and editor is ready
       if (!isNew && isEditorReady) {
         try {
           setAutoSave((p) => ({ ...p, saving: true }));
-          const { error } = await supabase
-            .from("blog_posts")
-            .update({
-              content: data.content,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", params.id);
 
-          if (error) throw error;
+          // Only update content in auto-save
+          const updatePayload = {
+            content: data.content,
+            updated_at: new Date().toISOString(),
+          };
+
+          console.log("AutoSave - Attempting to save:", updatePayload);
+          console.log("AutoSave - Post ID:", params.id);
+
+          const { data: updateData, error } = await supabase
+            .from("blog_posts")
+            .update(updatePayload)
+            .eq("id", params.id)
+            .select();
+
+          console.log("AutoSave - Response:", { data: updateData, error });
+
+          if (error) {
+            console.error("Auto-save update error details:", {
+              error,
+              postId: params.id,
+            });
+            throw error;
+          }
 
           setAutoSave({
             lastSaved: new Date(),
@@ -877,7 +894,7 @@ export default function Page() {
             error: null,
           });
         } catch (err) {
-          console.error(err);
+          console.error("Auto-save error:", err);
           setAutoSave((p) => ({
             ...p,
             saving: false,
@@ -897,73 +914,61 @@ export default function Page() {
       try {
         setIsLoading(true);
 
+        // IMPORTANT: Make sure to select the columns you need, including featured_image_url & alt
         const { data: post, error } = await supabase
           .from("blog_posts")
-          .select("*")
+          .select(
+            "id, title, content, meta_description, published, created_at, updated_at, author_id, featured_image_url, featured_image_alt"
+          )
           .eq("id", params.id)
           .single();
 
         if (error) throw error;
         console.log("Fetched blog post from Supabase:", post);
 
-        // If we got a post, parse content
-        if (post && editor && !editor.isDestroyed) {
-          let contentVal: unknown = post.content;
+        if (post) {
+          // Save featured image
+          setFeaturedImageUrl(post.featured_image_url);
+          setFeaturedImageAlt(post.featured_image_alt);
 
-          // If missing a `type` field, let's guess
+          // If we got a post, parse content
+          let contentVal: unknown = post.content;
           if (typeof contentVal === "object" && contentVal !== null) {
             if (!("type" in contentVal)) {
               // If there's .html => treat as raw
-              if (
-                "html" in contentVal &&
-                typeof (contentVal as RawHTML).html === "string"
-              ) {
+              if (isRawHtml(contentVal)) {
                 contentVal = {
                   type: "html",
-                  html: (contentVal as RawHTML).html,
+                  html: contentVal.html,
                 };
               }
               // If there's .content => treat as doc
-              else if (
-                "content" in contentVal &&
-                Array.isArray((contentVal as TiptapDoc).content)
-              ) {
+              else if (isTiptapDoc(contentVal)) {
                 (contentVal as TiptapDoc).type = "doc";
               }
             }
           }
 
-          // Now we can do final checks
+          // Now final check
+          let finalContent: JSONContent;
           if (isTiptapDoc(contentVal)) {
-            form.reset({
-              title: post.title,
-              content: contentVal,
-              meta_description: post.meta_description ?? "",
-              status: post.published ? "published" : "draft",
-            });
-            editor.commands.setContent(contentVal);
+            finalContent = contentVal;
           } else if (isRawHtml(contentVal)) {
-            // raw HTML => convert
-            const converted = convertHTMLToTiptap(contentVal.html);
-            form.reset({
-              title: post.title,
-              content: converted,
-              meta_description: post.meta_description ?? "",
-              status: post.published ? "published" : "draft",
-            });
-            editor.commands.setContent(converted);
+            finalContent = convertHTMLToTiptap(contentVal.html);
           } else {
-            // fallback empty doc
-            form.reset({
-              title: post.title,
-              content: { type: "doc", content: [] },
-              meta_description: post.meta_description ?? "",
-              status: post.published ? "published" : "draft",
-            });
-            editor.commands.setContent({ type: "doc", content: [] });
+            finalContent = { type: "doc", content: [] };
           }
+
+          form.reset({
+            title: post.title,
+            content: finalContent,
+            meta_description: post.meta_description ?? "",
+            status: post.published ? "published" : "draft",
+          });
+          editor?.commands.setContent(finalContent);
         }
       } catch (err) {
+        console.error(err);
         toast({
           title: "Error",
           description:
@@ -989,47 +994,81 @@ export default function Page() {
       if (userErr) throw userErr;
       if (!userData?.user) throw new Error("No user found");
 
+      // Get the current post if it exists
+      let currentPost = null;
+      if (!isNew) {
+        const { data: postData, error: postErr } = await supabase
+          .from("blog_posts")
+          .select("*")
+          .eq("id", params.id)
+          .single();
+
+        if (postErr) throw postErr;
+        currentPost = postData;
+      }
+
+      // Build postData
       const postData = {
         title: values.title,
         slug: slugify(values.title, { lower: true, strict: true }),
         content: values.content,
-        meta_description: values.meta_description,
-        status: values.status,
+        meta_description: values.meta_description || null,
         published: values.status === "published",
-        author_id: userData.user.id,
         updated_at: new Date().toISOString(),
+        // Ensure author_id is always set
+        author_id: isNew
+          ? userData.user.id
+          : currentPost?.author_id || userData.user.id,
       };
 
+      console.log("Saving post with data:", postData);
+
       if (isNew) {
-        // Insert new
-        const { error: createErr } = await supabase
+        // Insert new post
+        const { data: insertData, error: createErr } = await supabase
           .from("blog_posts")
           .insert([
             {
               ...postData,
               created_at: new Date().toISOString(),
             },
-          ]);
-        if (createErr) throw createErr;
+          ])
+          .select()
+          .single();
 
-        toast({ title: "Success", description: "Blog post created successfully" });
+        console.log("Insert response:", { data: insertData, error: createErr });
+
+        if (createErr) throw createErr;
+        toast({
+          title: "Success",
+          description: "Blog post created successfully",
+        });
       } else {
-        // Update existing
-        const { error: updateErr } = await supabase
+        // Update existing post
+        const { data: updateData, error: updateErr } = await supabase
           .from("blog_posts")
           .update(postData)
-          .eq("id", params.id);
+          .eq("id", params.id)
+          .select();
+
+        console.log("Update response:", { data: updateData, error: updateErr });
 
         if (updateErr) throw updateErr;
-
-        toast({ title: "Success", description: "Blog post updated successfully" });
+        toast({
+          title: "Success",
+          description: "Blog post updated successfully",
+        });
       }
 
+      // Add a small delay to ensure toast is visible
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       router.push("/dashboard/blog");
     } catch (err) {
+      console.error("Save error:", err);
       toast({
         title: "Error",
-        description: err instanceof Error ? err.message : "Failed to save blog post",
+        description:
+          err instanceof Error ? err.message : "Failed to save blog post",
         variant: "destructive",
       });
     } finally {
@@ -1301,16 +1340,41 @@ export default function Page() {
           </div>
         </div>
 
-        {/* Right: Sidebar (Status & Meta Desc) */}
+        {/* Right: Sidebar (Status & Meta Desc + Featured Image) */}
         {showSidebar && (
           <div className="w-80 border-l bg-card overflow-y-auto">
             <div className="p-4 space-y-6">
+
+              {/* Featured Image Display */}
+              <div>
+                <label className="text-sm font-medium mb-2 inline-block">
+                  Featured Image
+                </label>
+                {featuredImageUrl ? (
+                  <div className="relative w-full h-48 mb-2 rounded-md overflow-hidden bg-muted">
+                    <Image
+                      src={featuredImageUrl}
+                      alt={featuredImageAlt || "Featured image"}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No featured image
+                  </p>
+                )}
+              </div>
+
               {/* Status */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Status</label>
                 <Select
                   value={status}
-                  onValueChange={(v) => form.setValue("status", v as BlogStatus)}
+                  onValueChange={(v) =>
+                    form.setValue("status", v as BlogStatus)
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select status" />
@@ -1978,84 +2042,113 @@ export default function BlogPage() {
 
 ```typescript
 "use client";
+
 import React, { useState } from "react";
 import dynamic from "next/dynamic";
 import { useDropzone } from "react-dropzone";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Upload, Trash2, FolderIcon, AlertCircle, Edit2 } from "lucide-react";
-import Image from "next/image";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Database } from "@/types";
+import Image from "next/image";
+
+// Icons
+import { Upload, Trash2, FolderIcon, AlertCircle, Edit2 } from "lucide-react";
+
+// UI
 import { PageHeader } from "@/components/core/layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
-// Dynamic imports for dialog and select components
-const Dialog = dynamic(() => import("@/components/ui/dialog").then(mod => mod.Dialog));
-const DialogContent = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogContent));
-const DialogDescription = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogDescription));
-const DialogFooter = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogFooter));
-const DialogHeader = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogHeader));
-const DialogTitle = dynamic(() => import("@/components/ui/dialog").then(mod => mod.DialogTitle));
+// Dynamically imported components (for dialog and select)
+const Dialog = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.Dialog));
+const DialogContent = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogContent)
+);
+const DialogDescription = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogDescription)
+);
+const DialogFooter = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogFooter)
+);
+const DialogHeader = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogHeader)
+);
+const DialogTitle = dynamic(() =>
+  import("@/components/ui/dialog").then((mod) => mod.DialogTitle)
+);
 
-const AlertDialog = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialog));
-const AlertDialogAction = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogAction));
-const AlertDialogCancel = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogCancel));
-const AlertDialogContent = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogContent));
-const AlertDialogDescription = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogDescription));
-const AlertDialogFooter = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogFooter));
-const AlertDialogHeader = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogHeader));
-const AlertDialogTitle = dynamic(() => import("@/components/ui/alert-dialog").then(mod => mod.AlertDialogTitle));
+const AlertDialog = dynamic(() =>
+  import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialog)
+);
+const AlertDialogAction = dynamic(() =>
+  import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogAction)
+);
+const AlertDialogCancel = dynamic(() =>
+  import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogCancel)
+);
+const AlertDialogContent = dynamic(() =>
+  import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogContent)
+);
+const AlertDialogDescription = dynamic(() =>
+  import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogDescription)
+);
+const AlertDialogFooter = dynamic(() =>
+  import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogFooter)
+);
+const AlertDialogHeader = dynamic(() =>
+  import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogHeader)
+);
+const AlertDialogTitle = dynamic(() =>
+  import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogTitle)
+);
 
-const Select = dynamic(() => import("@/components/ui/select").then(mod => mod.Select));
-const SelectContent = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectContent));
-const SelectItem = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectItem));
-const SelectTrigger = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectTrigger));
-const SelectValue = dynamic(() => import("@/components/ui/select").then(mod => mod.SelectValue));
+const Select = dynamic(() => import("@/components/ui/select").then((mod) => mod.Select));
+const SelectContent = dynamic(() =>
+  import("@/components/ui/select").then((mod) => mod.SelectContent)
+);
+const SelectItem = dynamic(() => import("@/components/ui/select").then((mod) => mod.SelectItem));
+const SelectTrigger = dynamic(() =>
+  import("@/components/ui/select").then((mod) => mod.SelectTrigger)
+);
+const SelectValue = dynamic(() =>
+  import("@/components/ui/select").then((mod) => mod.SelectValue)
+);
 
-// Categories, plus a label mapping for nicer UI strings
-const CATEGORIES = [
-  "arroces",
-  "carnes",
-  "del-huerto",
-  "del-mar",
-  "para-compartir",
-  "para-peques",
-  "para-veganos",
-  "postres",
-  "wines",
-] as const;
+/* ---------------------------------------------------------------------
+   1) We now only have one bucket ("menu") plus an added "blog" category
+---------------------------------------------------------------------- */
+const BUCKETS = {
+  menu: {
+    name: "menu",
+    label: "Menu Images",
+    categories: {
+      arroces: "Arroces",
+      carnes: "Carnes",
+      "del-huerto": "Del Huerto",
+      "del-mar": "Del Mar",
+      "para-compartir": "Para Compartir",
+      "para-peques": "Para Peques",
+      "para-veganos": "Para Veganos",
+      postres: "Postres",
+      wines: "Wines",
+      blog: "Blog", // <-- Blog images stored in the same bucket under "blog" folder
+    },
+  },
+} as const;
 
-type Category = (typeof CATEGORIES)[number];
+type MenuCategory = keyof typeof BUCKETS.menu.categories;
 
-// Mapping from raw key -> friendly label
-const CATEGORY_LABELS: Record<Category, string> = {
-  "arroces": "Arroces",
-  "carnes": "Carnes",
-  "del-huerto": "Del Huerto",
-  "del-mar": "Del Mar",
-  "para-compartir": "Para Compartir",
-  "para-peques": "Para Peques",
-  "para-veganos": "Para Veganos",
-  "postres": "Postres",
-  "wines": "Wines",
-};
-
-interface ImageInfo {
-  name: string;
-  url: string;
-  category: string;
-  usageCount: number;
-}
-
-async function getImageUsageCount(
+/* ---------------------------------------------------------------------
+   2) Usage-count functions for menu vs. blog
+---------------------------------------------------------------------- */
+async function getMenuUsageCount(
   supabase: ReturnType<typeof createClientComponentClient<Database>>,
   imagePath: string
 ): Promise<number> {
-  // Example usage check: let's say we check in "wines" table
+  // Example usage check in "wines" table
   const { count } = await supabase
     .from("wines")
     .select("*", { count: "exact", head: true })
@@ -2063,75 +2156,112 @@ async function getImageUsageCount(
   return count || 0;
 }
 
+async function getBlogUsageCount(
+  supabase: ReturnType<typeof createClientComponentClient<Database>>,
+  imagePath: string
+): Promise<number> {
+  // Blog usage check in "blog_posts"
+  const { count } = await supabase
+    .from("blog_posts")
+    .select("*", { count: "exact", head: true })
+    .or(`featured_image_url.eq.${imagePath},content->>'text'.ilike.%${imagePath}%`);
+  return count || 0;
+}
+
+/* ---------------------------------------------------------------------
+   3) Single function to fetch images from "menu" bucket
+---------------------------------------------------------------------- */
+interface ImageInfo {
+  name: string;
+  url: string;
+  path: string;
+  folder: string; // which category/folder
+  usageCount: number;
+}
+
 async function fetchImages(
   supabase: ReturnType<typeof createClientComponentClient<Database>>,
-  category: string
+  folder: string
 ): Promise<ImageInfo[]> {
+  console.log("Fetching images from folder:", folder);
+
   const { data: storageData, error: storageError } = await supabase.storage
     .from("menu")
-    .list(category);
-  if (storageError) throw storageError;
+    .list(folder);
+
+  if (storageError) {
+    console.error("Storage error:", storageError);
+    throw storageError;
+  }
+
+  console.log("Storage data:", storageData);
 
   const imageList: ImageInfo[] = [];
   for (const file of storageData || []) {
-    const { data } = supabase.storage.from("menu").getPublicUrl(`${category}/${file.name}`);
-    const usageCount = await getImageUsageCount(supabase, `${category}/${file.name}`);
+    // Skip directories or non-image files
+    if (file.metadata?.mimetype === null || !file.metadata?.mimetype.startsWith("image/")) {
+      continue;
+    }
+
+    const path = `${folder}/${file.name}`;
+    const { data: urlData } = supabase.storage.from("menu").getPublicUrl(path);
+    console.log("Generated URL for:", path, urlData.publicUrl);
+
+    const usageCount =
+      folder === "blog"
+        ? await getBlogUsageCount(supabase, path)
+        : await getMenuUsageCount(supabase, path);
+
     imageList.push({
       name: file.name,
-      url: data.publicUrl,
-      category,
+      url: urlData.publicUrl,
+      path,
+      folder,
       usageCount,
     });
   }
+
+  console.log("Returning images:", imageList);
   return imageList;
 }
 
+/* ---------------------------------------------------------------------
+   4) The main ImagesPage component (single-bucket approach)
+---------------------------------------------------------------------- */
 export default function ImagesPage() {
   const supabase = createClientComponentClient<Database>();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const [selectedCategory, setSelectedCategory] = useState<Category>(CATEGORIES[0]);
-  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; image: ImageInfo | null }>({
-    open: false,
-    image: null,
-  });
-  const [moveDialog, setMoveDialog] = useState<{ open: boolean; image: ImageInfo | null }>({
-    open: false,
-    image: null,
-  });
-  const [renameDialog, setRenameDialog] = useState<{ open: boolean; image: ImageInfo | null }>({
-    open: false,
-    image: null,
-  });
-  const [newImageName, setNewImageName] = useState("");
-  const [targetCategory, setTargetCategory] = useState<Category>(CATEGORIES[0]);
+  // We'll default to the first category in "menu"
+  const [selectedFolder, setSelectedFolder] = useState<string>(
+    Object.keys(BUCKETS.menu.categories)[0]
+  );
 
-  // Handler to show nicely-labeled categories in the dropdown
-  const handleCategoryChange = (value: string) => {
-    if (CATEGORIES.includes(value as Category)) {
-      setSelectedCategory(value as Category);
-    }
-  };
-
-  const handleTargetCategoryChange = (value: string) => {
-    if (CATEGORIES.includes(value as Category)) {
-      setTargetCategory(value as Category);
-    }
-  };
-
+  // Query to fetch images from the chosen folder
   const {
     data: images = [],
-    isLoading,
-    error,
+    isLoading: imagesLoading,
+    error: imagesError,
   } = useQuery<ImageInfo[], Error>({
-    queryKey: ["images", selectedCategory],
-    queryFn: () => fetchImages(supabase, selectedCategory),
+    queryKey: ["images", selectedFolder],
+    queryFn: () => fetchImages(supabase, selectedFolder),
   });
 
-  // Upload multiple images
+  /* -------------------------------------------------------------------
+     4.1) Drag & drop setup (for uploading)
+  ---------------------------------------------------------------------*/
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: { "image/jpeg": [], "image/png": [], "image/webp": [] },
+    onDrop: (acceptedFiles: File[]) => uploadMutation.mutate(acceptedFiles),
+  });
+
+  /* -------------------------------------------------------------------
+     4.2) Mutations (upload, delete, move, rename)
+  ---------------------------------------------------------------------*/
+  // Upload
   const uploadMutation = useMutation<string[], Error, File[]>({
-    mutationFn: async (files: File[]): Promise<string[]> => {
+    mutationFn: async (files: File[]) => {
       const results: string[] = [];
       for (const file of files) {
         if (file.size > 2 * 1024 * 1024) {
@@ -2142,7 +2272,7 @@ export default function ImagesPage() {
           });
           continue;
         }
-        const filePath = `${selectedCategory}/${file.name}`;
+        const filePath = `${selectedFolder}/${file.name}`;
         const { error: uploadError } = await supabase.storage
           .from("menu")
           .upload(filePath, file, {
@@ -2165,10 +2295,10 @@ export default function ImagesPage() {
       }
       return results;
     },
-    onSuccess: (fileNames: string[]) => {
+    onSuccess: (fileNames) => {
       if (fileNames.length > 0) {
         toast({ title: "Success", description: `Uploaded ${fileNames.length} file(s)` });
-        queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
+        queryClient.invalidateQueries({ queryKey: ["images", selectedFolder] });
       }
     },
     onError: (err) => {
@@ -2177,19 +2307,23 @@ export default function ImagesPage() {
     },
   });
 
-  // Delete image
+  // Delete
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; image: ImageInfo | null }>({
+    open: false,
+    image: null,
+  });
   const deleteMutation = useMutation<string, Error, ImageInfo>({
     mutationFn: async (image) => {
       const { error: deleteError } = await supabase.storage
         .from("menu")
-        .remove([`${image.category}/${image.name}`]);
+        .remove([image.path]);
       if (deleteError) throw deleteError;
       return image.name;
     },
     onSuccess: (fileName) => {
       toast({ title: "Success", description: `Deleted ${fileName}` });
       setDeleteDialog({ open: false, image: null });
-      queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
+      queryClient.invalidateQueries({ queryKey: ["images", selectedFolder] });
     },
     onError: (err) => {
       const message = err instanceof Error ? err.message : "Failed to delete image";
@@ -2197,38 +2331,47 @@ export default function ImagesPage() {
     },
   });
 
-  // Move image
-  const moveMutation = useMutation<string, Error, { image: ImageInfo; targetCategory: string }>({
-    mutationFn: async ({ image, targetCategory }) => {
-      // Download file
+  // Move
+  const [moveDialog, setMoveDialog] = useState<{ open: boolean; image: ImageInfo | null }>({
+    open: false,
+    image: null,
+  });
+  const [targetFolder, setTargetFolder] = useState<string>(
+    Object.keys(BUCKETS.menu.categories)[0]
+  );
+  const moveMutation = useMutation<string, Error, { image: ImageInfo; targetFolder: string }>({
+    mutationFn: async ({ image, targetFolder }) => {
+      // 1) Download old file
       const { data: fileData, error: downloadError } = await supabase.storage
         .from("menu")
-        .download(`${image.category}/${image.name}`);
+        .download(image.path);
       if (downloadError || !fileData) throw new Error("Failed to download file");
 
-      // Upload file to the new category
+      // 2) Upload new file in the target folder
+      const newPath = `${targetFolder}/${image.name}`;
       const newFile = new File([fileData], image.name, { type: fileData.type });
       const { error: uploadError } = await supabase.storage
         .from("menu")
-        .upload(`${targetCategory}/${image.name}`, newFile, {
+        .upload(newPath, newFile, {
           cacheControl: "3600",
           upsert: false,
         });
       if (uploadError) throw uploadError;
 
-      // Remove the old file
+      // 3) Remove old file
       const { error: removeError } = await supabase.storage
         .from("menu")
-        .remove([`${image.category}/${image.name}`]);
+        .remove([image.path]);
       if (removeError) throw removeError;
 
       return image.name;
     },
-    onSuccess: (fileName) => {
+    onSuccess: (fileName, { targetFolder }) => {
       toast({ title: "Success", description: `Moved ${fileName}` });
       setMoveDialog({ open: false, image: null });
-      queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
-      queryClient.invalidateQueries({ queryKey: ["images", targetCategory] });
+      // Invalidate queries for both old folder and new folder
+      queryClient.invalidateQueries({ queryKey: ["images", selectedFolder] });
+      queryClient.invalidateQueries({ queryKey: ["images", targetFolder] });
     },
     onError: (err) => {
       const message = err instanceof Error ? err.message : "Failed to move image";
@@ -2236,29 +2379,39 @@ export default function ImagesPage() {
     },
   });
 
-  // Rename image
-  const renameMutation = useMutation<{ oldName: string; newName: string }, Error, { image: ImageInfo; newImageName: string }>({
+  // Rename
+  const [renameDialog, setRenameDialog] = useState<{ open: boolean; image: ImageInfo | null }>({
+    open: false,
+    image: null,
+  });
+  const [newImageName, setNewImageName] = useState("");
+  const renameMutation = useMutation<
+    { oldName: string; newName: string },
+    Error,
+    { image: ImageInfo; newImageName: string }
+  >({
     mutationFn: async ({ image, newImageName }) => {
-      // Download existing file
+      // 1) Download existing
       const { data: fileData, error: downloadError } = await supabase.storage
         .from("menu")
-        .download(`${image.category}/${image.name}`);
+        .download(image.path);
       if (downloadError || !fileData) throw new Error("Failed to download file");
 
-      // Upload new file with new name
+      // 2) Upload under new name
+      const newPath = `${image.folder}/${newImageName}`;
       const newFile = new File([fileData], newImageName, { type: fileData.type });
       const { error: uploadError } = await supabase.storage
         .from("menu")
-        .upload(`${image.category}/${newImageName}`, newFile, {
+        .upload(newPath, newFile, {
           cacheControl: "3600",
           upsert: false,
         });
       if (uploadError) throw uploadError;
 
-      // Remove old file
+      // 3) Remove old
       const { error: removeError } = await supabase.storage
         .from("menu")
-        .remove([`${image.category}/${image.name}`]);
+        .remove([image.path]);
       if (removeError) throw removeError;
 
       return { oldName: image.name, newName: newImageName };
@@ -2267,7 +2420,7 @@ export default function ImagesPage() {
       toast({ title: "Success", description: `Renamed ${oldName} to ${newName}` });
       setRenameDialog({ open: false, image: null });
       setNewImageName("");
-      queryClient.invalidateQueries({ queryKey: ["images", selectedCategory] });
+      queryClient.invalidateQueries({ queryKey: ["images", selectedFolder] });
     },
     onError: (err) => {
       const message = err instanceof Error ? err.message : "Failed to rename image";
@@ -2275,24 +2428,42 @@ export default function ImagesPage() {
     },
   });
 
-  // For drag & drop 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: { "image/jpeg": [], "image/png": [], "image/webp": [] },
-    onDrop: (acceptedFiles: File[]) => uploadMutation.mutate(acceptedFiles),
-  });
+  /* -------------------------------------------------------------------
+     4.3) Folder selector (categories in BUCKETS.menu.categories)
+  ---------------------------------------------------------------------*/
+  const folderSelector = (
+    <Select value={selectedFolder} onValueChange={setSelectedFolder}>
+      <SelectTrigger className="w-[180px]">
+        <SelectValue placeholder="Select category">
+          {BUCKETS.menu.categories[selectedFolder as MenuCategory]}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {Object.entries(BUCKETS.menu.categories).map(([key, label]) => (
+          <SelectItem key={key} value={key}>
+            {label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 
-  if (isLoading) {
+  /* -------------------------------------------------------------------
+     5) Render
+  ---------------------------------------------------------------------*/
+  if (imagesLoading) {
     return (
       <div className="flex items-center justify-center h-[200px]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     );
   }
-  if (error) {
+
+  if (imagesError) {
     return (
       <div className="container p-6">
         <Alert variant="destructive">
-          <AlertDescription>Failed to load images.</AlertDescription>
+          <AlertDescription>Failed to load images: {imagesError.message}</AlertDescription>
         </Alert>
       </div>
     );
@@ -2300,21 +2471,11 @@ export default function ImagesPage() {
 
   return (
     <div className="container p-6">
-      <PageHeader heading="Image Management" text="Upload and manage images for menu items">
-        <Select value={selectedCategory} onValueChange={handleCategoryChange}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select category" />
-          </SelectTrigger>
-          <SelectContent>
-            {CATEGORIES.map((cat) => (
-              <SelectItem key={cat} value={cat}>
-                {CATEGORY_LABELS[cat]} {/* Display the friendly label */}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <PageHeader heading="Image Management" text="Upload and manage images">
+        {folderSelector}
       </PageHeader>
 
+      {/* Dropzone for uploading */}
       <div
         {...getRootProps()}
         className={`mt-6 border-2 border-dashed rounded-lg p-8 text-center ${
@@ -2335,10 +2496,11 @@ export default function ImagesPage() {
         </div>
       </div>
 
+      {/* Image grid */}
       <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {images.map((image) => (
           <div
-            key={image.name}
+            key={image.path}
             className="group relative aspect-square rounded-lg overflow-hidden border bg-card"
           >
             <Image
@@ -2348,11 +2510,22 @@ export default function ImagesPage() {
               className="object-cover transition-all group-hover:scale-105"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               unoptimized
+              // Remove the unused 'e' parameter if not needed:
+              onError={() => {
+                console.error("Image load error:", image.url);
+                // Optionally set a fallback source:
+                // e.currentTarget.src = '/placeholder.jpg';
+              }}
             />
+            {/* Overlay */}
             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
               <div className="absolute bottom-0 left-0 right-0 p-4">
-                <p className="text-white text-sm mb-2 truncate">{image.name}</p>
+                <p className="text-white text-sm mb-2 truncate">
+                  {image.name}
+                  <span className="block text-xs opacity-75">{image.path}</span>
+                </p>
                 <div className="flex gap-2 mt-2">
+                  {/* Rename */}
                   <Button
                     size="sm"
                     variant="secondary"
@@ -2360,6 +2533,7 @@ export default function ImagesPage() {
                   >
                     <Edit2 className="h-4 w-4" />
                   </Button>
+                  {/* Move */}
                   <Button
                     size="sm"
                     variant="secondary"
@@ -2367,6 +2541,7 @@ export default function ImagesPage() {
                   >
                     <FolderIcon className="h-4 w-4" />
                   </Button>
+                  {/* Delete */}
                   <Button
                     size="sm"
                     variant="destructive"
@@ -2381,7 +2556,7 @@ export default function ImagesPage() {
         ))}
       </div>
 
-      {/* Delete confirmation */}
+      {/* ------------------ Delete Dialog ------------------ */}
       <AlertDialog
         open={deleteDialog.open}
         onOpenChange={(open) => setDeleteDialog({ open, image: null })}
@@ -2394,8 +2569,8 @@ export default function ImagesPage() {
                 <div className="flex items-center gap-2 text-yellow-600">
                   <AlertCircle className="h-4 w-4" />
                   This image is used in {deleteDialog.image.usageCount}{" "}
-                  {deleteDialog.image.usageCount === 1 ? "item" : "items"}. Deleting it will remove
-                  the image from those items.
+                  {deleteDialog.image.usageCount === 1 ? "item" : "items"}. Deleting it
+                  will remove the image from those items.
                 </div>
               ) : (
                 "Are you sure you want to delete this image? This action cannot be undone."
@@ -2405,7 +2580,11 @@ export default function ImagesPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleteDialog.image && deleteMutation.mutate(deleteDialog.image)}
+              onClick={() => {
+                if (deleteDialog.image) {
+                  deleteMutation.mutate(deleteDialog.image);
+                }
+              }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteMutation.isPending ? "Deleting..." : "Delete"}
@@ -2414,57 +2593,71 @@ export default function ImagesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Move dialog */}
-      <Dialog open={moveDialog.open} onOpenChange={(open) => setMoveDialog({ open, image: null })}>
+      {/* ------------------ Move Dialog ------------------ */}
+      <Dialog
+        open={moveDialog.open}
+        onOpenChange={(open) => setMoveDialog({ open, image: null })}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Move Image</DialogTitle>
-            <DialogDescription>Select a new category for this image</DialogDescription>
+            <DialogDescription>Select a new category/folder</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
+            {/* Current folder */}
             <div className="grid gap-2">
-              <Label>Current Category</Label>
-              <Input disabled value={moveDialog.image?.category || ""} />
+              <Label>Current Folder/Category</Label>
+              <Input disabled value={moveDialog.image?.folder || ""} />
             </div>
+            {/* Destination */}
             <div className="grid gap-2">
-              <Label>Destination Category</Label>
-              <Select value={targetCategory} onValueChange={handleTargetCategoryChange}>
+              <Label>Destination</Label>
+              <Select
+                value={targetFolder}
+                onValueChange={(val) => setTargetFolder(val)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.filter((cat) => cat !== moveDialog.image?.category).map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {CATEGORY_LABELS[cat]}
-                    </SelectItem>
-                  ))}
+                  {Object.entries(BUCKETS.menu.categories)
+                    .filter(([folderKey]) => folderKey !== moveDialog.image?.folder)
+                    .map(([folderKey, folderLabel]) => (
+                      <SelectItem key={folderKey} value={folderKey}>
+                        {folderLabel}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
+
               {moveDialog.image && moveDialog.image.usageCount > 0 && (
                 <p className="text-sm text-yellow-600 flex items-center gap-2 mt-2">
                   <AlertCircle className="h-4 w-4" />
                   This image is used in {moveDialog.image.usageCount}{" "}
-                  {moveDialog.image.usageCount === 1 ? "item" : "items"}. Moving it will update all references.
+                  {moveDialog.image.usageCount === 1 ? "item" : "items"}. Moving it
+                  will update references as needed.
                 </p>
               )}
             </div>
           </div>
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setMoveDialog({ open: false, image: null })}
-            >
+            <Button variant="outline" onClick={() => setMoveDialog({ open: false, image: null })}>
               Cancel
             </Button>
             <Button
-              onClick={() =>
-                moveDialog.image && moveMutation.mutate({ image: moveDialog.image, targetCategory })
-              }
+              onClick={() => {
+                if (moveDialog.image) {
+                  moveMutation.mutate({
+                    image: moveDialog.image,
+                    targetFolder,
+                  });
+                }
+              }}
               disabled={
-                !targetCategory ||
-                targetCategory === moveDialog.image?.category ||
+                !targetFolder ||
+                targetFolder === moveDialog.image?.folder ||
                 moveMutation.isPending
               }
             >
@@ -2474,7 +2667,7 @@ export default function ImagesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Rename dialog */}
+      {/* ------------------ Rename Dialog ------------------ */}
       <Dialog
         open={renameDialog.open}
         onOpenChange={(open) => {
@@ -2485,14 +2678,17 @@ export default function ImagesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Rename Image</DialogTitle>
-            <DialogDescription>Enter a new name for the image</DialogDescription>
+            {/* Use &quot; instead of raw quotes to fix react/no-unescaped-entities */}
+            <DialogDescription>Enter a new filename (e.g. &quot;photo.jpg&quot;)</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
+            {/* Current name */}
             <div className="grid gap-2">
               <Label>Current Name</Label>
               <Input disabled value={renameDialog.image?.name || ""} />
             </div>
+            {/* New name */}
             <div className="grid gap-2">
               <Label>New Name</Label>
               <Input
@@ -2500,17 +2696,19 @@ export default function ImagesPage() {
                 onChange={(e) => setNewImageName(e.target.value)}
                 placeholder="image.jpg"
               />
+              {/* Validation warnings */}
               {!newImageName.includes(".") && newImageName && (
                 <p className="text-sm text-red-500 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
-                  Please include a file extension (e.g., .jpg, .png, .webp)
+                  Please include a file extension (e.g., &quot;.jpg&quot;, &quot;.png&quot;, &quot;.webp&quot;)
                 </p>
               )}
               {renameDialog.image && renameDialog.image.usageCount > 0 && (
                 <p className="text-sm text-yellow-600 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
                   This image is used in {renameDialog.image.usageCount}{" "}
-                  {renameDialog.image.usageCount === 1 ? "item" : "items"}. Renaming it will update all references.
+                  {renameDialog.image.usageCount === 1 ? "item" : "items"}. Renaming it
+                  will affect those references.
                 </p>
               )}
             </div>
@@ -2527,9 +2725,14 @@ export default function ImagesPage() {
               Cancel
             </Button>
             <Button
-              onClick={() =>
-                renameDialog.image && renameMutation.mutate({ image: renameDialog.image, newImageName })
-              }
+              onClick={() => {
+                if (renameDialog.image) {
+                  renameMutation.mutate({
+                    image: renameDialog.image,
+                    newImageName,
+                  });
+                }
+              }}
               disabled={
                 !newImageName ||
                 newImageName === renameDialog.image?.name ||
@@ -9168,35 +9371,35 @@ export type Database = {
 
       // ===== Added daily_menus and daily_menu_items Tables =====
       daily_menus: {
-  Row: {
-    id: string;
-    date: string;
-    repeat_pattern: "none" | "weekly" | "monthly";
-    active: boolean;
-    scheduled_for: string;
-    created_at: string;
-    daily_menu_items?: {
-      id: string;
-      course_name: string;
-      course_type: "first" | "second";
-      display_order: number;
-      daily_menu_id: string;
-    }[];
-  };
-  Insert: {
-    date: string;
-    repeat_pattern?: "none" | "weekly" | "monthly";
-    active?: boolean;
-    scheduled_for: string;
-    created_at?: string;
-  };
-  Update: {
-    date?: string;
-    repeat_pattern?: "none" | "weekly" | "monthly";
-    active?: boolean;
-    scheduled_for?: string;
-  };
-};
+        Row: {
+          id: string;
+          date: string;
+          repeat_pattern: "none" | "weekly" | "monthly";
+          active: boolean;
+          scheduled_for: string;
+          created_at: string;
+          daily_menu_items?: {
+            id: string;
+            course_name: string;
+            course_type: "first" | "second";
+            display_order: number;
+            daily_menu_id: string;
+          }[];
+        };
+        Insert: {
+          date: string;
+          repeat_pattern?: "none" | "weekly" | "monthly";
+          active?: boolean;
+          scheduled_for: string;
+          created_at?: string;
+        };
+        Update: {
+          date?: string;
+          repeat_pattern?: "none" | "weekly" | "monthly";
+          active?: boolean;
+          scheduled_for?: string;
+        };
+      };
 
       daily_menu_items: {
         Row: {
@@ -9287,6 +9490,47 @@ export type Database = {
         };
       };
       // ===== End of New Tables =====
+
+      // ===== Add blog_posts Table =====
+      blog_posts: {
+        Row: {
+          id: string;
+          title: string;
+          slug: string;
+          published: boolean;
+          created_at: string;
+          updated_at: string | null;
+          content: unknown; // e.g. JSON or text type
+          featured_image_url: string | null;
+          featured_image_alt: string | null;
+          author_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          slug?: string;
+          published?: boolean;
+          created_at?: string;
+          updated_at?: string | null;
+          content?: unknown;
+          featured_image_url?: string | null;
+          featured_image_alt?: string | null;
+          author_id?: string | null;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          slug?: string;
+          published?: boolean;
+          created_at?: string;
+          updated_at?: string | null;
+          content?: unknown;
+          featured_image_url?: string | null;
+          featured_image_alt?: string | null;
+          author_id?: string | null;
+        };
+      };
+      // ===== End blog_posts Table =====
     };
     Views: {
       [_ in never]: never;
@@ -9716,7 +9960,7 @@ export function createFormControl(initialValue: unknown = ''): FormControl {
 
 export function isFormValid(controls: FormControls): boolean {
   return Object.values(controls).every(
-    control => !control.error && control.touched
+    (control) => !control.error && control.touched
   );
 }
 

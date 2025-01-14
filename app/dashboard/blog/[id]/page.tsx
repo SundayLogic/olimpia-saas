@@ -16,6 +16,7 @@ import StarterKit from "@tiptap/starter-kit";
 import ImageExt from "@tiptap/extension-image";
 import LinkExt from "@tiptap/extension-link";
 import type { JSONContent } from "@tiptap/react";
+
 import {
   Loader2,
   Save,
@@ -43,6 +44,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
 /** Dynamically import Tiptap UI components */
@@ -118,9 +125,131 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 /* ---------------------------------------------------------------------
-   2) The Editor Page
+   2) Inline ImageSelector (fetch from "menu" bucket, "blog" folder)
 ---------------------------------------------------------------------- */
 
+interface ImageSelectorProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (url: string) => void;
+  currentImageUrl?: string | null;
+}
+
+function ImageSelector({
+  open,
+  onOpenChange,
+  onSelect,
+  currentImageUrl,
+}: ImageSelectorProps) {
+  const [images, setImages] = useState<{ name: string; url: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const supabase = createClientComponentClient();
+
+  useEffect(() => {
+    const fetchBlogImages = async () => {
+      if (!open) return;
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        // We now list from "menu" bucket, "blog" folder
+        const { data: files, error: listError } = await supabase.storage
+          .from("menu")
+          .list("blog"); // <---- "blog" subfolder
+
+        if (listError) throw listError;
+        if (!files) {
+          setImages([]);
+          setLoading(false);
+          return;
+        }
+
+        // Filter only image files and get public URLs
+        const imageFiles = files.filter((file) =>
+          file.name.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+        );
+
+        const imageList: { name: string; url: string }[] = [];
+        for (const f of imageFiles) {
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from("menu").getPublicUrl(`blog/${f.name}`);
+          imageList.push({ name: f.name, url: publicUrl });
+        }
+
+        setImages(imageList);
+      } catch (err) {
+        console.error("Error fetching blog images:", err);
+        setError(err instanceof Error ? err.message : "Failed to load images");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchBlogImages();
+  }, [open, supabase]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Select Featured Image</DialogTitle>
+        </DialogHeader>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="text-center py-8 text-red-500">{error}</div>
+        ) : images.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            No images found in the blog folder
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-4">
+            {images.map((image) => (
+              <div
+                key={image.name}
+                className={cn(
+                  "relative aspect-video group cursor-pointer overflow-hidden rounded-md border-2 transition-colors",
+                  currentImageUrl === image.url
+                    ? "border-primary"
+                    : "border-transparent hover:border-primary/50"
+                )}
+                onClick={() => onSelect(image.url)}
+              >
+                <Image
+                  src={image.url}
+                  alt={image.name}
+                  fill
+                  className="object-cover"
+                  unoptimized
+                />
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute bottom-0 left-0 right-0 p-2 bg-black/75 text-white text-sm truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                  {image.name}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ---------------------------------------------------------------------
+   3) The Editor Page
+---------------------------------------------------------------------- */
 export default function Page() {
   const params = useParams();
   const router = useRouter();
@@ -138,12 +267,15 @@ export default function Page() {
     error: null,
   });
 
-  /** Are we making a new post (id === "new") or editing existing? */
+  // Are we making a new post (id === "new") or editing existing?
   const isNew = params.id === "new";
 
   // For displaying the featured image
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null);
   const [featuredImageAlt, setFeaturedImageAlt] = useState<string | null>(null);
+
+  // Dialog open state for image selector
+  const [isImageSelectorOpen, setIsImageSelectorOpen] = useState(false);
 
   // React Hook Form
   const form = useForm<FormData>({
@@ -253,7 +385,7 @@ export default function Page() {
         }
       }
     },
-    [isNew, isEditorReady, supabase, params.id]
+    [isNew, isEditorReady, supabase, params.id, form]
   );
 
   // Fetch existing post if not new
@@ -365,10 +497,13 @@ export default function Page() {
         meta_description: values.meta_description || null,
         published: values.status === "published",
         updated_at: new Date().toISOString(),
-        // Ensure author_id is always set
+        // Preserve or set author_id
         author_id: isNew
           ? userData.user.id
           : currentPost?.author_id || userData.user.id,
+        // If you want to preserve the chosen featured image:
+        featured_image_url: featuredImageUrl,
+        featured_image_alt: featuredImageAlt ?? null,
       };
 
       console.log("Saving post with data:", postData);
@@ -423,6 +558,40 @@ export default function Page() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Handler for selecting a new featured image
+  const handleImageSelect = async (url: string) => {
+    try {
+      setFeaturedImageUrl(url);
+
+      // If it's an existing post, update immediately
+      if (!isNew) {
+        const { error: updateError } = await supabase
+          .from("blog_posts")
+          .update({
+            featured_image_url: url,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", params.id);
+
+        if (updateError) throw updateError;
+      }
+
+      setIsImageSelectorOpen(false);
+      toast({
+        title: "Success",
+        description: "Featured image updated successfully",
+      });
+    } catch (err) {
+      console.error("Error updating featured image:", err);
+      toast({
+        title: "Error",
+        description:
+          err instanceof Error ? err.message : "Failed to update featured image",
+        variant: "destructive",
+      });
     }
   };
 
@@ -694,8 +863,7 @@ export default function Page() {
         {showSidebar && (
           <div className="w-80 border-l bg-card overflow-y-auto">
             <div className="p-4 space-y-6">
-
-              {/* Featured Image Display */}
+              {/* Featured Image Display + "Change" Button */}
               <div>
                 <label className="text-sm font-medium mb-2 inline-block">
                   Featured Image
@@ -711,10 +879,16 @@ export default function Page() {
                     />
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No featured image
-                  </p>
+                  <p className="text-sm text-muted-foreground">No featured image</p>
                 )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full mt-2"
+                  onClick={() => setIsImageSelectorOpen(true)}
+                >
+                  {featuredImageUrl ? "Change Image" : "Select Image"}
+                </Button>
               </div>
 
               {/* Status */}
@@ -722,9 +896,7 @@ export default function Page() {
                 <label className="text-sm font-medium">Status</label>
                 <Select
                   value={status}
-                  onValueChange={(v) =>
-                    form.setValue("status", v as BlogStatus)
-                  }
+                  onValueChange={(v) => form.setValue("status", v as BlogStatus)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select status" />
@@ -741,9 +913,7 @@ export default function Page() {
                 <label className="text-sm font-medium">Meta Description</label>
                 <Textarea
                   value={metaDescription}
-                  onChange={(e) =>
-                    form.setValue("meta_description", e.target.value)
-                  }
+                  onChange={(e) => form.setValue("meta_description", e.target.value)}
                   placeholder="Enter SEO description..."
                   className="h-20"
                   disabled={isPreview}
@@ -763,9 +933,7 @@ export default function Page() {
               Saving...
             </span>
           )}
-          {autoSave.error && (
-            <span className="text-destructive">{autoSave.error}</span>
-          )}
+          {autoSave.error && <span className="text-destructive">{autoSave.error}</span>}
           {!autoSave.saving && !autoSave.error && autoSave.lastSaved && (
             <span className="text-muted-foreground">All changes saved</span>
           )}
@@ -779,10 +947,7 @@ export default function Page() {
           >
             Cancel
           </Button>
-          <Button
-            onClick={form.handleSubmit(onSubmit)}
-            disabled={isLoading || autoSave.saving}
-          >
+          <Button onClick={form.handleSubmit(onSubmit)} disabled={isLoading || autoSave.saving}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -796,6 +961,14 @@ export default function Page() {
           </Button>
         </div>
       </div>
+
+      {/* Inline Image Selector Dialog */}
+      <ImageSelector
+        open={isImageSelectorOpen}
+        onOpenChange={setIsImageSelectorOpen}
+        onSelect={handleImageSelect}
+        currentImageUrl={featuredImageUrl}
+      />
 
       {/* Tiptap global styling */}
       <style jsx global>{`
