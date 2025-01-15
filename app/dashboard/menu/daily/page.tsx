@@ -11,9 +11,8 @@ import {
   isSameDay
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { DateRange } from "react-day-picker"; // For the date-range wizard
+import { DateRange } from "react-day-picker";
 
-// Replace these imports with your actual UI components:
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,13 +27,11 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-
-// If you have a custom Calendar or you use react-day-picker directly:
 import { Calendar } from "@/components/ui/calendar";
 
-// --------------------------------------------------------------------
-// 1) Minimal 'Database' type (Replace with your real schema).
-// --------------------------------------------------------------------
+/* ------------------------------------------------------------------------
+   1) Database / local interfaces 
+------------------------------------------------------------------------ */
 interface Database {
   public: {
     Tables: {
@@ -61,15 +58,12 @@ interface Database {
   };
 }
 
-// --------------------------------------------------------------------
-// 2) Local Types
-// --------------------------------------------------------------------
 interface DailyMenuItem {
-  id: string;
+  id?: string;
   course_name: string;
   course_type: "first" | "second";
   display_order: number;
-  daily_menu_id: string;
+  daily_menu_id?: string;
 }
 
 interface DailyMenu {
@@ -82,16 +76,17 @@ interface DailyMenu {
   daily_menu_items?: DailyMenuItem[];
 }
 
+// The new wizard structure to support multiple items per course.
 interface NewMenu {
   dateRange: DateRange;
   repeat_pattern: "none" | "weekly" | "monthly";
   active: boolean;
-  firstCourse: string;
-  secondCourse: string;
+  firstCourses: string[];   // multiple "first" items
+  secondCourses: string[];  // multiple "second" items
   previewDates?: string[];
 }
 
-// Steps for our wizard
+// For wizard steps
 interface WizardStep {
   key: "date" | "pattern" | "courses" | "preview";
   title: string;
@@ -99,21 +94,31 @@ interface WizardStep {
 }
 
 const WIZARD_STEPS: WizardStep[] = [
-  { key: "date", title: "Select Dates", description: "Choose the date range for your menus." },
-  { key: "pattern", title: "Set Repeat Pattern", description: "One-time, weekly, or monthly?" },
-  { key: "courses", title: "Courses", description: "Enter the first and second course." },
-  { key: "preview", title: "Preview & Confirm", description: "Review before creating menus." }
+  {
+    key: "date",
+    title: "Select Dates",
+    description: "Choose the date range for your menus."
+  },
+  {
+    key: "pattern",
+    title: "Set Repeat Pattern",
+    description: "One-time, weekly, or monthly?"
+  },
+  {
+    key: "courses",
+    title: "Add Courses",
+    description: "Enter multiple first and second courses."
+  },
+  {
+    key: "preview",
+    title: "Preview & Confirm",
+    description: "Review before creating menus."
+  }
 ];
 
-const PATTERN_DESCRIPTIONS = {
-  none: "Creates a menu only on the selected date(s)",
-  weekly: "Automatically creates menus every week from start to end date",
-  monthly: "Automatically creates menus on the same date each month"
-};
-
-// --------------------------------------------------------------------
-// 3) Utility Functions
-// --------------------------------------------------------------------
+/* ------------------------------------------------------------------------
+   2) Utility functions: scheduling, date conflicts
+------------------------------------------------------------------------ */
 function generatePreviewDates(
   startDate: Date,
   endDate: Date | null,
@@ -121,13 +126,16 @@ function generatePreviewDates(
 ): Date[] {
   const dates: Date[] = [];
   let current = startDate;
-  const finalDate = endDate || startDate;
-
-  while (current <= finalDate) {
+  const final = endDate || startDate;
+  while (current <= final) {
     dates.push(current);
-    if (pattern === "weekly") current = addWeeks(current, 1);
-    else if (pattern === "monthly") current = addMonths(current, 1);
-    else current = addDays(current, 1);
+    if (pattern === "weekly") {
+      current = addWeeks(current, 1);
+    } else if (pattern === "monthly") {
+      current = addMonths(current, 1);
+    } else {
+      current = addDays(current, 1);
+    }
   }
   return dates;
 }
@@ -139,10 +147,9 @@ function checkDateConflicts(dates: Date[], existingMenus: DailyMenu[]): string[]
   return conflicts.map((date) => format(date, "PPP", { locale: es }));
 }
 
-
-// --------------------------------------------------------------------
-// 4) Data Fetcher
-// --------------------------------------------------------------------
+/* ------------------------------------------------------------------------
+   3) Data fetch
+------------------------------------------------------------------------ */
 async function fetchDailyMenus(
   supabase: ReturnType<typeof createClientComponentClient<Database>>
 ): Promise<DailyMenu[]> {
@@ -150,55 +157,79 @@ async function fetchDailyMenus(
     .from("daily_menus")
     .select(
       `id, date, repeat_pattern, active, scheduled_for, created_at,
-       daily_menu_items (id, course_name, course_type, display_order, daily_menu_id)`
+       daily_menu_items(
+         id, course_name, course_type, display_order, daily_menu_id
+       )`
     );
+
   if (error) throw error;
   return (data ?? []) as DailyMenu[];
 }
 
-// --------------------------------------------------------------------
-// 5) Main Component
-// --------------------------------------------------------------------
+/* ------------------------------------------------------------------------
+   4) Main component
+------------------------------------------------------------------------ */
 export default function DailyMenuPage() {
   const supabase = createClientComponentClient<Database>();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Wizard state
+  /* -----------------
+     Wizard & state 
+  ----------------- */
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [previewDates, setPreviewDates] = useState<string[]>([]);
   const [conflicts, setConflicts] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Data for new menu creation
   const [newMenu, setNewMenu] = useState<NewMenu>({
     dateRange: { from: new Date(), to: new Date() },
     repeat_pattern: "none",
     active: true,
-    firstCourse: "",
-    secondCourse: "",
-    previewDates: [],
+    firstCourses: [""],
+    secondCourses: [""],
+    previewDates: []
   });
 
-  // For the calendar
-  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-
-  // Query daily menus
+  /* -----------------
+     Load daily menus
+  ----------------- */
   const {
     data: dailyMenus = [],
     isLoading,
-    error,
+    error
   } = useQuery<DailyMenu[], Error>({
     queryKey: ["dailyMenus"],
-    queryFn: () => fetchDailyMenus(supabase),
+    queryFn: () => fetchDailyMenus(supabase)
   });
 
-  // ----------------------------------------------------------------
-  // Mutations
-  // ----------------------------------------------------------------
-  // (1) Create menus wizard
+  /* -----------------
+     Toggle Status 
+  ----------------- */
+  const toggleMenuStatus = useMutation({
+    // toggles an existing daily_menus row's active field
+    mutationFn: async (vars: { id: string; newStatus: boolean }) => {
+      const { error: toggleErr } = await supabase
+        .from("daily_menus")
+        .update({ active: vars.newStatus })
+        .eq("id", vars.id);
+      if (toggleErr) throw toggleErr;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["dailyMenus"] });
+      toast({ title: "Success", description: "Menu status updated." });
+    },
+    onError: (err) => {
+      if (err instanceof Error) {
+        toast({ title: "Error", description: err.message, variant: "destructive" });
+      }
+    }
+  });
+
+  /* -----------------
+     Create new menus 
+  ----------------- */
   const createMenuMutation = useMutation({
     mutationFn: async () => {
       setIsSubmitting(true);
@@ -208,7 +239,7 @@ export default function DailyMenuPage() {
       const finalEnd = to || from;
       let dateList = generatePreviewDates(from, finalEnd, newMenu.repeat_pattern);
 
-      // check conflicts
+      // Check conflicts
       const conflictFound = checkDateConflicts(dateList, dailyMenus);
       if (conflictFound.length > 0) {
         const confirmSkip = window.confirm(
@@ -223,12 +254,12 @@ export default function DailyMenuPage() {
       }
       if (!dateList.length) throw new Error("No valid dates remain to schedule!");
 
-      // Insert daily_menus
+      // Insert daily_menus rows
       const rows = dateList.map((d) => ({
         date: format(d, "yyyy-MM-dd"),
         repeat_pattern: newMenu.repeat_pattern,
         active: newMenu.active,
-        scheduled_for: format(d, "yyyy-MM-dd'T'11:00:00.000'Z'"),
+        scheduled_for: format(d, "yyyy-MM-dd'T'11:00:00.000'Z'")
       }));
       const { data: inserted, error: insertErr } = await supabase
         .from("daily_menus")
@@ -236,20 +267,22 @@ export default function DailyMenuPage() {
         .select();
       if (insertErr) throw insertErr;
 
-      // Insert daily_menu_items
-      const allInserts = (inserted || []).flatMap((row) => [
-        {
-          daily_menu_id: row.id,
-          course_name: newMenu.firstCourse,
+      // Insert daily_menu_items for each new menu
+      const allInserts = (inserted || []).flatMap((menu) => [
+        // each first course
+        ...newMenu.firstCourses.map((course, index) => ({
+          daily_menu_id: menu.id,
+          course_name: course,
           course_type: "first" as const,
-          display_order: 1,
-        },
-        {
-          daily_menu_id: row.id,
-          course_name: newMenu.secondCourse,
+          display_order: index + 1
+        })),
+        // each second course
+        ...newMenu.secondCourses.map((course, index) => ({
+          daily_menu_id: menu.id,
+          course_name: course,
           course_type: "second" as const,
-          display_order: 2,
-        },
+          display_order: index + 1
+        }))
       ]);
       if (allInserts.length) {
         const { error: itemsErr } = await supabase
@@ -260,7 +293,10 @@ export default function DailyMenuPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["dailyMenus"] });
-      toast({ title: "Success", description: "Daily menus created." });
+      toast({
+        title: "Success",
+        description: "Daily menus created with multiple items per course."
+      });
     },
     onError: (err) => {
       if (err instanceof Error) {
@@ -269,109 +305,63 @@ export default function DailyMenuPage() {
     },
     onSettled: () => {
       setIsSubmitting(false);
-    },
+    }
   });
 
-  // (2) Toggle menu status
-  const toggleMenuStatusMutation = useMutation<
-    void, // return type
-    Error, // error type
-    { id: string; newStatus: boolean } // variables
-  >({
-    mutationFn: async ({ id, newStatus }) => {
-      const { error } = await supabase
-        .from("daily_menus")
-        .update({ active: newStatus })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["dailyMenus"] });
-      toast({ title: "Success", description: "Menu status updated successfully" });
-    },
-    onError: (err) => {
-      toast({
-        title: "Error",
-        description: err instanceof Error ? err.message : "Failed to update status",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Step-based wizard side effect
+  /* -----------------
+     Wizard logic 
+  ----------------- */
   useEffect(() => {
+    // If step = preview, build previewDates & conflicts
     if (currentStep === 3) {
       const { from, to } = newMenu.dateRange;
       if (!from) return;
-      const final = to || from;
-      const dateList = generatePreviewDates(from, final, newMenu.repeat_pattern);
+      const finalEnd = to || from;
+      const dateList = generatePreviewDates(from, finalEnd, newMenu.repeat_pattern);
       const conflictDates = checkDateConflicts(dateList, dailyMenus);
+
       setPreviewDates(dateList.map((d) => format(d, "PPP", { locale: es })));
       setConflicts(conflictDates);
     }
   }, [currentStep, newMenu, dailyMenus]);
 
-  // Step nav
-  const handleNext = () => {
+  function handleNext() {
     if (currentStep < WIZARD_STEPS.length - 1) {
       setCurrentStep((p) => p + 1);
     } else {
       createMenuMutation.mutate();
       resetWizard();
     }
-  };
-  const handleBack = () => {
+  }
+  function handleBack() {
     if (currentStep > 0) {
       setCurrentStep((p) => p - 1);
     } else {
       resetWizard();
     }
-  };
-
+  }
   function resetWizard() {
     setIsDialogOpen(false);
     setCurrentStep(0);
-    setConflicts([]);
     setPreviewDates([]);
+    setConflicts([]);
     setNewMenu({
       dateRange: { from: new Date(), to: new Date() },
       repeat_pattern: "none",
       active: true,
-      firstCourse: "",
-      secondCourse: "",
-      previewDates: [],
+      firstCourses: [""],
+      secondCourses: [""],
+      previewDates: []
     });
   }
 
   function updateMenu(vals: Partial<NewMenu>) {
-    setNewMenu((cur) => ({ ...cur, ...vals }));
+    setNewMenu((prev) => ({ ...prev, ...vals }));
   }
 
-  // Edit existing menu via wizard
-  function handleEditMenu(menu: DailyMenu) {
-    // Example approach: fill wizard with existing data
-    setNewMenu({
-      dateRange: {
-        from: new Date(menu.date),
-        to: new Date(menu.date),
-      },
-      repeat_pattern: menu.repeat_pattern,
-      active: menu.active,
-      firstCourse:
-        menu.daily_menu_items?.find((i) => i.course_type === "first")?.course_name || "",
-      secondCourse:
-        menu.daily_menu_items?.find((i) => i.course_type === "second")?.course_name || "",
-      previewDates: [],
-    });
-    setIsDialogOpen(true);
-  }
-
-  // Toggling status from the UI
-  function handleToggleMenuStatus(id: string, newStatus: boolean) {
-    toggleMenuStatusMutation.mutate({ id, newStatus });
-  }
-
-  // Wizard steps UI
+  /* ------------------------------------------------------------------------
+     4.1) Step content 
+  ------------------------------------------------------------------------*/
   function renderStepsIndicator() {
     return (
       <div className="flex justify-between mb-4">
@@ -416,12 +406,27 @@ export default function DailyMenuPage() {
             updateMenu({ dateRange: { from, to: dt || from } });
           }}
         />
+
+        {/* Optional: a DayPicker calendar to select a range */}
+        <div className="mt-4">
+          <Calendar
+            mode="range"
+            selected={newMenu.dateRange}
+            onSelect={(range) => {
+              if (range?.from) {
+                updateMenu({
+                  dateRange: { from: range.from, to: range.to || range.from }
+                });
+              }
+            }}
+            locale={es}
+          />
+        </div>
       </div>
     );
   }
 
   function renderPatternStep() {
-    const { repeat_pattern } = newMenu;
     return (
       <div className="space-y-4">
         {(["none", "weekly", "monthly"] as const).map((val) => (
@@ -430,12 +435,16 @@ export default function DailyMenuPage() {
             onClick={() => updateMenu({ repeat_pattern: val })}
             className={cn(
               "border p-3 rounded cursor-pointer hover:border-primary transition-colors",
-              repeat_pattern === val && "border-primary bg-primary/5"
+              newMenu.repeat_pattern === val && "border-primary bg-primary/5"
             )}
           >
             <p className="font-medium capitalize mb-1">{val}</p>
             <p className="text-sm text-muted-foreground">
-              {PATTERN_DESCRIPTIONS[val]}
+              {val === "none"
+                ? "One-time: Creates a menu only for the selected date(s)."
+                : val === "weekly"
+                ? "Weekly: Automatically create menus every week."
+                : "Monthly: Automatically create menus on the same date each month."}
             </p>
           </div>
         ))}
@@ -443,22 +452,82 @@ export default function DailyMenuPage() {
     );
   }
 
+  // For multi-items in "firstCourses" and "secondCourses"
   function renderCoursesStep() {
     return (
-      <div className="space-y-4">
-        <div>
-          <Label>First Course</Label>
-          <Input
-            value={newMenu.firstCourse}
-            onChange={(e) => updateMenu({ firstCourse: e.target.value })}
-          />
+      <div className="space-y-6">
+        {/* First Courses */}
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <Label className="text-lg font-semibold">First Courses</Label>
+            <Button variant="outline" size="sm" onClick={() => {
+              updateMenu({ firstCourses: [...newMenu.firstCourses, ""] });
+            }}>
+              + Add Another First
+            </Button>
+          </div>
+          {newMenu.firstCourses.map((course, index) => (
+            <div key={`first-${index}`} className="flex gap-2">
+              <Input
+                value={course}
+                onChange={(e) => {
+                  const updated = [...newMenu.firstCourses];
+                  updated[index] = e.target.value;
+                  updateMenu({ firstCourses: updated });
+                }}
+                placeholder={`First Course ${index + 1}`}
+              />
+              {newMenu.firstCourses.length > 1 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const updated = newMenu.firstCourses.filter((_, i) => i !== index);
+                    updateMenu({ firstCourses: updated.length ? updated : [""] });
+                  }}
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+          ))}
         </div>
-        <div>
-          <Label>Second Course</Label>
-          <Input
-            value={newMenu.secondCourse}
-            onChange={(e) => updateMenu({ secondCourse: e.target.value })}
-          />
+
+        {/* Second Courses */}
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <Label className="text-lg font-semibold">Second Courses</Label>
+            <Button variant="outline" size="sm" onClick={() => {
+              updateMenu({ secondCourses: [...newMenu.secondCourses, ""] });
+            }}>
+              + Add Another Second
+            </Button>
+          </div>
+          {newMenu.secondCourses.map((course, index) => (
+            <div key={`second-${index}`} className="flex gap-2">
+              <Input
+                value={course}
+                onChange={(e) => {
+                  const updated = [...newMenu.secondCourses];
+                  updated[index] = e.target.value;
+                  updateMenu({ secondCourses: updated });
+                }}
+                placeholder={`Second Course ${index + 1}`}
+              />
+              {newMenu.secondCourses.length > 1 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const updated = newMenu.secondCourses.filter((_, i) => i !== index);
+                    updateMenu({ secondCourses: updated.length ? updated : [""] });
+                  }}
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -479,6 +548,7 @@ export default function DailyMenuPage() {
             <p className="text-red-500">No valid dates selected.</p>
           )}
         </div>
+
         <div>
           <strong>Conflicts found:</strong>{" "}
           {conflicts.length ? (
@@ -491,33 +561,50 @@ export default function DailyMenuPage() {
             <span className="text-muted-foreground">None</span>
           )}
         </div>
+
         <div>
-          <strong>Courses:</strong>
-          <p className="ml-4">
-            <em>First:</em>{" "}
-            {newMenu.firstCourse || <span className="text-muted-foreground">N/A</span>}
-            <br />
-            <em>Second:</em>{" "}
-            {newMenu.secondCourse || <span className="text-muted-foreground">N/A</span>}
-          </p>
+          <strong>First Courses:</strong>
+          <ul className="list-disc list-inside ml-4 mt-1">
+            {newMenu.firstCourses.map((course, index) => (
+              <li key={`preview-first-${index}`}>
+                {course || <span className="text-muted-foreground">Empty</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <strong>Second Courses:</strong>
+          <ul className="list-disc list-inside ml-4 mt-1">
+            {newMenu.secondCourses.map((course, index) => (
+              <li key={`preview-second-${index}`}>
+                {course || <span className="text-muted-foreground">Empty</span>}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     );
   }
 
   function renderStepContent() {
-    const stepKey = WIZARD_STEPS[currentStep]?.key;
-    if (stepKey === "date") return renderDateStep();
-    if (stepKey === "pattern") return renderPatternStep();
-    if (stepKey === "courses") return renderCoursesStep();
-    if (stepKey === "preview") return renderPreviewStep();
-    return null;
+    switch (WIZARD_STEPS[currentStep]?.key) {
+      case "date":
+        return renderDateStep();
+      case "pattern":
+        return renderPatternStep();
+      case "courses":
+        return renderCoursesStep();
+      case "preview":
+        return renderPreviewStep();
+      default:
+        return null;
+    }
   }
 
-  // ----------------------------------------------------------------
-  // Calendar Modifiers
-  // Color code each type
-  // ----------------------------------------------------------------
+  /* ------------------------------------------------------------------------
+     5) Calendar color-coding
+  ------------------------------------------------------------------------*/
+  // Build modifiers for color-coded days:
   const modifiers = {
     hasActiveOneTime: dailyMenus
       .filter((m) => m.active && m.repeat_pattern === "none")
@@ -530,31 +617,23 @@ export default function DailyMenuPage() {
       .map((m) => new Date(m.date)),
     hasInactiveMenu: dailyMenus
       .filter((m) => !m.active)
-      .map((m) => new Date(m.date)),
-  };
-  const modifiersStyles = {
-    hasActiveOneTime: { backgroundColor: "var(--primary)", opacity: 0.4 },
-    hasActiveWeekly: { backgroundColor: "#3B82F6", opacity: 0.4 },   // blue
-    hasActiveMonthly: { backgroundColor: "#8B5CF6", opacity: 0.4 }, // purple
-    hasInactiveMenu: { backgroundColor: "var(--muted)", opacity: 0.4 },
+      .map((m) => new Date(m.date))
   };
 
-  // ----------------------------------------------------------------
-  // RENDER
-  // ----------------------------------------------------------------
+  // Style them differently
+  const modifiersStyles = {
+    hasActiveOneTime: { backgroundColor: "var(--primary)", opacity: 0.3 },
+    hasActiveWeekly: { backgroundColor: "#3B82F6", opacity: 0.3 },  // Blue
+    hasActiveMonthly: { backgroundColor: "#8B5CF6", opacity: 0.3 }, // Purple
+    hasInactiveMenu: { backgroundColor: "var(--muted)", opacity: 0.3 }
+  };
+
+  /* ------------------------------------------------------------------------
+     6) Render
+  ------------------------------------------------------------------------*/
   return (
     <main className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Daily Menus</h1>
-        <Button
-          onClick={() => {
-            resetWizard();
-            setIsDialogOpen(true);
-          }}
-        >
-          Create
-        </Button>
-      </div>
+      <h1 className="text-2xl font-bold mb-4">Daily Menus (Multi-item) with Calendar</h1>
 
       {error && (
         <Alert variant="destructive">
@@ -562,53 +641,64 @@ export default function DailyMenuPage() {
         </Alert>
       )}
 
-      {isLoading ? (
-        <div className="flex justify-center items-center h-20">
-          <div className="animate-spin h-8 w-8 border-b-2 border-primary" />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* LEFT: Calendar */}
-          <div className="bg-white rounded-lg border p-6 space-y-4">
-            <h2 className="text-xl font-semibold">Calendar View</h2>
-            <Calendar
-              modifiers={modifiers}
-              modifiersStyles={modifiersStyles}
-              mode="single"
-              selected={selectedDate || undefined}
-              onSelect={(date) => date && setSelectedDate(date)}
-              month={selectedMonth}
-              onMonthChange={setSelectedMonth}
-              showOutsideDays
-              className="w-full"
-            />
-            {/* Legend */}
-            <div className="flex flex-wrap items-center gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-primary opacity-40" />
-                <span>One-time Menu</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-blue-500 opacity-40" />
-                <span>Weekly Menu</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-purple-500 opacity-40" />
-                <span>Monthly Menu</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-muted opacity-40" />
-                <span>Inactive Menu</span>
-              </div>
+      {/* Grid layout: left side calendar, right side Active Menus list */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Left: Calendar */}
+        <div className="bg-white rounded-lg border p-6 space-y-4">
+          <h2 className="text-xl font-semibold">Calendar View</h2>
+          <Calendar
+            mode="single"
+            // For color-coded days:
+            modifiers={modifiers}
+            modifiersStyles={modifiersStyles}
+            // If you want to handle clicks on days:
+            // onSelect={(day) => console.log("Clicked day:", day)}
+            locale={es}
+            showOutsideDays
+            className="w-full"
+          />
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-4 text-sm mt-4">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-primary opacity-30" />
+              <span>One-time</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-blue-500 opacity-30" />
+              <span>Weekly</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-purple-500 opacity-30" />
+              <span>Monthly</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-muted opacity-30" />
+              <span>Inactive</span>
             </div>
           </div>
 
-          {/* RIGHT: Active Menus */}
-          <div className="bg-white rounded-lg border p-6">
-            <h2 className="text-xl font-semibold mb-4">Active Menus</h2>
+          {/* Button to open wizard to create a new menu */}
+          <div className="mt-6">
+            <Button onClick={() => {
+              resetWizard();
+              setIsDialogOpen(true);
+            }}>
+              Create New Menu
+            </Button>
+          </div>
+        </div>
+
+        {/* Right: Active Menus */}
+        <div className="bg-white rounded-lg border p-6">
+          <h2 className="text-xl font-semibold mb-4">Active Menus</h2>
+          {isLoading ? (
+            <div className="flex justify-center items-center h-10">
+              <div className="animate-spin h-6 w-6 border-b-2 border-primary" />
+            </div>
+          ) : (
             <div className="space-y-4">
               {dailyMenus
-                .filter((menu) => menu.active)
+                .filter((m) => m.active)
                 .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
                 .map((menu) => (
                   <div
@@ -636,30 +726,40 @@ export default function DailyMenuPage() {
                           : "Monthly"}
                       </span>
                     </div>
+
+                    {/* Show items grouped by type */}
                     <div className="space-y-1 text-sm">
-                      {(menu.daily_menu_items || [])
-                        .sort((a, b) => a.display_order - b.display_order)
-                        .map((item) => (
-                          <div key={item.id}>
-                            <span className="font-medium capitalize">
-                              {item.course_type}:
-                            </span>{" "}
-                            {item.course_name}
-                          </div>
-                        ))}
+                      <strong>First:</strong>
+                      <ul className="list-disc ml-4">
+                        {menu.daily_menu_items
+                          ?.filter((it) => it.course_type === "first")
+                          .sort((a, b) => a.display_order - b.display_order)
+                          .map((item) => (
+                            <li key={item.id}>{item.course_name}</li>
+                          ))}
+                      </ul>
+                      <strong>Second:</strong>
+                      <ul className="list-disc ml-4">
+                        {menu.daily_menu_items
+                          ?.filter((it) => it.course_type === "second")
+                          .sort((a, b) => a.display_order - b.display_order)
+                          .map((item) => (
+                            <li key={item.id}>{item.course_name}</li>
+                          ))}
+                      </ul>
                     </div>
-                    <div className="mt-3 flex gap-2">
+
+                    {/* Deactivate button, if we want to toggle */}
+                    <div className="mt-3">
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleEditMenu(menu)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleToggleMenuStatus(menu.id, false)}
+                        onClick={() =>
+                          toggleMenuStatus.mutate({
+                            id: menu.id,
+                            newStatus: false
+                          })
+                        }
                       >
                         Deactivate
                       </Button>
@@ -667,11 +767,11 @@ export default function DailyMenuPage() {
                   </div>
                 ))}
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Wizard for Creating/Editing */}
+      {/* Wizard Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
@@ -682,6 +782,7 @@ export default function DailyMenuPage() {
           </DialogHeader>
 
           {renderStepsIndicator()}
+
           <div className="py-4">{renderStepContent()}</div>
 
           <DialogFooter>
