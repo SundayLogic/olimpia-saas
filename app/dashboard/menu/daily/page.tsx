@@ -3,9 +3,15 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { addWeeks, addMonths, addDays, format, isSameDay } from "date-fns";
+import {
+  addDays,
+  addWeeks,
+  addMonths,
+  format,
+  isSameDay
+} from "date-fns";
 import { es } from "date-fns/locale";
-import { DateRange } from "react-day-picker";
+import { DateRange } from "react-day-picker"; // For the date-range wizard
 
 // Replace these imports with your actual UI components:
 import { Button } from "@/components/ui/button";
@@ -18,14 +24,16 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
+  DialogFooter
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
+// If you have a custom Calendar or you use react-day-picker directly:
+import { Calendar } from "@/components/ui/calendar";
+
 // --------------------------------------------------------------------
-// 1) Minimal 'Database' type to fix unknown fields
-//    (Replace with your real schema definition.)
+// 1) Minimal 'Database' type (Replace with your real schema).
 // --------------------------------------------------------------------
 interface Database {
   public: {
@@ -54,7 +62,7 @@ interface Database {
 }
 
 // --------------------------------------------------------------------
-// 2) Local types for your code
+// 2) Local Types
 // --------------------------------------------------------------------
 interface DailyMenuItem {
   id: string;
@@ -83,45 +91,28 @@ interface NewMenu {
   previewDates?: string[];
 }
 
-// For wizard steps
+// Steps for our wizard
 interface WizardStep {
   key: "date" | "pattern" | "courses" | "preview";
   title: string;
   description: string;
 }
 
-// A bit more descriptive pattern help text:
+const WIZARD_STEPS: WizardStep[] = [
+  { key: "date", title: "Select Dates", description: "Choose the date range for your menus." },
+  { key: "pattern", title: "Set Repeat Pattern", description: "One-time, weekly, or monthly?" },
+  { key: "courses", title: "Courses", description: "Enter the first and second course." },
+  { key: "preview", title: "Preview & Confirm", description: "Review before creating menus." }
+];
+
 const PATTERN_DESCRIPTIONS = {
   none: "Creates a menu only on the selected date(s)",
   weekly: "Automatically creates menus every week from start to end date",
-  monthly: "Automatically creates menus on the same date each month",
+  monthly: "Automatically creates menus on the same date each month"
 };
 
-const WIZARD_STEPS: WizardStep[] = [
-  {
-    key: "date",
-    title: "Select Dates",
-    description: "Choose the date range for your menus.",
-  },
-  {
-    key: "pattern",
-    title: "Set Repeat Pattern",
-    description: "One-time, weekly, or monthly?",
-  },
-  {
-    key: "courses",
-    title: "Courses",
-    description: "Enter the first and second course for the menu.",
-  },
-  {
-    key: "preview",
-    title: "Preview & Confirm",
-    description: "Review final details before creating your menus.",
-  },
-];
-
 // --------------------------------------------------------------------
-// 3) Utility functions
+// 3) Utility Functions
 // --------------------------------------------------------------------
 function generatePreviewDates(
   startDate: Date,
@@ -130,8 +121,9 @@ function generatePreviewDates(
 ): Date[] {
   const dates: Date[] = [];
   let current = startDate;
-  const final = endDate || startDate;
-  while (current <= final) {
+  const finalDate = endDate || startDate;
+
+  while (current <= finalDate) {
     dates.push(current);
     if (pattern === "weekly") current = addWeeks(current, 1);
     else if (pattern === "monthly") current = addMonths(current, 1);
@@ -147,8 +139,9 @@ function checkDateConflicts(dates: Date[], existingMenus: DailyMenu[]): string[]
   return conflicts.map((date) => format(date, "PPP", { locale: es }));
 }
 
+
 // --------------------------------------------------------------------
-// 4) Data fetcher
+// 4) Data Fetcher
 // --------------------------------------------------------------------
 async function fetchDailyMenus(
   supabase: ReturnType<typeof createClientComponentClient<Database>>
@@ -157,30 +150,28 @@ async function fetchDailyMenus(
     .from("daily_menus")
     .select(
       `id, date, repeat_pattern, active, scheduled_for, created_at,
-       daily_menu_items (
-         id, course_name, course_type, display_order, daily_menu_id
-       )`
+       daily_menu_items (id, course_name, course_type, display_order, daily_menu_id)`
     );
   if (error) throw error;
   return (data ?? []) as DailyMenu[];
 }
 
 // --------------------------------------------------------------------
-// 5) Component
+// 5) Main Component
 // --------------------------------------------------------------------
 export default function DailyMenuPage() {
-  const supabase = createClientComponentClient<Database>(); 
+  const supabase = createClientComponentClient<Database>();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Wizard states
+  // Wizard state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [previewDates, setPreviewDates] = useState<string[]>([]);
   const [conflicts, setConflicts] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false); // For loading transitions
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Data
+  // Data for new menu creation
   const [newMenu, setNewMenu] = useState<NewMenu>({
     dateRange: { from: new Date(), to: new Date() },
     repeat_pattern: "none",
@@ -190,7 +181,11 @@ export default function DailyMenuPage() {
     previewDates: [],
   });
 
-  // Query
+  // For the calendar
+  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  // Query daily menus
   const {
     data: dailyMenus = [],
     isLoading,
@@ -200,16 +195,20 @@ export default function DailyMenuPage() {
     queryFn: () => fetchDailyMenus(supabase),
   });
 
+  // ----------------------------------------------------------------
   // Mutations
+  // ----------------------------------------------------------------
+  // (1) Create menus wizard
   const createMenuMutation = useMutation({
     mutationFn: async () => {
-      setIsSubmitting(true); // show loading
+      setIsSubmitting(true);
       const { from, to } = newMenu.dateRange;
       if (!from) throw new Error("Please select a start date first!");
+
       const finalEnd = to || from;
       let dateList = generatePreviewDates(from, finalEnd, newMenu.repeat_pattern);
 
-      // Check conflicts
+      // check conflicts
       const conflictFound = checkDateConflicts(dateList, dailyMenus);
       if (conflictFound.length > 0) {
         const confirmSkip = window.confirm(
@@ -224,7 +223,7 @@ export default function DailyMenuPage() {
       }
       if (!dateList.length) throw new Error("No valid dates remain to schedule!");
 
-      // Insert into daily_menus
+      // Insert daily_menus
       const rows = dateList.map((d) => ({
         date: format(d, "yyyy-MM-dd"),
         repeat_pattern: newMenu.repeat_pattern,
@@ -269,11 +268,37 @@ export default function DailyMenuPage() {
       }
     },
     onSettled: () => {
-      setIsSubmitting(false); // hide loading
+      setIsSubmitting(false);
     },
   });
 
-  // Step-based side effects (Preview)
+  // (2) Toggle menu status
+  const toggleMenuStatusMutation = useMutation<
+    void, // return type
+    Error, // error type
+    { id: string; newStatus: boolean } // variables
+  >({
+    mutationFn: async ({ id, newStatus }) => {
+      const { error } = await supabase
+        .from("daily_menus")
+        .update({ active: newStatus })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dailyMenus"] });
+      toast({ title: "Success", description: "Menu status updated successfully" });
+    },
+    onError: (err) => {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to update status",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Step-based wizard side effect
   useEffect(() => {
     if (currentStep === 3) {
       const { from, to } = newMenu.dateRange;
@@ -286,12 +311,11 @@ export default function DailyMenuPage() {
     }
   }, [currentStep, newMenu, dailyMenus]);
 
-  // Step navigation
+  // Step nav
   const handleNext = () => {
     if (currentStep < WIZARD_STEPS.length - 1) {
       setCurrentStep((p) => p + 1);
     } else {
-      // finalize creation
       createMenuMutation.mutate();
       resetWizard();
     }
@@ -303,7 +327,7 @@ export default function DailyMenuPage() {
       resetWizard();
     }
   };
-  // Reset Wizard
+
   function resetWizard() {
     setIsDialogOpen(false);
     setCurrentStep(0);
@@ -323,7 +347,31 @@ export default function DailyMenuPage() {
     setNewMenu((cur) => ({ ...cur, ...vals }));
   }
 
-  // Visual Steps indicator
+  // Edit existing menu via wizard
+  function handleEditMenu(menu: DailyMenu) {
+    // Example approach: fill wizard with existing data
+    setNewMenu({
+      dateRange: {
+        from: new Date(menu.date),
+        to: new Date(menu.date),
+      },
+      repeat_pattern: menu.repeat_pattern,
+      active: menu.active,
+      firstCourse:
+        menu.daily_menu_items?.find((i) => i.course_type === "first")?.course_name || "",
+      secondCourse:
+        menu.daily_menu_items?.find((i) => i.course_type === "second")?.course_name || "",
+      previewDates: [],
+    });
+    setIsDialogOpen(true);
+  }
+
+  // Toggling status from the UI
+  function handleToggleMenuStatus(id: string, newStatus: boolean) {
+    toggleMenuStatusMutation.mutate({ id, newStatus });
+  }
+
+  // Wizard steps UI
   function renderStepsIndicator() {
     return (
       <div className="flex justify-between mb-4">
@@ -343,16 +391,6 @@ export default function DailyMenuPage() {
         })}
       </div>
     );
-  }
-
-  // Render step content
-  function renderStepContent() {
-    const stepKey = WIZARD_STEPS[currentStep]?.key;
-    if (stepKey === "date") return renderDateStep();
-    if (stepKey === "pattern") return renderPatternStep();
-    if (stepKey === "courses") return renderCoursesStep();
-    if (stepKey === "preview") return renderPreviewStep();
-    return null;
   }
 
   function renderDateStep() {
@@ -456,17 +494,53 @@ export default function DailyMenuPage() {
         <div>
           <strong>Courses:</strong>
           <p className="ml-4">
-            <em>First:</em> {newMenu.firstCourse || <span className="text-muted-foreground">N/A</span>}
+            <em>First:</em>{" "}
+            {newMenu.firstCourse || <span className="text-muted-foreground">N/A</span>}
             <br />
-            <em>Second:</em> {newMenu.secondCourse || <span className="text-muted-foreground">N/A</span>}
+            <em>Second:</em>{" "}
+            {newMenu.secondCourse || <span className="text-muted-foreground">N/A</span>}
           </p>
         </div>
       </div>
     );
   }
 
+  function renderStepContent() {
+    const stepKey = WIZARD_STEPS[currentStep]?.key;
+    if (stepKey === "date") return renderDateStep();
+    if (stepKey === "pattern") return renderPatternStep();
+    if (stepKey === "courses") return renderCoursesStep();
+    if (stepKey === "preview") return renderPreviewStep();
+    return null;
+  }
+
   // ----------------------------------------------------------------
-  // 5-H) RENDER
+  // Calendar Modifiers
+  // Color code each type
+  // ----------------------------------------------------------------
+  const modifiers = {
+    hasActiveOneTime: dailyMenus
+      .filter((m) => m.active && m.repeat_pattern === "none")
+      .map((m) => new Date(m.date)),
+    hasActiveWeekly: dailyMenus
+      .filter((m) => m.active && m.repeat_pattern === "weekly")
+      .map((m) => new Date(m.date)),
+    hasActiveMonthly: dailyMenus
+      .filter((m) => m.active && m.repeat_pattern === "monthly")
+      .map((m) => new Date(m.date)),
+    hasInactiveMenu: dailyMenus
+      .filter((m) => !m.active)
+      .map((m) => new Date(m.date)),
+  };
+  const modifiersStyles = {
+    hasActiveOneTime: { backgroundColor: "var(--primary)", opacity: 0.4 },
+    hasActiveWeekly: { backgroundColor: "#3B82F6", opacity: 0.4 },   // blue
+    hasActiveMonthly: { backgroundColor: "#8B5CF6", opacity: 0.4 }, // purple
+    hasInactiveMenu: { backgroundColor: "var(--muted)", opacity: 0.4 },
+  };
+
+  // ----------------------------------------------------------------
+  // RENDER
   // ----------------------------------------------------------------
   return (
     <main className="container mx-auto p-6 space-y-6">
@@ -492,31 +566,112 @@ export default function DailyMenuPage() {
         <div className="flex justify-center items-center h-20">
           <div className="animate-spin h-8 w-8 border-b-2 border-primary" />
         </div>
-      ) : dailyMenus.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No daily menus found.</p>
       ) : (
-        <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {dailyMenus.map((m) => (
-            <li key={m.id} className="p-4 border rounded-md">
-              <p className="text-sm text-muted-foreground mb-2">
-                {format(new Date(m.date), "PPP", { locale: es })}
-              </p>
-              <p className="text-xs font-medium">
-                Pattern: {m.repeat_pattern}, Active: {m.active ? "Yes" : "No"}
-              </p>
-              <div className="mt-2 space-y-1 text-sm">
-                {(m.daily_menu_items || []).map((item) => (
-                  <div key={item.id}>
-                    <strong className="capitalize">{item.course_type}:</strong>{" "}
-                    {item.course_name}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* LEFT: Calendar */}
+          <div className="bg-white rounded-lg border p-6 space-y-4">
+            <h2 className="text-xl font-semibold">Calendar View</h2>
+            <Calendar
+              modifiers={modifiers}
+              modifiersStyles={modifiersStyles}
+              mode="single"
+              selected={selectedDate || undefined}
+              onSelect={(date) => date && setSelectedDate(date)}
+              month={selectedMonth}
+              onMonthChange={setSelectedMonth}
+              showOutsideDays
+              className="w-full"
+            />
+            {/* Legend */}
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-primary opacity-40" />
+                <span>One-time Menu</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-blue-500 opacity-40" />
+                <span>Weekly Menu</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-purple-500 opacity-40" />
+                <span>Monthly Menu</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-muted opacity-40" />
+                <span>Inactive Menu</span>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: Active Menus */}
+          <div className="bg-white rounded-lg border p-6">
+            <h2 className="text-xl font-semibold mb-4">Active Menus</h2>
+            <div className="space-y-4">
+              {dailyMenus
+                .filter((menu) => menu.active)
+                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                .map((menu) => (
+                  <div
+                    key={menu.id}
+                    className="border rounded-lg p-4 hover:shadow-sm transition-shadow"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="font-medium">
+                        {format(new Date(menu.date), "PPP", { locale: es })}
+                      </div>
+                      <span
+                        className={cn(
+                          "text-xs px-2 py-1 rounded-full",
+                          menu.repeat_pattern === "weekly"
+                            ? "bg-blue-100 text-blue-700"
+                            : menu.repeat_pattern === "monthly"
+                            ? "bg-purple-100 text-purple-700"
+                            : "bg-gray-100 text-gray-700"
+                        )}
+                      >
+                        {menu.repeat_pattern === "none"
+                          ? "One-time"
+                          : menu.repeat_pattern === "weekly"
+                          ? "Weekly"
+                          : "Monthly"}
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      {(menu.daily_menu_items || [])
+                        .sort((a, b) => a.display_order - b.display_order)
+                        .map((item) => (
+                          <div key={item.id}>
+                            <span className="font-medium capitalize">
+                              {item.course_type}:
+                            </span>{" "}
+                            {item.course_name}
+                          </div>
+                        ))}
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleEditMenu(menu)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleToggleMenuStatus(menu.id, false)}
+                      >
+                        Deactivate
+                      </Button>
+                    </div>
                   </div>
                 ))}
-              </div>
-            </li>
-          ))}
-        </ul>
+            </div>
+          </div>
+        </div>
       )}
 
+      {/* Wizard for Creating/Editing */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
@@ -526,9 +681,7 @@ export default function DailyMenuPage() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Steps Indicator */}
           {renderStepsIndicator()}
-
           <div className="py-4">{renderStepContent()}</div>
 
           <DialogFooter>
