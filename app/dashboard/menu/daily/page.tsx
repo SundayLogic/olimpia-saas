@@ -167,7 +167,7 @@ async function fetchDailyMenus(
 }
 
 /* ------------------------------------------------------------------------
-   4) Main component
+   Main component
 ------------------------------------------------------------------------ */
 export default function DailyMenuPage() {
   const supabase = createClientComponentClient<Database>();
@@ -604,7 +604,6 @@ export default function DailyMenuPage() {
   /* ------------------------------------------------------------------------
      5) Calendar color-coding
   ------------------------------------------------------------------------*/
-  // Build modifiers for color-coded days:
   const modifiers = {
     hasActiveOneTime: dailyMenus
       .filter((m) => m.active && m.repeat_pattern === "none")
@@ -619,13 +618,27 @@ export default function DailyMenuPage() {
       .filter((m) => !m.active)
       .map((m) => new Date(m.date))
   };
-
-  // Style them differently
   const modifiersStyles = {
     hasActiveOneTime: { backgroundColor: "var(--primary)", opacity: 0.3 },
     hasActiveWeekly: { backgroundColor: "#3B82F6", opacity: 0.3 },  // Blue
     hasActiveMonthly: { backgroundColor: "#8B5CF6", opacity: 0.3 }, // Purple
     hasInactiveMenu: { backgroundColor: "var(--muted)", opacity: 0.3 }
+  };
+
+  /* -----------------------------
+     Editing Menu states & handlers
+  ------------------------------*/
+  const [editingMenu, setEditingMenu] = useState<DailyMenu | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
+  const handleEditMenu = (menu: DailyMenu) => {
+    setEditingMenu(menu);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleCloseEditDialog = () => {
+    setEditingMenu(null);
+    setIsEditDialogOpen(false);
   };
 
   /* ------------------------------------------------------------------------
@@ -648,11 +661,8 @@ export default function DailyMenuPage() {
           <h2 className="text-xl font-semibold">Calendar View</h2>
           <Calendar
             mode="single"
-            // For color-coded days:
             modifiers={modifiers}
             modifiersStyles={modifiersStyles}
-            // If you want to handle clicks on days:
-            // onSelect={(day) => console.log("Clicked day:", day)}
             locale={es}
             showOutsideDays
             className="w-full"
@@ -749,8 +759,15 @@ export default function DailyMenuPage() {
                       </ul>
                     </div>
 
-                    {/* Deactivate button, if we want to toggle */}
-                    <div className="mt-3">
+                    {/* Action buttons */}
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleEditMenu(menu)}
+                      >
+                        Edit
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"
@@ -801,6 +818,197 @@ export default function DailyMenuPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Menu Dialog - inline subcomponent */}
+      {editingMenu && (
+        <EditMenuDialog
+          menu={editingMenu}
+          isOpen={isEditDialogOpen}
+          onClose={handleCloseEditDialog}
+        />
+      )}
     </main>
+  );
+}
+
+/* ------------------------------------------------------------------------
+   Inline EditMenuDialog Subcomponent
+------------------------------------------------------------------------ */
+function EditMenuDialog({
+  isOpen,
+  menu,
+  onClose
+}: {
+  isOpen: boolean;
+  menu: DailyMenu;
+  onClose: () => void;
+}) {
+  const supabase = createClientComponentClient<Database>();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Separate the existing items into firstCourses and secondCourses
+  const [firstCourses, setFirstCourses] = useState<string[]>(
+    menu.daily_menu_items
+      ? menu.daily_menu_items
+          .filter((i) => i.course_type === "first")
+          .sort((a, b) => a.display_order - b.display_order)
+          .map((i) => i.course_name)
+      : []
+  );
+  const [secondCourses, setSecondCourses] = useState<string[]>(
+    menu.daily_menu_items
+      ? menu.daily_menu_items
+          .filter((i) => i.course_type === "second")
+          .sort((a, b) => a.display_order - b.display_order)
+          .map((i) => i.course_name)
+      : []
+  );
+
+  // A simple approach: remove all items for this menu & re-insert them
+  const updateMenuMutation = useMutation({
+    mutationFn: async () => {
+      // 1) Delete old items
+      const { error: delErr } = await supabase
+        .from("daily_menu_items")
+        .delete()
+        .eq("daily_menu_id", menu.id);
+      if (delErr) throw delErr;
+
+      // 2) Insert new items
+      const allInserts: Omit<DailyMenuItem, "id">[] = [
+        // first courses
+        ...firstCourses.map((course, idx) => ({
+          daily_menu_id: menu.id,
+          course_name: course,
+          course_type: "first",
+          display_order: idx + 1
+        })),
+        // second courses
+        ...secondCourses.map((course, idx) => ({
+          daily_menu_id: menu.id,
+          course_name: course,
+          course_type: "second",
+          display_order: idx + 1
+        }))
+      ];
+
+      if (allInserts.length) {
+        const { error: insertErr } = await supabase
+          .from("daily_menu_items")
+          .insert(allInserts);
+        if (insertErr) throw insertErr;
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["dailyMenus"] });
+      toast({ title: "Success", description: "Menu updated successfully" });
+      onClose();
+    },
+    onError: (err) => {
+      if (err instanceof Error) {
+        toast({ title: "Error", description: err.message, variant: "destructive" });
+      }
+    }
+  });
+
+  function handleSave() {
+    updateMenuMutation.mutate();
+  }
+
+  if (!isOpen) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Edit Menu Items</DialogTitle>
+          <DialogDescription>Edit the first/second courses for {menu.date}.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 py-4">
+          {/* First Courses */}
+          <div>
+            <Label className="text-lg font-semibold mb-2">First Courses</Label>
+            {firstCourses.map((fc, idx) => (
+              <div key={`fc-${idx}`} className="mt-2 flex gap-2">
+                <Input
+                  value={fc}
+                  onChange={(e) => {
+                    const updated = [...firstCourses];
+                    updated[idx] = e.target.value;
+                    setFirstCourses(updated);
+                  }}
+                />
+                {firstCourses.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const updated = firstCourses.filter((_, i) => i !== idx);
+                      setFirstCourses(updated);
+                    }}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => setFirstCourses((prev) => [...prev, ""])}
+            >
+              + Add Another First
+            </Button>
+          </div>
+
+          {/* Second Courses */}
+          <div>
+            <Label className="text-lg font-semibold mb-2">Second Courses</Label>
+            {secondCourses.map((sc, idx) => (
+              <div key={`sc-${idx}`} className="mt-2 flex gap-2">
+                <Input
+                  value={sc}
+                  onChange={(e) => {
+                    const updated = [...secondCourses];
+                    updated[idx] = e.target.value;
+                    setSecondCourses(updated);
+                  }}
+                />
+                {secondCourses.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const updated = secondCourses.filter((_, i) => i !== idx);
+                      setSecondCourses(updated);
+                    }}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => setSecondCourses((prev) => [...prev, ""])}
+            >
+              + Add Another Second
+            </Button>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={updateMenuMutation.isLoading}>
+            {updateMenuMutation.isLoading ? "Saving..." : "Save Changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
