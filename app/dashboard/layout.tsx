@@ -1,6 +1,6 @@
-// app/dashboard/layout.tsx (Server Component)
+// app/dashboard/layout.tsx
 import type { Metadata } from "next";
-import DashboardClientLayout from "./_client"; // <--- The new client layout
+import DashboardClientLayout from "./_client"; // The client layout
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -12,8 +12,6 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Here you could do server checks, fetch data, etc.
-  // Then pass the children to the client layout.
-
+  // (Server checks, server fetching, etc. if needed)
   return <DashboardClientLayout>{children}</DashboardClientLayout>;
 }

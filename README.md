@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2025-01-15 23:59:42
+Generated on: 2025-01-16 00:18:57
 
 ## Documented Directories:
 - app/
@@ -45,6 +45,7 @@ app/
             ├── settings/
             │   ├── pages.tsx
         │   
+        │   ├── _client.tsx
         │   ├── layout.tsx
         │   ├── page.tsx
     │   
@@ -4545,6 +4546,7 @@ export default function WinePage() {
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { useTranslation } from "react-i18next"; // <--- ADDED
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Image from "next/image";
 import { Plus, Search, Edit } from "lucide-react";
@@ -4573,7 +4575,7 @@ type MultiSelectProps = {
   placeholder?: string;
 };
 
-// Dynamic imports for Dialog & MultiSelect
+// Dynamically import Dialog & MultiSelect
 const Dialog = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.Dialog));
 const DialogContent = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogContent));
 const DialogDescription = dynamic(() => import("@/components/ui/dialog").then((mod) => mod.DialogDescription));
@@ -4637,6 +4639,8 @@ export default function MenuPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const { t } = useTranslation("menuPage"); // <--- ADDED
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newItem, setNewItem] = useState<NewMenuItem>({
     name: "",
@@ -4655,6 +4659,7 @@ export default function MenuPage() {
     allergen_ids: [],
     image_path: "",
   });
+
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
@@ -4718,6 +4723,7 @@ export default function MenuPage() {
       )
       .order("name");
     if (error) throw error;
+
     const raw = data as RawMenuItemResponse[];
     return raw.map((i) => ({
       id: i.id,
@@ -4768,9 +4774,10 @@ export default function MenuPage() {
       );
     }
     if (selectedFilter !== "all") {
-      // Compare IDs as strings
       f = f.filter(
-        (i) => (i.category?.id === selectedFilter) || i.category_id.toString() === selectedFilter
+        (i) =>
+          (i.category?.id === selectedFilter) ||
+          i.category_id.toString() === selectedFilter
       );
     }
     return f;
@@ -4779,11 +4786,10 @@ export default function MenuPage() {
   // Create new item
   const handleCreateItem = async () => {
     try {
-      // Basic validation
       if (!newItem.name || !newItem.category_id || !newItem.price) {
         toast({
           title: "Error",
-          description: "Please fill in all required fields",
+          description: t("errors.fillRequiredFields"), // <--- translated
           variant: "destructive",
         });
         return;
@@ -4792,12 +4798,13 @@ export default function MenuPage() {
       if (isNaN(priceValue) || priceValue < 0) {
         toast({
           title: "Error",
-          description: "Please enter a valid positive price.",
+          description: t("errors.invalidPrice"),
           variant: "destructive",
         });
         return;
       }
-      // Insert the item
+
+      // Insert
       const { data: insertedItem, error: itemError } = await supabase
         .from("menu_items")
         .insert({
@@ -4811,7 +4818,7 @@ export default function MenuPage() {
         .single();
       if (itemError) throw itemError;
 
-      // Insert allergens if any
+      // Allergens
       if (newItem.allergen_ids.length > 0) {
         const assign = newItem.allergen_ids.map((allergenId) => ({
           menu_item_id: insertedItem.id,
@@ -4833,14 +4840,14 @@ export default function MenuPage() {
         active: true,
         allergen_ids: [],
       });
-      toast({ title: "Success", description: "Menu item created successfully" });
+      toast({ title: t("success"), description: t("itemCreated") });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to create menu item";
       toast({ title: "Error", description: msg, variant: "destructive" });
     }
   };
 
-  // Open edit dialog with item data
+  // Open edit dialog
   const handleEdit = useCallback((item: MenuItem) => {
     setEditForm({
       name: item.name || "",
@@ -4853,15 +4860,14 @@ export default function MenuPage() {
     setEditDialog({ open: true, item });
   }, []);
 
-  // Save item changes
+  // Save edit
   const handleSaveEdit = useCallback(async () => {
     if (!editDialog.item) return;
     try {
-      // Basic validation
       if (!editForm.name || !editForm.category_id || !editForm.price) {
         toast({
           title: "Error",
-          description: "Please fill in all required fields.",
+          description: t("errors.fillRequiredFields"),
           variant: "destructive",
         });
         return;
@@ -4870,7 +4876,7 @@ export default function MenuPage() {
       if (isNaN(priceValue) || priceValue < 0) {
         toast({
           title: "Error",
-          description: "Please enter a valid positive price.",
+          description: t("errors.invalidPrice"),
           variant: "destructive",
         });
         return;
@@ -4879,13 +4885,13 @@ export default function MenuPage() {
       if (isNaN(categoryId)) {
         toast({
           title: "Error",
-          description: "Please select a valid category.",
+          description: t("errors.invalidCategory"),
           variant: "destructive",
         });
         return;
       }
 
-      // Update the item
+      // Update
       const { error: itemError } = await supabase
         .from("menu_items")
         .update({
@@ -4898,14 +4904,14 @@ export default function MenuPage() {
         .eq("id", editDialog.item.id);
       if (itemError) throw itemError;
 
-      // Remove existing allergens for this item
+      // Remove old allergens
       const { error: deleteError } = await supabase
         .from("menu_item_allergens")
         .delete()
         .eq("menu_item_id", editDialog.item.id);
       if (deleteError) throw deleteError;
 
-      // Insert updated allergens
+      // Insert new allergens
       if (editForm.allergen_ids.length > 0) {
         const assign = editForm.allergen_ids.map((allergenId) => ({
           menu_item_id: editDialog.item!.id,
@@ -4917,17 +4923,16 @@ export default function MenuPage() {
         if (assignmentError) throw assignmentError;
       }
 
-      // Refresh query
       await queryClient.invalidateQueries({ queryKey: ["items"] });
-      toast({ title: "Success", description: "Menu item updated successfully." });
+      toast({ title: t("success"), description: t("itemUpdated") });
       setEditDialog({ open: false, item: null });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to update menu item";
       toast({ title: "Error", description: msg, variant: "destructive" });
     }
-  }, [editDialog.item, editForm, supabase, toast, queryClient]);
+  }, [editDialog.item, editForm, supabase, toast, queryClient, t]);
 
-  // Fetch images for the chosen category in the edit dialog
+  // Fetch images in chosen category
   useEffect(() => {
     const fetchImages = async () => {
       if (!editDialog.open || !editForm.category_id || categories.length === 0) {
@@ -4939,9 +4944,10 @@ export default function MenuPage() {
         setImages([]);
         return;
       }
-      // Convert category name to folder-friendly format
       const folderName = cat.name.toLowerCase().replace(/\s+/g, "-");
-      const { data: fileList, error } = await supabase.storage.from("menu").list(folderName);
+      const { data: fileList, error } = await supabase.storage
+        .from("menu")
+        .list(folderName);
       if (error || !fileList || fileList.length === 0) {
         setImages([]);
         return;
@@ -4971,7 +4977,7 @@ export default function MenuPage() {
     return (
       <div className="container p-6">
         <Alert variant="destructive">
-          <AlertDescription>Failed to load data.</AlertDescription>
+          <AlertDescription>{t("errors.failedLoadData")}</AlertDescription>
         </Alert>
       </div>
     );
@@ -4981,10 +4987,12 @@ export default function MenuPage() {
     return (
       <div className="container p-6">
         <Alert>
-          <AlertDescription>No menu items found.</AlertDescription>
+          <AlertDescription>{t("noMenuItemsFound")}</AlertDescription>
         </Alert>
         <div className="mt-4">
-          <Button onClick={() => setIsDialogOpen(true)}>Add Your First Item</Button>
+          <Button onClick={() => setIsDialogOpen(true)}>
+            {t("addYourFirstItem")}
+          </Button>
         </div>
       </div>
     );
@@ -4999,10 +5007,10 @@ export default function MenuPage() {
 
   return (
     <div className="container p-6">
-      <PageHeader heading="Menu Items" text="Manage your restaurant's menu selection">
+      <PageHeader heading={t("heading")} text={t("description")}>
         <Button onClick={() => setIsDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          Add Item
+          {t("addItem")}
         </Button>
       </PageHeader>
 
@@ -5015,19 +5023,20 @@ export default function MenuPage() {
               spellCheck="false"
               autoCorrect="off"
               type="text"
-              placeholder="Search menu items..."
+              placeholder={t("searchPlaceholder") || "Search..."}
               value={localSearchTerm}
               onChange={(e) => setLocalSearchTerm(e.target.value)}
               className="w-full pl-10"
+              onFocus={removeHighlightOnFocus}
             />
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           </div>
           <Select value={selectedFilter} onValueChange={(value) => setSelectedFilter(value)}>
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Filter by Category" />
+              <SelectValue placeholder={t("filterByCategory") || "Filter..."} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="all">{t("allCategories")}</SelectItem>
               {categories.map((c) => (
                 <SelectItem key={c.id} value={c.id.toString()}>
                   {c.name}
@@ -5052,7 +5061,7 @@ export default function MenuPage() {
                 size="sm"
                 onClick={() => handleEdit(item)}
                 className="h-8 w-8 p-0"
-                aria-label={`Edit ${item.name}`}
+                aria-label={t("editThisItem", { itemName: item.name })}
               >
                 <Edit className="h-4 w-4" />
               </Button>
@@ -5069,13 +5078,13 @@ export default function MenuPage() {
                   sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                   loading="lazy"
                   onError={(e) => {
-                    const t = e.target as HTMLImageElement;
-                    t.src = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/placeholder.webp`;
+                    const tImg = e.target as HTMLImageElement;
+                    tImg.src = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu/placeholder.webp`;
                   }}
                 />
               ) : (
                 <div className="absolute inset-0 bg-neutral-100 flex items-center justify-center rounded-sm">
-                  <span className="text-neutral-400">No image</span>
+                  <span className="text-neutral-400">{t("noImage")}</span>
                 </div>
               )}
             </div>
@@ -5100,13 +5109,17 @@ export default function MenuPage() {
             {/* Allergens */}
             <div className="flex flex-wrap gap-1 mb-4">
               {item.allergens?.map((a) => (
-                <Badge key={a.id} variant="secondary" className="text-xs px-2 py-0.5 bg-neutral-100">
+                <Badge
+                  key={a.id}
+                  variant="secondary"
+                  className="text-xs px-2 py-0.5 bg-neutral-100"
+                >
                   {a.name}
                 </Badge>
               ))}
             </div>
 
-            {/* Price in Euros */}
+            {/* Price */}
             <div className="mt-auto font-medium text-lg">
               €{item.price.toFixed(2)}
             </div>
@@ -5118,12 +5131,12 @@ export default function MenuPage() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Menu Item</DialogTitle>
-            <DialogDescription>Create a new menu item with details</DialogDescription>
+            <DialogTitle>{t("addDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("addDialogDescription")}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>Name</Label>
+              <Label>{t("fields.name")}</Label>
               <Input
                 autoComplete="new-password"
                 spellCheck="false"
@@ -5131,11 +5144,11 @@ export default function MenuPage() {
                 onFocus={removeHighlightOnFocus}
                 value={newItem.name}
                 onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                placeholder="Menu item name"
+                placeholder={t("fields.namePlaceholder") || ""}
               />
             </div>
             <div className="grid gap-2">
-              <Label>Price</Label>
+              <Label>{t("fields.price")}</Label>
               <Input
                 autoComplete="new-password"
                 spellCheck="false"
@@ -5149,13 +5162,13 @@ export default function MenuPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label>Category</Label>
+              <Label>{t("fields.category")}</Label>
               <Select
                 value={newItem.category_id}
                 onValueChange={(value) => setNewItem({ ...newItem, category_id: value })}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder={t("fields.categoryPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((c) => (
@@ -5167,46 +5180,51 @@ export default function MenuPage() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>Description</Label>
+              <Label>{t("fields.description")}</Label>
               <Input
                 autoComplete="new-password"
                 spellCheck="false"
                 autoCorrect="off"
                 onFocus={removeHighlightOnFocus}
                 value={newItem.description}
-                onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                placeholder="Menu item description"
+                onChange={(e) =>
+                  setNewItem({ ...newItem, description: e.target.value })
+                }
+                placeholder={t("fields.descriptionPlaceholder") || ""}
               />
             </div>
             <div className="grid gap-2">
-              <Label>Allergens</Label>
+              <Label>{t("fields.allergens")}</Label>
               <MultiSelect
                 options={allergens}
                 selected={newItem.allergen_ids}
                 onChange={(ids: string[]) => setNewItem({ ...newItem, allergen_ids: ids })}
-                placeholder="Select allergens"
+                placeholder={t("fields.allergensPlaceholder") || ""}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancel
+              {t("cancel")}
             </Button>
-            <Button onClick={handleCreateItem}>Create Item</Button>
+            <Button onClick={handleCreateItem}>{t("createItem")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Dialog for editing existing items */}
-      <Dialog open={editDialog.open} onOpenChange={(open) => !open && setEditDialog({ open: false, item: null })}>
+      <Dialog
+        open={editDialog.open}
+        onOpenChange={(open) => !open && setEditDialog({ open: false, item: null })}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Menu Item</DialogTitle>
-            <DialogDescription>Update the details of the selected menu item.</DialogDescription>
+            <DialogTitle>{t("editDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("editDialogDescription")}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>Name</Label>
+              <Label>{t("fields.name")}</Label>
               <Input
                 autoComplete="new-password"
                 spellCheck="false"
@@ -5214,11 +5232,11 @@ export default function MenuPage() {
                 onFocus={removeHighlightOnFocus}
                 value={editForm.name}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                placeholder="Menu item name"
+                placeholder={t("fields.namePlaceholder") || ""}
               />
             </div>
             <div className="grid gap-2">
-              <Label>Description</Label>
+              <Label>{t("fields.description")}</Label>
               <Input
                 autoComplete="new-password"
                 spellCheck="false"
@@ -5226,11 +5244,11 @@ export default function MenuPage() {
                 onFocus={removeHighlightOnFocus}
                 value={editForm.description}
                 onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                placeholder="Menu item description"
+                placeholder={t("fields.descriptionPlaceholder") || ""}
               />
             </div>
             <div className="grid gap-2">
-              <Label>Price</Label>
+              <Label>{t("fields.price")}</Label>
               <Input
                 autoComplete="new-password"
                 spellCheck="false"
@@ -5244,13 +5262,13 @@ export default function MenuPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label>Category</Label>
+              <Label>{t("fields.category")}</Label>
               <Select
                 value={editForm.category_id}
                 onValueChange={(value) => setEditForm({ ...editForm, category_id: value })}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder={t("fields.categoryPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((c) => (
@@ -5262,23 +5280,27 @@ export default function MenuPage() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>Allergens</Label>
+              <Label>{t("fields.allergens")}</Label>
               <MultiSelect
                 options={allergens}
                 selected={editForm.allergen_ids}
-                onChange={(ids: string[]) => setEditForm({ ...editForm, allergen_ids: ids })}
-                placeholder="Select allergens"
+                onChange={(ids: string[]) =>
+                  setEditForm({ ...editForm, allergen_ids: ids })
+                }
+                placeholder={t("fields.allergensPlaceholder") || ""}
               />
             </div>
             <div className="grid gap-2">
-              <Label>Select Image</Label>
+              <Label>{t("fields.selectImage")}</Label>
               {images.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No images found for this category.</p>
+                <p className="text-sm text-muted-foreground">{t("noImagesFound")}</p>
               ) : (
                 <div className="grid gap-2 max-h-[200px] overflow-y-auto">
                   {images.map((img) => {
                     const cat = categories.find((c) => c.id.toString() === editForm.category_id);
-                    const folderName = cat ? cat.name.toLowerCase().replace(/\s+/g, '-') : '';
+                    const folderName = cat
+                      ? cat.name.toLowerCase().replace(/\s+/g, "-")
+                      : "";
                     const pathValue = `${folderName}/${img.name}`;
                     return (
                       <div key={img.name} className="flex items-center gap-2">
@@ -5287,7 +5309,9 @@ export default function MenuPage() {
                           name="image_path"
                           value={pathValue}
                           checked={editForm.image_path === pathValue}
-                          onChange={(e) => setEditForm({ ...editForm, image_path: e.target.value })}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, image_path: e.target.value })
+                          }
                         />
                         <Image src={img.url} alt={img.name} width={50} height={50} />
                         <span>{img.name}</span>
@@ -5299,10 +5323,13 @@ export default function MenuPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialog({ open: false, item: null })}>
-              Cancel
+            <Button
+              variant="outline"
+              onClick={() => setEditDialog({ open: false, item: null })}
+            >
+              {t("cancel")}
             </Button>
-            <Button onClick={handleSaveEdit}>Save Changes</Button>
+            <Button onClick={handleSaveEdit}>{t("saveChanges")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -5318,26 +5345,34 @@ export default function MenuPage() {
 
 ```
 
-### app/dashboard/layout.tsx
+### app/dashboard/_client.tsx
 
 ```typescript
-"use client"; // So we can call `useTranslation`
-import { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
-import { LogOut, LayoutDashboard, Users, Settings, ImageIcon, MenuSquare, ClipboardList, Wine, BookOpen } from "lucide-react";
+import {
+  LogOut,
+  LayoutDashboard,
+  Users,
+  Settings,
+  ImageIcon,
+  MenuSquare,
+  ClipboardList,
+  Wine,
+  BookOpen,
+} from "lucide-react";
 import LanguageFlagSwitcher from "@/components/features/LanguageSwitcher";
 
-export const metadata: Metadata = {
-  title: "Dashboard",
-  description: "Restaurant management dashboard",
-};
+export default function DashboardClientLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { t } = useTranslation("sidebar"); // Using "sidebar" namespace
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  // Example: using the "sidebar" namespace from the JSON
-  const { t } = useTranslation("sidebar");
-
-  // Hard-coded for demonstration (in real code, do your session check on server):
+  // Example user data
   const userName = "John Doe";
   const userRole = "admin";
 
@@ -5457,12 +5492,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Main Content */}
       <main className="pl-64 w-full">
-        <div className="h-full min-h-screen bg-background">
-          {children}
-        </div>
+        <div className="h-full min-h-screen bg-background">{children}</div>
       </main>
     </div>
   );
+}
+
+```
+
+### app/dashboard/layout.tsx
+
+```typescript
+// app/dashboard/layout.tsx
+import type { Metadata } from "next";
+import DashboardClientLayout from "./_client"; // The client layout
+
+export const metadata: Metadata = {
+  title: "Dashboard",
+  description: "Restaurant management dashboard",
+};
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  // (Server checks, server fetching, etc. if needed)
+  return <DashboardClientLayout>{children}</DashboardClientLayout>;
 }
 
 ```
@@ -9698,6 +9754,49 @@ export function isArray<T>(value: unknown): value is T[] {
     "admin": "Admin",
     "users": "Users",
     "settings": "Settings"
+  },
+  "menuPage": {
+    "heading": "Menu Items",
+    "description": "Manage your restaurant's menu selection",
+    "addItem": "Add Item",
+    "searchPlaceholder": "Search menu items...",
+    "filterByCategory": "Filter by Category",
+    "allCategories": "All Categories",
+    "noMenuItemsFound": "No menu items found.",
+    "addYourFirstItem": "Add Your First Item",
+    "noImage": "No image",
+    "noImagesFound": "No images found for this category.",
+    "editThisItem": "Edit {{itemName}}",
+    "success": "Success",
+    "itemCreated": "Menu item created successfully.",
+    "itemUpdated": "Menu item updated successfully.",
+    "cancel": "Cancel",
+    "createItem": "Create Item",
+    "saveChanges": "Save Changes",
+
+    "addDialogTitle": "Add Menu Item",
+    "addDialogDescription": "Create a new menu item with details",
+    "editDialogTitle": "Edit Menu Item",
+    "editDialogDescription": "Update the details of the selected menu item.",
+
+    "errors": {
+      "fillRequiredFields": "Please fill in all required fields.",
+      "invalidPrice": "Please enter a valid positive price.",
+      "invalidCategory": "Please select a valid category.",
+      "failedLoadData": "Failed to load data."
+    },
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "Menu item name",
+      "description": "Description",
+      "descriptionPlaceholder": "Menu item description",
+      "price": "Price",
+      "category": "Category",
+      "categoryPlaceholder": "Select category",
+      "allergens": "Allergens",
+      "allergensPlaceholder": "Select allergens",
+      "selectImage": "Select Image"
+    }
   }
 }
 
@@ -9724,6 +9823,49 @@ export function isArray<T>(value: unknown): value is T[] {
     "admin": "Admin",
     "users": "Usuarios",
     "settings": "Configuraciones"
+  },
+  "menuPage": {
+    "heading": "Elementos del Menú",
+    "description": "Administra la selección de tu restaurante",
+    "addItem": "Agregar Elemento",
+    "searchPlaceholder": "Buscar elementos del menú...",
+    "filterByCategory": "Filtrar por Categoría",
+    "allCategories": "Todas las Categorías",
+    "noMenuItemsFound": "No se encontraron elementos del menú.",
+    "addYourFirstItem": "Agrega tu primer elemento",
+    "noImage": "Sin imagen",
+    "noImagesFound": "No hay imágenes para esta categoría.",
+    "editThisItem": "Editar {{itemName}}",
+    "success": "Éxito",
+    "itemCreated": "Elemento del menú creado correctamente.",
+    "itemUpdated": "Elemento del menú actualizado correctamente.",
+    "cancel": "Cancelar",
+    "createItem": "Crear Elemento",
+    "saveChanges": "Guardar Cambios",
+
+    "addDialogTitle": "Agregar Elemento al Menú",
+    "addDialogDescription": "Crea un nuevo elemento con sus detalles",
+    "editDialogTitle": "Editar Elemento",
+    "editDialogDescription": "Actualiza los detalles del elemento seleccionado.",
+
+    "errors": {
+      "fillRequiredFields": "Por favor, completa todos los campos requeridos.",
+      "invalidPrice": "Introduce un precio positivo válido.",
+      "invalidCategory": "Selecciona una categoría válida.",
+      "failedLoadData": "No se pudieron cargar los datos."
+    },
+    "fields": {
+      "name": "Nombre",
+      "namePlaceholder": "Nombre del elemento",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Descripción del elemento",
+      "price": "Precio",
+      "category": "Categoría",
+      "categoryPlaceholder": "Selecciona categoría",
+      "allergens": "Alérgenos",
+      "allergensPlaceholder": "Selecciona alérgenos",
+      "selectImage": "Seleccionar Imagen"
+    }
   }
 }
 
@@ -9750,6 +9892,49 @@ export function isArray<T>(value: unknown): value is T[] {
     "admin": "Admin",
     "users": "Utilizatori",
     "settings": "Setări"
+  },
+  "menuPage": {
+    "heading": "Elemente de Meniu",
+    "description": "Gestionează selecția din restaurantul tău",
+    "addItem": "Adaugă Element",
+    "searchPlaceholder": "Caută elemente de meniu...",
+    "filterByCategory": "Filtrează după Categorie",
+    "allCategories": "Toate categoriile",
+    "noMenuItemsFound": "Nu s-au găsit elemente de meniu.",
+    "addYourFirstItem": "Adaugă primul element",
+    "noImage": "Fără imagine",
+    "noImagesFound": "Nu s-au găsit imagini pentru această categorie.",
+    "editThisItem": "Editează {{itemName}}",
+    "success": "Succes",
+    "itemCreated": "Elementul de meniu a fost creat cu succes.",
+    "itemUpdated": "Elementul de meniu a fost actualizat cu succes.",
+    "cancel": "Anulează",
+    "createItem": "Creează Element",
+    "saveChanges": "Salvează modificările",
+
+    "addDialogTitle": "Adaugă Element de Meniu",
+    "addDialogDescription": "Creează un nou element cu toate detaliile",
+    "editDialogTitle": "Editează Elementul",
+    "editDialogDescription": "Actualizează detaliile elementului selectat.",
+
+    "errors": {
+      "fillRequiredFields": "Completează toate câmpurile obligatorii.",
+      "invalidPrice": "Introduceți un preț pozitiv valid.",
+      "invalidCategory": "Selectează o categorie validă.",
+      "failedLoadData": "Nu s-au putut încărca datele."
+    },
+    "fields": {
+      "name": "Nume",
+      "namePlaceholder": "Numele elementului de meniu",
+      "description": "Descriere",
+      "descriptionPlaceholder": "Descrierea elementului de meniu",
+      "price": "Preț",
+      "category": "Categorie",
+      "categoryPlaceholder": "Selectează categorie",
+      "allergens": "Alergeni",
+      "allergensPlaceholder": "Selectează alergeni",
+      "selectImage": "Selectează Imagine"
+    }
   }
 }
 

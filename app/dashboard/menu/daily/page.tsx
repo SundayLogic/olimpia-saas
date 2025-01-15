@@ -5,6 +5,7 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, addDays } from "date-fns";
 import { Pencil } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   Dialog,
@@ -18,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-// ----- DropdownMenu from shadcn/ui -----
+// DropdownMenu from shadcn/ui
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -176,6 +177,7 @@ function EditTomorrowDialog({
 }) {
   const supabase = createClientComponentClient<Database>();
   const qc = useQueryClient();
+  const { t } = useTranslation("dailyPage");
 
   const [first, setFirst] = useState<{ id?: string; name: string }[]>([]);
   const [second, setSecond] = useState<{ id?: string; name: string }[]>([]);
@@ -283,18 +285,18 @@ function EditTomorrowDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{menu ? "Edit Tomorrow" : "Create Tomorrow"}</DialogTitle>
+          <DialogTitle>
+            {menu ? t("editTomorrowTitle") : t("createTomorrowTitle")}
+          </DialogTitle>
           <DialogDescription>
-            {menu
-              ? "Adjust tomorrow’s items and price."
-              : "Add new menu for tomorrow (default price = 15)."}
+            {menu ? t("editTomorrowDescription") : t("createTomorrowDescription")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="py-4 space-y-4">
           {/* Price */}
           <div>
-            <Label>Price</Label>
+            <Label>{t("price")}</Label>
             <Input
               type="number"
               min={0}
@@ -306,7 +308,7 @@ function EditTomorrowDialog({
 
           {/* First */}
           <div>
-            <Label>First Courses</Label>
+            <Label>{t("firstCourses")}</Label>
             {first.map((fc, idx) => (
               <div key={fc.id ?? `f-${idx}`} className="flex gap-2 mt-2">
                 <Input
@@ -327,7 +329,7 @@ function EditTomorrowDialog({
                       setFirst(arr);
                     }}
                   >
-                    Remove
+                    {t("remove")}
                   </Button>
                 )}
               </div>
@@ -338,13 +340,13 @@ function EditTomorrowDialog({
               className="mt-2"
               onClick={() => setFirst((arr) => [...arr, { name: "" }])}
             >
-              + Add Another First
+              {t("addAnotherFirst")}
             </Button>
           </div>
 
           {/* Second */}
           <div>
-            <Label>Second Courses</Label>
+            <Label>{t("secondCourses")}</Label>
             {second.map((sc, idx) => (
               <div key={sc.id ?? `s-${idx}`} className="flex gap-2 mt-2">
                 <Input
@@ -365,7 +367,7 @@ function EditTomorrowDialog({
                       setSecond(arr);
                     }}
                   >
-                    Remove
+                    {t("remove")}
                   </Button>
                 )}
               </div>
@@ -376,17 +378,17 @@ function EditTomorrowDialog({
               className="mt-2"
               onClick={() => setSecond((arr) => [...arr, { name: "" }])}
             >
-              + Add Another Second
+              {t("addAnotherSecond")}
             </Button>
           </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button disabled={saving} onClick={() => saveMutation.mutate()}>
-            {saving ? "Saving..." : "Save"}
+            {saving ? t("saving") : t("save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -406,11 +408,13 @@ function MenuItemsList({
   type: "first" | "second";
   onEditItem: (item: DailyMenuItem) => void;
 }) {
+  const { t } = useTranslation("dailyPage");
+
   // If no items, no dropdown (the pencil won't show)
   return (
     <div>
       <div className="flex items-center gap-2">
-        <b>{type === "first" ? "First" : "Second"}:</b>
+        <b>{type === "first" ? t("firstHeading") : t("secondHeading")}:</b>
         {items.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -423,7 +427,7 @@ function MenuItemsList({
                 .sort((a, b) => a.display_order - b.display_order)
                 .map((item) => (
                   <DropdownMenuItem key={item.id} onClick={() => onEditItem(item)}>
-                    Edit: {item.course_name}
+                    {t("editColon")} {item.course_name}
                   </DropdownMenuItem>
                 ))}
             </DropdownMenuContent>
@@ -455,6 +459,7 @@ function EditSingleItemDialog({
 }) {
   const supabase = createClientComponentClient<Database>();
   const qc = useQueryClient();
+  const { t } = useTranslation("dailyPage");
 
   const [name, setName] = useState("");
   const [type, setType] = useState<"first" | "second">("first");
@@ -493,12 +498,12 @@ function EditSingleItemDialog({
       <Dialog open={true} onOpenChange={onClose}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit an Item</DialogTitle>
-            <DialogDescription>No item selected.</DialogDescription>
+            <DialogTitle>{t("editItemTitle")}</DialogTitle>
+            <DialogDescription>{t("noItemSelected")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={onClose}>
-              Close
+              {t("close")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -510,17 +515,17 @@ function EditSingleItemDialog({
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit an Item</DialogTitle>
-          <DialogDescription>Rename or switch the course type.</DialogDescription>
+          <DialogTitle>{t("editItemTitle")}</DialogTitle>
+          <DialogDescription>{t("editItemDescription")}</DialogDescription>
         </DialogHeader>
 
         <div className="py-4 space-y-4">
           <div>
-            <Label>Course Name</Label>
+            <Label>{t("courseName")}</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div>
-            <Label>Course Type</Label>
+            <Label>{t("courseType")}</Label>
             <div className="flex gap-3 mt-1">
               <label className="flex items-center gap-1 text-sm">
                 <input
@@ -530,7 +535,7 @@ function EditSingleItemDialog({
                   checked={type === "first"}
                   onChange={() => setType("first")}
                 />
-                First
+                {t("firstHeading")}
               </label>
               <label className="flex items-center gap-1 text-sm">
                 <input
@@ -540,7 +545,7 @@ function EditSingleItemDialog({
                   checked={type === "second"}
                   onChange={() => setType("second")}
                 />
-                Second
+                {t("secondHeading")}
               </label>
             </div>
           </div>
@@ -548,13 +553,13 @@ function EditSingleItemDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button
             onClick={() => updateItemMut.mutate()}
             disabled={!name.trim() || saving}
           >
-            {saving ? "Saving..." : "Save"}
+            {saving ? t("saving") : t("save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -568,6 +573,7 @@ function EditSingleItemDialog({
 export default function DailyMenusPage() {
   const supabase = createClientComponentClient<Database>();
   const queryClient = useQueryClient();
+  const { t } = useTranslation("dailyPage");
 
   const [editTomorrowOpen, setEditTomorrowOpen] = useState(false);
 
@@ -596,8 +602,15 @@ export default function DailyMenusPage() {
     },
   });
 
-  if (isLoading) return <p>Loading menus...</p>;
-  if (error) return <p className="text-red-500">Error: {(error as Error).message}</p>;
+  if (isLoading) return <p>{t("loadingMenus")}</p>;
+  if (error) {
+    const err = error as Error;
+    return (
+      <p className="text-red-500">
+        {t("errorColon")} {err.message}
+      </p>
+    );
+  }
 
   // Called when user picks "Edit: X" in the dropdown
   function handleEditItem(item: DailyMenuItem) {
@@ -607,17 +620,20 @@ export default function DailyMenusPage() {
 
   return (
     <main className="p-4 space-y-4">
-      <h1 className="text-2xl font-bold">Daily Menus (Dropdown Icon Edit)</h1>
+      <h1 className="text-2xl font-bold">{t("dailyMenusHeading")}</h1>
 
       {/* ----- TODAY ----- */}
       <section className="border p-3 rounded">
-        <h2 className="text-xl font-semibold">Today&apos;s Menu</h2>
+        <h2 className="text-xl font-semibold">{t("todayTitle")}</h2>
         {today ? (
           <div className="mt-2">
-            <strong>{today.date}</strong> (Active? {today.active ? "Yes" : "No"})
-            <div className="text-sm mt-1 text-gray-600">Price: {today.price}€</div>
+            <strong>{today.date}</strong>{" "}
+            ({t("activeQuestion")} {today.active ? t("yes") : t("no")})
+            <div className="text-sm mt-1 text-gray-600">
+              {t("priceColon")} {today.price}€
+            </div>
             {today.daily_menu_items?.length === 0 && (
-              <p className="mt-1 text-gray-500 italic">No items</p>
+              <p className="mt-1 text-gray-500 italic">{t("noItems")}</p>
             )}
             <div className="mt-3 flex gap-6">
               {/* First */}
@@ -639,28 +655,33 @@ export default function DailyMenusPage() {
               onClick={() => carryForwardMut.mutate(today)}
               disabled={carryForwardMut.isPending || !!tomorrow}
             >
-              {carryForwardMut.isPending ? "Carrying..." : "Carry forward to Tomorrow"}
+              {carryForwardMut.isPending
+                ? t("carryingEllipsis")
+                : t("carryForwardToTomorrow")}
             </Button>
           </div>
         ) : (
-          <p className="mt-2 text-gray-500 text-sm">No menu for today.</p>
+          <p className="mt-2 text-gray-500 text-sm">{t("noMenuToday")}</p>
         )}
       </section>
 
       {/* ----- TOMORROW ----- */}
       <section className="border p-3 rounded">
-        <h2 className="text-xl font-semibold">Tomorrow&apos;s Menu</h2>
+        <h2 className="text-xl font-semibold">{t("tomorrowTitle")}</h2>
         {tomorrow ? (
           <div className="mt-2">
-            <strong>{tomorrow.date}</strong> (Active? {tomorrow.active ? "Yes" : "No"})
-            <div className="text-sm mt-1 text-gray-600">Price: {tomorrow.price}€</div>
+            <strong>{tomorrow.date}</strong>{" "}
+            ({t("activeQuestion")} {tomorrow.active ? t("yes") : t("no")})
+            <div className="text-sm mt-1 text-gray-600">
+              {t("priceColon")} {tomorrow.price}€
+            </div>
             {tomorrow.carried_forward && (
               <p className="italic text-gray-500 text-sm">
-                Carried from: {tomorrow.carried_from_id}
+                {t("carriedFromColon")} {tomorrow.carried_from_id}
               </p>
             )}
             {tomorrow.daily_menu_items?.length === 0 && (
-              <p className="mt-1 text-gray-500 italic">No items</p>
+              <p className="mt-1 text-gray-500 italic">{t("noItems")}</p>
             )}
             <div className="mt-3 flex gap-6">
               {/* First */}
@@ -676,18 +697,19 @@ export default function DailyMenusPage() {
                 onEditItem={handleEditItem}
               />
             </div>
-            <Button variant="outline" className="mt-4" onClick={() => setEditTomorrowOpen(true)}>
-              {today ? "Edit Tomorrow’s Menu" : "Create Tomorrow’s Menu"}
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => setEditTomorrowOpen(true)}
+            >
+              {today ? t("editTomorrowsMenu") : t("createTomorrowsMenu")}
             </Button>
           </div>
         ) : (
           <div className="mt-2 text-sm text-gray-500">
-            <p>
-              No menu set for tomorrow. We&apos;ll reuse today&apos;s if you do nothing,
-              or you can explicitly create it now:
-            </p>
+            <p>{t("noMenuTomorrow")}</p>
             <Button variant="outline" className="mt-2" onClick={() => setEditTomorrowOpen(true)}>
-              Create Tomorrow&apos;s Menu
+              {t("createTomorrowsMenu")}
             </Button>
           </div>
         )}

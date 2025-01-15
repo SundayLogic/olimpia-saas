@@ -1,4 +1,5 @@
-"use client"; // <--- Keep this so we can call useTranslation
+"use client";
+
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import {
@@ -19,9 +20,9 @@ export default function DashboardClientLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { t } = useTranslation("sidebar"); // "sidebar" namespace from en.json, es.json, ro.json
+  const { t } = useTranslation("sidebar"); // Using "sidebar" namespace
 
-  // Hard-coded for demonstration
+  // Example user data
   const userName = "John Doe";
   const userRole = "admin";
 
