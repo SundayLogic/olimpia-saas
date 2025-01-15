@@ -1,0 +1,15 @@
+{
+  "common": {
+    "hello": "Hello",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "language": "Language"
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout"
+  }
+}

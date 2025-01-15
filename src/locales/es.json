@@ -1,0 +1,15 @@
+{
+  "common": {
+    "hello": "Hola",
+    "yes": "Sí",
+    "no": "No"
+  },
+  "sidebar": {
+    "dashboard": "Panel",
+    "language": "Idioma"
+  },
+  "auth": {
+    "login": "Iniciar sesión",
+    "logout": "Cerrar sesión"
+  }
+}

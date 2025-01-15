@@ -1,0 +1,15 @@
+{
+  "common": {
+    "hello": "Salut",
+    "yes": "Da",
+    "no": "Nu"
+  },
+  "sidebar": {
+    "dashboard": "Panou",
+    "language": "Limba"
+  },
+  "auth": {
+    "login": "Autentificare",
+    "logout": "Ieșire"
+  }
+}

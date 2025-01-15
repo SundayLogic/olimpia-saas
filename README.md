@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2025-01-15 16:56:53
+Generated on: 2025-01-15 22:49:57
 
 ## Documented Directories:
 - app/
@@ -2920,37 +2920,34 @@ export default function ImagesPage() {
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import {
-  addDays,
-  addWeeks,
-  addMonths,
-  format,
-  isSameDay
-} from "date-fns";
-import { es } from "date-fns/locale";
-import { DateRange } from "react-day-picker";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { format, addDays } from "date-fns";
+import { Pencil } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
-import { Calendar } from "@/components/ui/calendar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-/* ------------------------------------------------------------------------
-   1) Database / local interfaces 
------------------------------------------------------------------------- */
+// ----- DropdownMenu from shadcn/ui -----
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+
+/* -------------------------------------------------------------------------
+   1) Database & Local Types
+------------------------------------------------------------------------- */
 interface Database {
   public: {
     Tables: {
@@ -2958,19 +2955,22 @@ interface Database {
         Row: {
           id: string;
           date: string;
-          repeat_pattern: "none" | "weekly" | "monthly";
           active: boolean;
-          scheduled_for: string;
           created_at: string;
+          carried_forward: boolean;
+          carried_from_id: string | null;
+          price: number;
+          scheduled_for: string;
+          is_draft: boolean;
         };
       };
       daily_menu_items: {
         Row: {
           id: string;
+          daily_menu_id: string;
           course_name: string;
           course_type: "first" | "second";
           display_order: number;
-          daily_menu_id: string;
         };
       };
     };
@@ -2978,748 +2978,656 @@ interface Database {
 }
 
 interface DailyMenuItem {
-  id?: string;
+  id: string;
+  daily_menu_id: string;
   course_name: string;
   course_type: "first" | "second";
   display_order: number;
-  daily_menu_id?: string;
 }
 
 interface DailyMenu {
   id: string;
   date: string;
-  repeat_pattern: "none" | "weekly" | "monthly";
   active: boolean;
-  scheduled_for: string;
   created_at: string;
-  daily_menu_items?: DailyMenuItem[];
+  carried_forward: boolean;
+  carried_from_id: string | null;
+  price: number;
+  scheduled_for: string;
+  is_draft: boolean;
+  daily_menu_items: DailyMenuItem[];
 }
 
-// The new wizard structure to support multiple items per course.
-interface NewMenu {
-  dateRange: DateRange;
-  repeat_pattern: "none" | "weekly" | "monthly";
-  active: boolean;
-  firstCourses: string[];   // multiple "first" items
-  secondCourses: string[];  // multiple "second" items
-  previewDates?: string[];
-}
+type MenusTodayTomorrow = {
+  today: DailyMenu | null;
+  tomorrow: DailyMenu | null;
+};
 
-// For wizard steps
-interface WizardStep {
-  key: "date" | "pattern" | "courses" | "preview";
-  title: string;
-  description: string;
-}
-
-const WIZARD_STEPS: WizardStep[] = [
-  {
-    key: "date",
-    title: "Select Dates",
-    description: "Choose the date range for your menus."
-  },
-  {
-    key: "pattern",
-    title: "Set Repeat Pattern",
-    description: "One-time, weekly, or monthly?"
-  },
-  {
-    key: "courses",
-    title: "Add Courses",
-    description: "Enter multiple first and second courses."
-  },
-  {
-    key: "preview",
-    title: "Preview & Confirm",
-    description: "Review before creating menus."
-  }
-];
-
-/* ------------------------------------------------------------------------
-   2) Utility functions: scheduling, date conflicts
------------------------------------------------------------------------- */
-function generatePreviewDates(
-  startDate: Date,
-  endDate: Date | null,
-  pattern: "none" | "weekly" | "monthly"
-): Date[] {
-  const dates: Date[] = [];
-  let current = startDate;
-  const final = endDate || startDate;
-  while (current <= final) {
-    dates.push(current);
-    if (pattern === "weekly") {
-      current = addWeeks(current, 1);
-    } else if (pattern === "monthly") {
-      current = addMonths(current, 1);
-    } else {
-      current = addDays(current, 1);
-    }
-  }
-  return dates;
-}
-
-function checkDateConflicts(dates: Date[], existingMenus: DailyMenu[]): string[] {
-  const conflicts = dates.filter((date) =>
-    existingMenus.some((m) => isSameDay(new Date(m.date), date))
-  );
-  return conflicts.map((date) => format(date, "PPP", { locale: es }));
-}
-
-/* ------------------------------------------------------------------------
-   3) Data fetch
------------------------------------------------------------------------- */
-async function fetchDailyMenus(
+/* -------------------------------------------------------------------------
+   2) fetchMenus => returns "today" and "tomorrow"
+------------------------------------------------------------------------- */
+async function fetchMenus(
   supabase: ReturnType<typeof createClientComponentClient<Database>>
-): Promise<DailyMenu[]> {
+): Promise<MenusTodayTomorrow> {
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const tomorrowStr = format(addDays(new Date(), 1), "yyyy-MM-dd");
+
   const { data, error } = await supabase
     .from("daily_menus")
-    .select(
-      `id, date, repeat_pattern, active, scheduled_for, created_at,
-       daily_menu_items(
-         id, course_name, course_type, display_order, daily_menu_id
-       )`
-    );
+    .select(`
+      id,
+      date,
+      active,
+      created_at,
+      carried_forward,
+      carried_from_id,
+      price,
+      scheduled_for,
+      is_draft,
+      daily_menu_items (
+        id,
+        daily_menu_id,
+        course_name,
+        course_type,
+        display_order
+      )
+    `)
+    .in("date", [todayStr, tomorrowStr]);
 
-  if (error) throw error;
-  return (data ?? []) as DailyMenu[];
+  if (error) throw new Error(error.message);
+
+  let t: DailyMenu | null = null;
+  let tm: DailyMenu | null = null;
+  data?.forEach((row) => {
+    if (row.date === todayStr) t = row as DailyMenu;
+    else if (row.date === tomorrowStr) tm = row as DailyMenu;
+  });
+
+  return { today: t, tomorrow: tm };
 }
 
-/* ------------------------------------------------------------------------
-   4) Main component
------------------------------------------------------------------------- */
-export default function DailyMenuPage() {
-  const supabase = createClientComponentClient<Database>();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
+/* -------------------------------------------------------------------------
+   3) carryForwardMenu => duplicates today's record for tomorrow
+------------------------------------------------------------------------- */
+async function carryForwardMenu(
+  supabase: ReturnType<typeof createClientComponentClient<Database>>,
+  fromMenu: DailyMenu
+): Promise<void> {
+  const tomorrowStr = format(addDays(new Date(), 1), "yyyy-MM-dd");
 
-  /* -----------------
-     Wizard & state 
-  ----------------- */
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [previewDates, setPreviewDates] = useState<string[]>([]);
-  const [conflicts, setConflicts] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [newMenu, setNewMenu] = useState<NewMenu>({
-    dateRange: { from: new Date(), to: new Date() },
-    repeat_pattern: "none",
-    active: true,
-    firstCourses: [""],
-    secondCourses: [""],
-    previewDates: []
-  });
-
-  /* -----------------
-     Load daily menus
-  ----------------- */
-  const {
-    data: dailyMenus = [],
-    isLoading,
-    error
-  } = useQuery<DailyMenu[], Error>({
-    queryKey: ["dailyMenus"],
-    queryFn: () => fetchDailyMenus(supabase)
-  });
-
-  /* -----------------
-     Toggle Status 
-  ----------------- */
-  const toggleMenuStatus = useMutation({
-    // toggles an existing daily_menus row's active field
-    mutationFn: async (vars: { id: string; newStatus: boolean }) => {
-      const { error: toggleErr } = await supabase
-        .from("daily_menus")
-        .update({ active: vars.newStatus })
-        .eq("id", vars.id);
-      if (toggleErr) throw toggleErr;
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["dailyMenus"] });
-      toast({ title: "Success", description: "Menu status updated." });
-    },
-    onError: (err) => {
-      if (err instanceof Error) {
-        toast({ title: "Error", description: err.message, variant: "destructive" });
-      }
-    }
-  });
-
-  /* -----------------
-     Create new menus 
-  ----------------- */
-  const createMenuMutation = useMutation({
-    mutationFn: async () => {
-      setIsSubmitting(true);
-      const { from, to } = newMenu.dateRange;
-      if (!from) throw new Error("Please select a start date first!");
-
-      const finalEnd = to || from;
-      let dateList = generatePreviewDates(from, finalEnd, newMenu.repeat_pattern);
-
-      // Check conflicts
-      const conflictFound = checkDateConflicts(dateList, dailyMenus);
-      if (conflictFound.length > 0) {
-        const confirmSkip = window.confirm(
-          `These dates already have menus: ${conflictFound.join(", ")}.\nSkip them and continue?`
-        );
-        if (!confirmSkip) {
-          throw new Error("Operation cancelled due to conflicts.");
-        }
-        dateList = dateList.filter(
-          (d) => !conflictFound.includes(format(d, "PPP", { locale: es }))
-        );
-      }
-      if (!dateList.length) throw new Error("No valid dates remain to schedule!");
-
-      // Insert daily_menus rows
-      const rows = dateList.map((d) => ({
-        date: format(d, "yyyy-MM-dd"),
-        repeat_pattern: newMenu.repeat_pattern,
-        active: newMenu.active,
-        scheduled_for: format(d, "yyyy-MM-dd'T'11:00:00.000'Z'")
-      }));
-      const { data: inserted, error: insertErr } = await supabase
-        .from("daily_menus")
-        .insert(rows)
-        .select();
-      if (insertErr) throw insertErr;
-
-      // Insert daily_menu_items for each new menu
-      const allInserts = (inserted || []).flatMap((menu) => [
-        // each first course
-        ...newMenu.firstCourses.map((course, index) => ({
-          daily_menu_id: menu.id,
-          course_name: course,
-          course_type: "first" as const,
-          display_order: index + 1
-        })),
-        // each second course
-        ...newMenu.secondCourses.map((course, index) => ({
-          daily_menu_id: menu.id,
-          course_name: course,
-          course_type: "second" as const,
-          display_order: index + 1
-        }))
-      ]);
-      if (allInserts.length) {
-        const { error: itemsErr } = await supabase
-          .from("daily_menu_items")
-          .insert(allInserts);
-        if (itemsErr) throw itemsErr;
-      }
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["dailyMenus"] });
-      toast({
-        title: "Success",
-        description: "Daily menus created with multiple items per course."
-      });
-    },
-    onError: (err) => {
-      if (err instanceof Error) {
-        toast({ title: "Error", description: err.message, variant: "destructive" });
-      }
-    },
-    onSettled: () => {
-      setIsSubmitting(false);
-    }
-  });
-
-  /* -----------------
-     Wizard logic 
-  ----------------- */
-  useEffect(() => {
-    // If step = preview, build previewDates & conflicts
-    if (currentStep === 3) {
-      const { from, to } = newMenu.dateRange;
-      if (!from) return;
-      const finalEnd = to || from;
-      const dateList = generatePreviewDates(from, finalEnd, newMenu.repeat_pattern);
-      const conflictDates = checkDateConflicts(dateList, dailyMenus);
-
-      setPreviewDates(dateList.map((d) => format(d, "PPP", { locale: es })));
-      setConflicts(conflictDates);
-    }
-  }, [currentStep, newMenu, dailyMenus]);
-
-  function handleNext() {
-    if (currentStep < WIZARD_STEPS.length - 1) {
-      setCurrentStep((p) => p + 1);
-    } else {
-      createMenuMutation.mutate();
-      resetWizard();
-    }
-  }
-  function handleBack() {
-    if (currentStep > 0) {
-      setCurrentStep((p) => p - 1);
-    } else {
-      resetWizard();
-    }
-  }
-  function resetWizard() {
-    setIsDialogOpen(false);
-    setCurrentStep(0);
-    setPreviewDates([]);
-    setConflicts([]);
-    setNewMenu({
-      dateRange: { from: new Date(), to: new Date() },
-      repeat_pattern: "none",
+  const { data: newRec, error: newErr } = await supabase
+    .from("daily_menus")
+    .insert({
+      date: tomorrowStr,
       active: true,
-      firstCourses: [""],
-      secondCourses: [""],
-      previewDates: []
-    });
-  }
+      carried_forward: true,
+      carried_from_id: fromMenu.id,
+      price: fromMenu.price,
+      scheduled_for: format(addDays(new Date(), 1), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx"),
+      is_draft: false,
+    })
+    .select()
+    .single();
+  if (newErr) throw new Error(newErr.message);
 
-  function updateMenu(vals: Partial<NewMenu>) {
-    setNewMenu((prev) => ({ ...prev, ...vals }));
-  }
+  // replicate items
+  const cloneItems = fromMenu.daily_menu_items.map((item) => ({
+    daily_menu_id: newRec.id,
+    course_name: item.course_name,
+    course_type: item.course_type,
+    display_order: item.display_order,
+  }));
+  const { error: itemsErr } = await supabase.from("daily_menu_items").insert(cloneItems);
+  if (itemsErr) throw new Error(itemsErr.message);
+}
 
-  /* ------------------------------------------------------------------------
-     4.1) Step content 
-  ------------------------------------------------------------------------*/
-  function renderStepsIndicator() {
-    return (
-      <div className="flex justify-between mb-4">
-        {WIZARD_STEPS.map((step, idx) => {
-          const isActive = currentStep >= idx;
-          return (
-            <div
-              key={step.key}
-              className={cn(
-                "w-8 h-8 rounded-full flex items-center justify-center border border-muted-foreground text-sm font-semibold",
-                isActive ? "bg-primary text-white border-primary" : "text-muted-foreground"
-              )}
-            >
-              {idx + 1}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
+/* -------------------------------------------------------------------------
+   4) "Edit Tomorrow" Dialog => create/update tomorrow's entire menu
+------------------------------------------------------------------------- */
+function EditTomorrowDialog({
+  isOpen,
+  menu,
+  onClose,
+}: {
+  isOpen: boolean;
+  menu: DailyMenu | null;
+  onClose: () => void;
+}) {
+  const supabase = createClientComponentClient<Database>();
+  const qc = useQueryClient();
 
-  function renderDateStep() {
-    const { from, to } = newMenu.dateRange;
-    return (
-      <div className="space-y-4">
-        <Label>Start Date</Label>
-        <Input
-          type="date"
-          value={from ? format(from, "yyyy-MM-dd") : ""}
-          onChange={(e) => {
-            const dt = e.target.value ? new Date(e.target.value) : new Date();
-            updateMenu({ dateRange: { from: dt, to } });
-          }}
-        />
+  const [first, setFirst] = useState<{ id?: string; name: string }[]>([]);
+  const [second, setSecond] = useState<{ id?: string; name: string }[]>([]);
+  const [price, setPrice] = useState<number>(15);
 
-        <Label>End Date</Label>
-        <Input
-          type="date"
-          value={to ? format(to, "yyyy-MM-dd") : ""}
-          onChange={(e) => {
-            const dt = e.target.value ? new Date(e.target.value) : null;
-            updateMenu({ dateRange: { from, to: dt || from } });
-          }}
-        />
+  useEffect(() => {
+    if (!menu) {
+      setFirst([{ name: "" }]);
+      setSecond([{ name: "" }]);
+      setPrice(15);
+    } else {
+      const f = menu.daily_menu_items
+        .filter((x) => x.course_type === "first")
+        .sort((a, b) => a.display_order - b.display_order)
+        .map((c) => ({ id: c.id, name: c.course_name }));
+      const s = menu.daily_menu_items
+        .filter((x) => x.course_type === "second")
+        .sort((a, b) => a.display_order - b.display_order)
+        .map((c) => ({ id: c.id, name: c.course_name }));
+      setFirst(f.length ? f : [{ name: "" }]);
+      setSecond(s.length ? s : [{ name: "" }]);
+      setPrice(menu.price ?? 15);
+    }
+  }, [menu]);
 
-        {/* Optional: a DayPicker calendar to select a range */}
-        <div className="mt-4">
-          <Calendar
-            mode="range"
-            selected={newMenu.dateRange}
-            onSelect={(range) => {
-              if (range?.from) {
-                updateMenu({
-                  dateRange: { from: range.from, to: range.to || range.from }
-                });
-              }
-            }}
-            locale={es}
-          />
-        </div>
-      </div>
-    );
-  }
+  const saveMutation = useMutation<void, Error, void>({
+    mutationFn: async () => {
+      const tomorrowStr = format(addDays(new Date(), 1), "yyyy-MM-dd");
+      if (menu) {
+        // update existing tomorrow => clear items, re-insert
+        const { error: delErr } = await supabase
+          .from("daily_menu_items")
+          .delete()
+          .eq("daily_menu_id", menu.id);
+        if (delErr) throw new Error(delErr.message);
 
-  function renderPatternStep() {
-    return (
-      <div className="space-y-4">
-        {(["none", "weekly", "monthly"] as const).map((val) => (
-          <div
-            key={val}
-            onClick={() => updateMenu({ repeat_pattern: val })}
-            className={cn(
-              "border p-3 rounded cursor-pointer hover:border-primary transition-colors",
-              newMenu.repeat_pattern === val && "border-primary bg-primary/5"
-            )}
-          >
-            <p className="font-medium capitalize mb-1">{val}</p>
-            <p className="text-sm text-muted-foreground">
-              {val === "none"
-                ? "One-time: Creates a menu only for the selected date(s)."
-                : val === "weekly"
-                ? "Weekly: Automatically create menus every week."
-                : "Monthly: Automatically create menus on the same date each month."}
-            </p>
+        // also update the menu's price
+        const { error: upErr } = await supabase
+          .from("daily_menus")
+          .update({ price })
+          .eq("id", menu.id);
+        if (upErr) throw new Error(upErr.message);
+
+        const items = [
+          ...first.map((fc, i) => ({
+            daily_menu_id: menu.id,
+            course_name: fc.name,
+            course_type: "first" as const,
+            display_order: i + 1,
+          })),
+          ...second.map((sc, i) => ({
+            daily_menu_id: menu.id,
+            course_name: sc.name,
+            course_type: "second" as const,
+            display_order: i + 1,
+          })),
+        ];
+        const { error: insErr } = await supabase.from("daily_menu_items").insert(items);
+        if (insErr) throw new Error(insErr.message);
+      } else {
+        // create brand-new tomorrow row
+        const { data: newRec, error: newErr } = await supabase
+          .from("daily_menus")
+          .insert({
+            date: tomorrowStr,
+            active: true,
+            carried_forward: false,
+            carried_from_id: null,
+            price,
+            scheduled_for: format(addDays(new Date(), 1), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx"),
+            is_draft: false,
+          })
+          .select()
+          .single();
+        if (newErr) throw new Error(newErr.message);
+
+        const newItems = [
+          ...first.map((fc, i) => ({
+            daily_menu_id: newRec.id,
+            course_name: fc.name,
+            course_type: "first" as const,
+            display_order: i + 1,
+          })),
+          ...second.map((sc, i) => ({
+            daily_menu_id: newRec.id,
+            course_name: sc.name,
+            course_type: "second" as const,
+            display_order: i + 1,
+          })),
+        ];
+        const { error: itmErr } = await supabase.from("daily_menu_items").insert(newItems);
+        if (itmErr) throw new Error(itmErr.message);
+      }
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["todayAndTomorrowMenus"] });
+      onClose();
+    },
+  });
+
+  const saving = saveMutation.isPending;
+  if (!isOpen) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{menu ? "Edit Tomorrow" : "Create Tomorrow"}</DialogTitle>
+          <DialogDescription>
+            {menu
+              ? "Adjust tomorrow’s items and price."
+              : "Add new menu for tomorrow (default price = 15)."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="py-4 space-y-4">
+          {/* Price */}
+          <div>
+            <Label>Price</Label>
+            <Input
+              type="number"
+              min={0}
+              step={0.01}
+              value={price}
+              onChange={(e) => setPrice(Number(e.target.value))}
+            />
           </div>
-        ))}
-      </div>
-    );
-  }
 
-  // For multi-items in "firstCourses" and "secondCourses"
-  function renderCoursesStep() {
-    return (
-      <div className="space-y-6">
-        {/* First Courses */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <Label className="text-lg font-semibold">First Courses</Label>
-            <Button variant="outline" size="sm" onClick={() => {
-              updateMenu({ firstCourses: [...newMenu.firstCourses, ""] });
-            }}>
+          {/* First */}
+          <div>
+            <Label>First Courses</Label>
+            {first.map((fc, idx) => (
+              <div key={fc.id ?? `f-${idx}`} className="flex gap-2 mt-2">
+                <Input
+                  value={fc.name}
+                  onChange={(e) => {
+                    const arr = [...first];
+                    arr[idx].name = e.target.value;
+                    setFirst(arr);
+                  }}
+                />
+                {first.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const arr = [...first];
+                      arr.splice(idx, 1);
+                      setFirst(arr);
+                    }}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => setFirst((arr) => [...arr, { name: "" }])}
+            >
               + Add Another First
             </Button>
           </div>
-          {newMenu.firstCourses.map((course, index) => (
-            <div key={`first-${index}`} className="flex gap-2">
-              <Input
-                value={course}
-                onChange={(e) => {
-                  const updated = [...newMenu.firstCourses];
-                  updated[index] = e.target.value;
-                  updateMenu({ firstCourses: updated });
-                }}
-                placeholder={`First Course ${index + 1}`}
-              />
-              {newMenu.firstCourses.length > 1 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    const updated = newMenu.firstCourses.filter((_, i) => i !== index);
-                    updateMenu({ firstCourses: updated.length ? updated : [""] });
-                  }}
-                >
-                  Remove
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
 
-        {/* Second Courses */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <Label className="text-lg font-semibold">Second Courses</Label>
-            <Button variant="outline" size="sm" onClick={() => {
-              updateMenu({ secondCourses: [...newMenu.secondCourses, ""] });
-            }}>
+          {/* Second */}
+          <div>
+            <Label>Second Courses</Label>
+            {second.map((sc, idx) => (
+              <div key={sc.id ?? `s-${idx}`} className="flex gap-2 mt-2">
+                <Input
+                  value={sc.name}
+                  onChange={(e) => {
+                    const arr = [...second];
+                    arr[idx].name = e.target.value;
+                    setSecond(arr);
+                  }}
+                />
+                {second.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const arr = [...second];
+                      arr.splice(idx, 1);
+                      setSecond(arr);
+                    }}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => setSecond((arr) => [...arr, { name: "" }])}
+            >
               + Add Another Second
             </Button>
           </div>
-          {newMenu.secondCourses.map((course, index) => (
-            <div key={`second-${index}`} className="flex gap-2">
-              <Input
-                value={course}
-                onChange={(e) => {
-                  const updated = [...newMenu.secondCourses];
-                  updated[index] = e.target.value;
-                  updateMenu({ secondCourses: updated });
-                }}
-                placeholder={`Second Course ${index + 1}`}
-              />
-              {newMenu.secondCourses.length > 1 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    const updated = newMenu.secondCourses.filter((_, i) => i !== index);
-                    updateMenu({ secondCourses: updated.length ? updated : [""] });
-                  }}
-                >
-                  Remove
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  function renderPreviewStep() {
-    return (
-      <div className="space-y-4 text-sm">
-        <div>
-          <strong>Will create menus on:</strong>
-          {previewDates.length ? (
-            <ul className="list-disc list-inside mt-1">
-              {previewDates.map((pd) => (
-                <li key={pd}>{pd}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-red-500">No valid dates selected.</p>
-          )}
         </div>
 
-        <div>
-          <strong>Conflicts found:</strong>{" "}
-          {conflicts.length ? (
-            <ul className="list-disc list-inside text-red-600 mt-1">
-              {conflicts.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
-            </ul>
-          ) : (
-            <span className="text-muted-foreground">None</span>
-          )}
-        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={saving} onClick={() => saveMutation.mutate()}>
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-        <div>
-          <strong>First Courses:</strong>
-          <ul className="list-disc list-inside ml-4 mt-1">
-            {newMenu.firstCourses.map((course, index) => (
-              <li key={`preview-first-${index}`}>
-                {course || <span className="text-muted-foreground">Empty</span>}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div>
-          <strong>Second Courses:</strong>
-          <ul className="list-disc list-inside ml-4 mt-1">
-            {newMenu.secondCourses.map((course, index) => (
-              <li key={`preview-second-${index}`}>
-                {course || <span className="text-muted-foreground">Empty</span>}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    );
-  }
-
-  function renderStepContent() {
-    switch (WIZARD_STEPS[currentStep]?.key) {
-      case "date":
-        return renderDateStep();
-      case "pattern":
-        return renderPatternStep();
-      case "courses":
-        return renderCoursesStep();
-      case "preview":
-        return renderPreviewStep();
-      default:
-        return null;
-    }
-  }
-
-  /* ------------------------------------------------------------------------
-     5) Calendar color-coding
-  ------------------------------------------------------------------------*/
-  // Build modifiers for color-coded days:
-  const modifiers = {
-    hasActiveOneTime: dailyMenus
-      .filter((m) => m.active && m.repeat_pattern === "none")
-      .map((m) => new Date(m.date)),
-    hasActiveWeekly: dailyMenus
-      .filter((m) => m.active && m.repeat_pattern === "weekly")
-      .map((m) => new Date(m.date)),
-    hasActiveMonthly: dailyMenus
-      .filter((m) => m.active && m.repeat_pattern === "monthly")
-      .map((m) => new Date(m.date)),
-    hasInactiveMenu: dailyMenus
-      .filter((m) => !m.active)
-      .map((m) => new Date(m.date))
-  };
-
-  // Style them differently
-  const modifiersStyles = {
-    hasActiveOneTime: { backgroundColor: "var(--primary)", opacity: 0.3 },
-    hasActiveWeekly: { backgroundColor: "#3B82F6", opacity: 0.3 },  // Blue
-    hasActiveMonthly: { backgroundColor: "#8B5CF6", opacity: 0.3 }, // Purple
-    hasInactiveMenu: { backgroundColor: "var(--muted)", opacity: 0.3 }
-  };
-
-  /* ------------------------------------------------------------------------
-     6) Render
-  ------------------------------------------------------------------------*/
+/* -------------------------------------------------------------------------
+   5) The "MenuItemsList" with a DropdownMenu for each course
+------------------------------------------------------------------------- */
+function MenuItemsList({
+  items,
+  type,
+  onEditItem,
+}: {
+  items: DailyMenuItem[];
+  type: "first" | "second";
+  onEditItem: (item: DailyMenuItem) => void;
+}) {
+  // If no items, no dropdown (the pencil won't show)
   return (
-    <main className="container mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold mb-4">Daily Menus (Multi-item) with Calendar</h1>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error.message}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* Grid layout: left side calendar, right side Active Menus list */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Left: Calendar */}
-        <div className="bg-white rounded-lg border p-6 space-y-4">
-          <h2 className="text-xl font-semibold">Calendar View</h2>
-          <Calendar
-            mode="single"
-            // For color-coded days:
-            modifiers={modifiers}
-            modifiersStyles={modifiersStyles}
-            // If you want to handle clicks on days:
-            // onSelect={(day) => console.log("Clicked day:", day)}
-            locale={es}
-            showOutsideDays
-            className="w-full"
-          />
-          {/* Legend */}
-          <div className="flex flex-wrap items-center gap-4 text-sm mt-4">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-primary opacity-30" />
-              <span>One-time</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-blue-500 opacity-30" />
-              <span>Weekly</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-purple-500 opacity-30" />
-              <span>Monthly</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-muted opacity-30" />
-              <span>Inactive</span>
-            </div>
-          </div>
-
-          {/* Button to open wizard to create a new menu */}
-          <div className="mt-6">
-            <Button onClick={() => {
-              resetWizard();
-              setIsDialogOpen(true);
-            }}>
-              Create New Menu
-            </Button>
-          </div>
-        </div>
-
-        {/* Right: Active Menus */}
-        <div className="bg-white rounded-lg border p-6">
-          <h2 className="text-xl font-semibold mb-4">Active Menus</h2>
-          {isLoading ? (
-            <div className="flex justify-center items-center h-10">
-              <div className="animate-spin h-6 w-6 border-b-2 border-primary" />
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {dailyMenus
-                .filter((m) => m.active)
-                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                .map((menu) => (
-                  <div
-                    key={menu.id}
-                    className="border rounded-lg p-4 hover:shadow-sm transition-shadow"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="font-medium">
-                        {format(new Date(menu.date), "PPP", { locale: es })}
-                      </div>
-                      <span
-                        className={cn(
-                          "text-xs px-2 py-1 rounded-full",
-                          menu.repeat_pattern === "weekly"
-                            ? "bg-blue-100 text-blue-700"
-                            : menu.repeat_pattern === "monthly"
-                            ? "bg-purple-100 text-purple-700"
-                            : "bg-gray-100 text-gray-700"
-                        )}
-                      >
-                        {menu.repeat_pattern === "none"
-                          ? "One-time"
-                          : menu.repeat_pattern === "weekly"
-                          ? "Weekly"
-                          : "Monthly"}
-                      </span>
-                    </div>
-
-                    {/* Show items grouped by type */}
-                    <div className="space-y-1 text-sm">
-                      <strong>First:</strong>
-                      <ul className="list-disc ml-4">
-                        {menu.daily_menu_items
-                          ?.filter((it) => it.course_type === "first")
-                          .sort((a, b) => a.display_order - b.display_order)
-                          .map((item) => (
-                            <li key={item.id}>{item.course_name}</li>
-                          ))}
-                      </ul>
-                      <strong>Second:</strong>
-                      <ul className="list-disc ml-4">
-                        {menu.daily_menu_items
-                          ?.filter((it) => it.course_type === "second")
-                          .sort((a, b) => a.display_order - b.display_order)
-                          .map((item) => (
-                            <li key={item.id}>{item.course_name}</li>
-                          ))}
-                      </ul>
-                    </div>
-
-                    {/* Deactivate button, if we want to toggle */}
-                    <div className="mt-3">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          toggleMenuStatus.mutate({
-                            id: menu.id,
-                            newStatus: false
-                          })
-                        }
-                      >
-                        Deactivate
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Wizard Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{WIZARD_STEPS[currentStep]?.title}</DialogTitle>
-            <DialogDescription>
-              {WIZARD_STEPS[currentStep]?.description}
-            </DialogDescription>
-          </DialogHeader>
-
-          {renderStepsIndicator()}
-
-          <div className="py-4">{renderStepContent()}</div>
-
-          <DialogFooter>
-            {currentStep > 0 && (
-              <Button variant="outline" onClick={handleBack}>
-                Back
+    <div>
+      <div className="flex items-center gap-2">
+        <b>{type === "first" ? "First" : "Second"}:</b>
+        {items.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Pencil className="h-4 w-4" />
               </Button>
-            )}
-            <Button onClick={handleNext} disabled={isSubmitting}>
-              {isSubmitting
-                ? "Submitting..."
-                : currentStep === WIZARD_STEPS.length - 1
-                ? "Create"
-                : "Next"}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {items
+                .sort((a, b) => a.display_order - b.display_order)
+                .map((item) => (
+                  <DropdownMenuItem key={item.id} onClick={() => onEditItem(item)}>
+                    Edit: {item.course_name}
+                  </DropdownMenuItem>
+                ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+      <ul className="list-disc ml-4">
+        {items
+          .sort((a, b) => a.display_order - b.display_order)
+          .map((x) => (
+            <li key={x.id}>{x.course_name}</li>
+          ))}
+      </ul>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------
+   6) Single-Item Editor => rename or switch course type
+------------------------------------------------------------------------- */
+function EditSingleItemDialog({
+  isOpen,
+  item,
+  onClose,
+}: {
+  isOpen: boolean;
+  item: DailyMenuItem | null;
+  onClose: () => void;
+}) {
+  const supabase = createClientComponentClient<Database>();
+  const qc = useQueryClient();
+
+  const [name, setName] = useState("");
+  const [type, setType] = useState<"first" | "second">("first");
+
+  useEffect(() => {
+    if (item) {
+      setName(item.course_name);
+      setType(item.course_type);
+    } else {
+      setName("");
+      setType("first");
+    }
+  }, [item]);
+
+  const updateItemMut = useMutation<void, Error, void>({
+    mutationFn: async () => {
+      if (!item) return;
+      const { error } = await supabase
+        .from("daily_menu_items")
+        .update({ course_name: name, course_type: type })
+        .eq("id", item.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["todayAndTomorrowMenus"] });
+      onClose();
+    },
+  });
+
+  const saving = updateItemMut.isPending;
+  if (!isOpen) return null;
+
+  // If we have no "item" to edit, just close
+  if (!item) {
+    return (
+      <Dialog open={true} onOpenChange={onClose}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit an Item</DialogTitle>
+            <DialogDescription>No item selected.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    );
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit an Item</DialogTitle>
+          <DialogDescription>Rename or switch the course type.</DialogDescription>
+        </DialogHeader>
+
+        <div className="py-4 space-y-4">
+          <div>
+            <Label>Course Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div>
+            <Label>Course Type</Label>
+            <div className="flex gap-3 mt-1">
+              <label className="flex items-center gap-1 text-sm">
+                <input
+                  type="radio"
+                  name="type"
+                  value="first"
+                  checked={type === "first"}
+                  onChange={() => setType("first")}
+                />
+                First
+              </label>
+              <label className="flex items-center gap-1 text-sm">
+                <input
+                  type="radio"
+                  name="type"
+                  value="second"
+                  checked={type === "second"}
+                  onChange={() => setType("second")}
+                />
+                Second
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => updateItemMut.mutate()}
+            disabled={!name.trim() || saving}
+          >
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* -------------------------------------------------------------------------
+   7) Main Page => merges everything
+------------------------------------------------------------------------- */
+export default function DailyMenusPage() {
+  const supabase = createClientComponentClient<Database>();
+  const queryClient = useQueryClient();
+
+  const [editTomorrowOpen, setEditTomorrowOpen] = useState(false);
+
+  // For single-item editing
+  const [editItemOpen, setEditItemOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<DailyMenuItem | null>(null);
+
+  // Query: fetch "today" & "tomorrow"
+  const {
+    data: { today, tomorrow } = { today: null, tomorrow: null },
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ["todayAndTomorrowMenus"],
+    queryFn: () => fetchMenus(supabase),
+    staleTime: 30000,
+  });
+
+  // carry-forward
+  const carryForwardMut = useMutation<void, Error, DailyMenu>({
+    mutationFn: async (fromMenu) => {
+      await carryForwardMenu(supabase, fromMenu);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["todayAndTomorrowMenus"] });
+    },
+  });
+
+  if (isLoading) return <p>Loading menus...</p>;
+  if (error) return <p className="text-red-500">Error: {(error as Error).message}</p>;
+
+  // Called when user picks "Edit: X" in the dropdown
+  function handleEditItem(item: DailyMenuItem) {
+    setEditingItem(item);
+    setEditItemOpen(true);
+  }
+
+  return (
+    <main className="p-4 space-y-4">
+      <h1 className="text-2xl font-bold">Daily Menus (Dropdown Icon Edit)</h1>
+
+      {/* ----- TODAY ----- */}
+      <section className="border p-3 rounded">
+        <h2 className="text-xl font-semibold">Today&apos;s Menu</h2>
+        {today ? (
+          <div className="mt-2">
+            <strong>{today.date}</strong> (Active? {today.active ? "Yes" : "No"})
+            <div className="text-sm mt-1 text-gray-600">Price: {today.price}€</div>
+            {today.daily_menu_items?.length === 0 && (
+              <p className="mt-1 text-gray-500 italic">No items</p>
+            )}
+            <div className="mt-3 flex gap-6">
+              {/* First */}
+              <MenuItemsList
+                items={today.daily_menu_items.filter((i) => i.course_type === "first")}
+                type="first"
+                onEditItem={handleEditItem}
+              />
+              {/* Second */}
+              <MenuItemsList
+                items={today.daily_menu_items.filter((i) => i.course_type === "second")}
+                type="second"
+                onEditItem={handleEditItem}
+              />
+            </div>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => carryForwardMut.mutate(today)}
+              disabled={carryForwardMut.isPending || !!tomorrow}
+            >
+              {carryForwardMut.isPending ? "Carrying..." : "Carry forward to Tomorrow"}
+            </Button>
+          </div>
+        ) : (
+          <p className="mt-2 text-gray-500 text-sm">No menu for today.</p>
+        )}
+      </section>
+
+      {/* ----- TOMORROW ----- */}
+      <section className="border p-3 rounded">
+        <h2 className="text-xl font-semibold">Tomorrow&apos;s Menu</h2>
+        {tomorrow ? (
+          <div className="mt-2">
+            <strong>{tomorrow.date}</strong> (Active? {tomorrow.active ? "Yes" : "No"})
+            <div className="text-sm mt-1 text-gray-600">Price: {tomorrow.price}€</div>
+            {tomorrow.carried_forward && (
+              <p className="italic text-gray-500 text-sm">
+                Carried from: {tomorrow.carried_from_id}
+              </p>
+            )}
+            {tomorrow.daily_menu_items?.length === 0 && (
+              <p className="mt-1 text-gray-500 italic">No items</p>
+            )}
+            <div className="mt-3 flex gap-6">
+              {/* First */}
+              <MenuItemsList
+                items={tomorrow.daily_menu_items.filter((i) => i.course_type === "first")}
+                type="first"
+                onEditItem={handleEditItem}
+              />
+              {/* Second */}
+              <MenuItemsList
+                items={tomorrow.daily_menu_items.filter((i) => i.course_type === "second")}
+                type="second"
+                onEditItem={handleEditItem}
+              />
+            </div>
+            <Button variant="outline" className="mt-4" onClick={() => setEditTomorrowOpen(true)}>
+              {today ? "Edit Tomorrow’s Menu" : "Create Tomorrow’s Menu"}
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-2 text-sm text-gray-500">
+            <p>
+              No menu set for tomorrow. We&apos;ll reuse today&apos;s if you do nothing,
+              or you can explicitly create it now:
+            </p>
+            <Button variant="outline" className="mt-2" onClick={() => setEditTomorrowOpen(true)}>
+              Create Tomorrow&apos;s Menu
+            </Button>
+          </div>
+        )}
+      </section>
+
+      {/* ----- EditTomorrowDialog ----- */}
+      <EditTomorrowDialog
+        isOpen={editTomorrowOpen}
+        menu={tomorrow}
+        onClose={() => setEditTomorrowOpen(false)}
+      />
+
+      {/* ----- Single-Item Editor Dialog ----- */}
+      <EditSingleItemDialog
+        isOpen={editItemOpen}
+        item={editingItem}
+        onClose={() => {
+          setEditItemOpen(false);
+          setEditingItem(null);
+        }}
+      />
     </main>
   );
 }
