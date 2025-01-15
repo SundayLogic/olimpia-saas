@@ -1,15 +1,20 @@
 {
   "common": {
-    "hello": "Hello",
-    "yes": "Yes",
-    "no": "No"
+    "chooseLanguage": "Choose Language",
+    "hello": "Hello"
   },
   "sidebar": {
     "dashboard": "Dashboard",
-    "language": "Language"
-  },
-  "auth": {
-    "login": "Login",
-    "logout": "Logout"
+    "menuManagement": "Menu Management",
+    "menuItems": "Menu Items",
+    "dailyMenu": "Daily Menu",
+    "wineList": "Wine List",
+    "blog": "Blog",
+    "blogPosts": "Blog Posts",
+    "assets": "Assets",
+    "images": "Images",
+    "admin": "Admin",
+    "users": "Users",
+    "settings": "Settings"
   }
 }

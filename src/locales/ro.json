@@ -1,15 +1,20 @@
 {
   "common": {
-    "hello": "Salut",
-    "yes": "Da",
-    "no": "Nu"
+    "chooseLanguage": "Alege limba",
+    "hello": "Bună"
   },
   "sidebar": {
-    "dashboard": "Panou",
-    "language": "Limba"
-  },
-  "auth": {
-    "login": "Autentificare",
-    "logout": "Ieșire"
+    "dashboard": "Tablou de bord",
+    "menuManagement": "Gestionare Meniu",
+    "menuItems": "Elemente de Meniu",
+    "dailyMenu": "Meniu Zilnic",
+    "wineList": "Listă de Vinuri",
+    "blog": "Blog",
+    "blogPosts": "Postări pe Blog",
+    "assets": "Fișiere",
+    "images": "Imagini",
+    "admin": "Admin",
+    "users": "Utilizatori",
+    "settings": "Setări"
   }
 }

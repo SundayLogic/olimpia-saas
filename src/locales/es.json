@@ -1,15 +1,20 @@
 {
   "common": {
-    "hello": "Hola",
-    "yes": "Sí",
-    "no": "No"
+    "chooseLanguage": "Elige idioma",
+    "hello": "Hola"
   },
   "sidebar": {
     "dashboard": "Panel",
-    "language": "Idioma"
-  },
-  "auth": {
-    "login": "Iniciar sesión",
-    "logout": "Cerrar sesión"
+    "menuManagement": "Gestión de Menú",
+    "menuItems": "Elementos del Menú",
+    "dailyMenu": "Menú Diario",
+    "wineList": "Lista de Vinos",
+    "blog": "Blog",
+    "blogPosts": "Entradas del Blog",
+    "assets": "Archivos",
+    "images": "Imágenes",
+    "admin": "Admin",
+    "users": "Usuarios",
+    "settings": "Configuraciones"
   }
 }

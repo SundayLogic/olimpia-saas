@@ -1,6 +1,6 @@
 # Documentation for Selected Directories
 
-Generated on: 2025-01-15 22:49:57
+Generated on: 2025-01-15 23:59:42
 
 ## Documented Directories:
 - app/
@@ -61,6 +61,7 @@ src/
             │   ├── layout.tsx
             │   ├── ui.tsx
             ├── features/
+            │   ├── LanguageSwitcher.tsx
             │   ├── images.tsx
             │   ├── menu.tsx
             │   ├── users.tsx
@@ -86,9 +87,15 @@ src/
             │   ├── toaster.tsx
         ├── hooks/
         │   ├── use-toast.ts
+        │   ├── use-translation.ts
         ├── lib/
+        │   ├── i18n.ts
         │   ├── supabase.ts
         │   ├── utils.ts
+        ├── locales/
+        │   ├── en.json
+        │   ├── es.json
+        │   ├── ro.json
         ├── types/
         │   ├── index.ts
 
@@ -5314,149 +5321,135 @@ export default function MenuPage() {
 ### app/dashboard/layout.tsx
 
 ```typescript
-export const dynamic = 'force-dynamic'; // Keep if needed due to session checks
+"use client"; // So we can call `useTranslation`
 import { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import { LayoutDashboard, Users, Settings, LogOut, ImageIcon, MenuSquare, ClipboardList, Wine, BookOpen } from "lucide-react";
-import type { Database } from "@/types";
+import { useTranslation } from "react-i18next";
+import { LogOut, LayoutDashboard, Users, Settings, ImageIcon, MenuSquare, ClipboardList, Wine, BookOpen } from "lucide-react";
+import LanguageFlagSwitcher from "@/components/features/LanguageSwitcher";
 
 export const metadata: Metadata = {
   title: "Dashboard",
   description: "Restaurant management dashboard",
 };
 
-interface DashboardLayoutProps {
-  children: React.ReactNode;
-}
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // Example: using the "sidebar" namespace from the JSON
+  const { t } = useTranslation("sidebar");
 
-export default async function DashboardLayout({ children }: DashboardLayoutProps) {
-  const supabase = createServerComponentClient<Database>({ cookies });
-
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    redirect("/login");
-  }
-
-  const { data: userProfile } = await supabase
-    .from("users")
-    .select("role, name")
-    .eq("id", session.user.id)
-    .single();
-
-  // If userProfile doesn't matter for some routes, consider conditional fetch or omit entirely.
-  // If userProfile is always needed:
-  const userName = userProfile?.name || session.user.email;
-  const userRole = userProfile?.role || 'user';
+  // Hard-coded for demonstration (in real code, do your session check on server):
+  const userName = "John Doe";
+  const userRole = "admin";
 
   return (
     <div className="flex min-h-screen">
+      {/* Sidebar */}
       <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-background">
         <div className="flex h-full flex-col">
-          {/* Sidebar Header */}
+          {/* Header */}
           <div className="border-b px-6 py-4">
             <Link href="/dashboard" className="flex items-center text-lg font-semibold">
-              Restaurant Dashboard
+              {t("dashboard")}
             </Link>
           </div>
 
           {/* Navigation */}
           <nav className="flex-1 space-y-1 px-3 py-4">
             <Link href="/dashboard">
-              <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+              <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
                 <LayoutDashboard className="mr-2 h-4 w-4" />
-                Dashboard
+                {t("dashboard")}
               </div>
             </Link>
 
             <div className="pt-4">
               <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Menu Management
+                {t("menuManagement")}
               </h2>
-              {/* Menu items */}
               <Link href="/dashboard/menu">
-                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
                   <ClipboardList className="mr-2 h-4 w-4" />
-                  Menu Items
+                  {t("menuItems")}
                 </div>
               </Link>
               <Link href="/dashboard/menu/daily">
-                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
                   <MenuSquare className="mr-2 h-4 w-4" />
-                  Daily Menu
+                  {t("dailyMenu")}
                 </div>
               </Link>
               <Link href="/dashboard/menu/wine">
-                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
                   <Wine className="mr-2 h-4 w-4" />
-                  Wine List
+                  {t("wineList")}
                 </div>
               </Link>
             </div>
 
             <div className="pt-4">
               <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Blog
+                {t("blog")}
               </h2>
               <Link href="/dashboard/blog">
-                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
                   <BookOpen className="mr-2 h-4 w-4" />
-                  Blog Posts
+                  {t("blogPosts")}
                 </div>
               </Link>
             </div>
 
             <div className="pt-4">
               <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Assets
+                {t("assets")}
               </h2>
               <Link href="/dashboard/images">
-                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
                   <ImageIcon className="mr-2 h-4 w-4" />
-                  Images
+                  {t("images")}
                 </div>
               </Link>
             </div>
 
-            {userRole === 'admin' && (
+            {userRole === "admin" && (
               <div className="pt-4">
                 <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Admin
+                  {t("admin")}
                 </h2>
                 <Link href="/dashboard/users">
-                  <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                  <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
                     <Users className="mr-2 h-4 w-4" />
-                    Users
+                    {t("users")}
                   </div>
                 </Link>
                 <Link href="/dashboard/settings">
-                  <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                  <div className="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
                     <Settings className="mr-2 h-4 w-4" />
-                    Settings
+                    {t("settings")}
                   </div>
                 </Link>
               </div>
             )}
           </nav>
 
-          {/* User Section */}
+          {/* Bottom row: user info + language switcher */}
           <div className="border-t p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">{userName}</p>
                 <p className="text-xs text-muted-foreground capitalize">{userRole}</p>
               </div>
-              <form action="/auth/signout" method="post">
-                <button
-                  type="submit"
-                  className="rounded-full p-2 hover:bg-accent hover:text-accent-foreground"
-                  aria-label="Sign out"
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
-              </form>
+              <button
+                type="button"
+                className="rounded-full p-2 hover:bg-accent hover:text-accent-foreground"
+                aria-label="Sign out"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Language Switcher with flags */}
+            <div className="mt-3">
+              <LanguageFlagSwitcher />
             </div>
           </div>
         </div>
@@ -5721,74 +5714,14 @@ export default async function DashboardPage() {
 ### app/layout.tsx
 
 ```typescript
-import type { Metadata, Viewport } from "next";
-import { Lato } from "next/font/google";
-import { Providers } from "./providers"; 
-import { Toaster } from "@/components/ui/toaster";
-import "./global.css"; // Tailwind & global styles
+import "./global.css";
+import { Providers } from "./providers";
 
-const lato = Lato({
-  subsets: ['latin'],
-  weight: ['100', '300', '400', '700', '900'],
-  variable: '--font-lato',
-  display: 'swap',
-});
-
-const APP_NAME = "Restaurant Manager";
-const APP_DESCRIPTION = "A modern restaurant management platform";
-
-export const metadata: Metadata = {
-  title: {
-    default: APP_NAME,
-    template: `%s | ${APP_NAME}`,
-  },
-  description: APP_DESCRIPTION,
-  icons: {
-    icon: "/favicon.ico",
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: APP_NAME,
-  },
-  formatDetection: {
-    telephone: false,
-  },
-};
-
-export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "white" },
-    { media: "(prefers-color-scheme: dark)", color: "black" },
-  ],
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-};
-
-interface RootLayoutProps {
-  children: React.ReactNode;
-}
-
-export default async function RootLayout({ children }: RootLayoutProps) {
-  // Removed supabase session fetch since layout doesn’t seem to need it.
-
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html 
-      lang="en" 
-      className={`${lato.variable} antialiased`}
-      suppressHydrationWarning
-    >
-      <head />
-      <body className="min-h-screen bg-background font-sans">
-        <Providers>
-          <main className="relative flex min-h-screen flex-col">
-            {children}
-          </main>
-          {/* If Toaster is always needed, keep it. Otherwise, consider moving it into specific pages */}
-          <Toaster />
-        </Providers>
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
@@ -5846,16 +5779,20 @@ export default async function HomePage() {
 ```typescript
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { I18nextProvider } from "react-i18next";
+import i18n from "@/lib/i18n";
 
 const queryClient = new QueryClient();
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <QueryClientProvider client={queryClient}>
-      {children}
-    </QueryClientProvider>
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    </I18nextProvider>
   );
 }
 
@@ -6503,6 +6440,61 @@ export {
   buttonVariants,
   badgeVariants,
 };
+```
+
+### src/components/features/LanguageSwitcher.tsx
+
+```typescript
+"use client";
+
+import React from "react";
+import { useTranslation } from "react-i18next";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+
+export default function LanguageFlagSwitcher() {
+  const { i18n } = useTranslation();
+
+  const languages = [
+    { code: "en", name: "English", flag: "🇬🇧" },
+    { code: "es", name: "Español", flag: "🇪🇸" },
+    { code: "ro", name: "Română", flag: "🇷🇴" },
+  ];
+
+  // e.g. "en", "es", etc.
+  const currentLang = i18n.language;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" className="w-full justify-start text-black">
+          {/* Show the current language's flag & label */}
+          {languages.map((lang) =>
+            lang.code === currentLang ? (
+              <React.Fragment key={lang.code}>
+                <span className="mr-2">{lang.flag}</span>
+                <span>{lang.name}</span>
+              </React.Fragment>
+            ) : null
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-48">
+        {languages.map((lang) => (
+          <DropdownMenuItem
+            key={lang.code}
+            className="cursor-pointer"
+            onClick={() => i18n.changeLanguage(lang.code)}
+          >
+            <span className="mr-2">{lang.flag}</span>
+            <span>{lang.name}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 ```
 
 ### src/components/features/images.tsx
@@ -9242,6 +9234,52 @@ function useToast() {
 export { useToast, toast }
 ```
 
+### src/hooks/use-translation.ts
+
+```typescript
+// /src/hooks/use-translation.ts
+import { useTranslation as useReactI18Next } from 'react-i18next';
+
+// Simple wrapper to keep a consistent naming or custom logic:
+export function useTranslation(ns?: string) {
+  // If you have a specific namespace, you can pass it, e.g., "sidebar"
+  return useReactI18Next(ns);
+}
+
+```
+
+### src/lib/i18n.ts
+
+```typescript
+// /src/lib/i18n.ts
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+
+// Example local JSON resources
+import en from '@/locales/en.json';
+import es from '@/locales/es.json';
+import ro from '@/locales/ro.json';
+
+i18n
+  .use(initReactI18next)
+  .init({
+    resources: {
+      en,
+      es,
+      ro,
+    },
+    lng: 'es', // default language
+    fallbackLng: 'es',
+    interpolation: {
+      escapeValue: false, 
+    },
+  })
+  .catch((err) => console.error('i18n init error:', err));
+
+export default i18n;
+
+```
+
 ### src/lib/supabase.ts
 
 ```typescript
@@ -9637,6 +9675,84 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function isArray<T>(value: unknown): value is T[] {
   return Array.isArray(value);
 }
+```
+
+### src/locales/en.json
+
+```json
+{
+  "common": {
+    "chooseLanguage": "Choose Language",
+    "hello": "Hello"
+  },
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "menuManagement": "Menu Management",
+    "menuItems": "Menu Items",
+    "dailyMenu": "Daily Menu",
+    "wineList": "Wine List",
+    "blog": "Blog",
+    "blogPosts": "Blog Posts",
+    "assets": "Assets",
+    "images": "Images",
+    "admin": "Admin",
+    "users": "Users",
+    "settings": "Settings"
+  }
+}
+
+```
+
+### src/locales/es.json
+
+```json
+{
+  "common": {
+    "chooseLanguage": "Elige idioma",
+    "hello": "Hola"
+  },
+  "sidebar": {
+    "dashboard": "Panel",
+    "menuManagement": "Gestión de Menú",
+    "menuItems": "Elementos del Menú",
+    "dailyMenu": "Menú Diario",
+    "wineList": "Lista de Vinos",
+    "blog": "Blog",
+    "blogPosts": "Entradas del Blog",
+    "assets": "Archivos",
+    "images": "Imágenes",
+    "admin": "Admin",
+    "users": "Usuarios",
+    "settings": "Configuraciones"
+  }
+}
+
+```
+
+### src/locales/ro.json
+
+```json
+{
+  "common": {
+    "chooseLanguage": "Alege limba",
+    "hello": "Bună"
+  },
+  "sidebar": {
+    "dashboard": "Tablou de bord",
+    "menuManagement": "Gestionare Meniu",
+    "menuItems": "Elemente de Meniu",
+    "dailyMenu": "Meniu Zilnic",
+    "wineList": "Listă de Vinuri",
+    "blog": "Blog",
+    "blogPosts": "Postări pe Blog",
+    "assets": "Fișiere",
+    "images": "Imagini",
+    "admin": "Admin",
+    "users": "Utilizatori",
+    "settings": "Setări"
+  }
+}
+
 ```
 
 ### src/types/index.ts

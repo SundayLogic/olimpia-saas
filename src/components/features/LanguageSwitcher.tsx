@@ -1,58 +1,49 @@
-// /src/components/features/LanguageSwitcher.tsx
 "use client";
 
-import React, { useState } from "react";
-import i18n from "@/lib/i18n";
-import { useTranslation } from "@/hooks/use-translation";
+import React from "react";
+import { useTranslation } from "react-i18next";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 
-// If you placed flags in public/flags
-import Image from "next/image";
+export default function LanguageFlagSwitcher() {
+  const { i18n } = useTranslation();
 
-// Example: each object has language code + path to the PNG or SVG
-const LANGUAGES = [
-  { code: "es", label: "Español", flagSrc: "/flags/es.png" },
-  { code: "en", label: "English", flagSrc: "/flags/en.png" },
-  { code: "ro", label: "Română", flagSrc: "/flags/ro.png" },
-];
+  const languages = [
+    { code: "en", name: "English", flag: "🇬🇧" },
+    { code: "es", name: "Español", flag: "🇪🇸" },
+    { code: "ro", name: "Română", flag: "🇷🇴" },
+  ];
 
-export default function LanguageSwitcher() {
-  // We'll re-render when user picks a new language
-  const [currentLng, setCurrentLng] = useState(i18n.language);
-
-  // For any translation text in the switcher itself (optional).
-  const { t } = useTranslation("common");
-
-  const handleChange = async (lngCode: string) => {
-    await i18n.changeLanguage(lngCode);
-    setCurrentLng(lngCode);
-    // Optionally store chosen language in localStorage
-    localStorage.setItem("appLang", lngCode);
-  };
+  // e.g. "en", "es", etc.
+  const currentLang = i18n.language;
 
   return (
-    <div className="flex flex-col gap-2 pt-2">
-      <span className="text-sm font-semibold">
-        {t("chooseLanguage") /* a key from your JSON, e.g. "Choose language" */}
-      </span>
-      <div className="flex gap-2">
-        {LANGUAGES.map((lang) => (
-          <button
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" className="w-full justify-start text-black">
+          {/* Show the current language's flag & label */}
+          {languages.map((lang) =>
+            lang.code === currentLang ? (
+              <React.Fragment key={lang.code}>
+                <span className="mr-2">{lang.flag}</span>
+                <span>{lang.name}</span>
+              </React.Fragment>
+            ) : null
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-48">
+        {languages.map((lang) => (
+          <DropdownMenuItem
             key={lang.code}
-            onClick={() => handleChange(lang.code)}
-            className={`rounded p-1 ${
-              lang.code === currentLng ? "border border-primary" : "border"
-            }`}
+            className="cursor-pointer"
+            onClick={() => i18n.changeLanguage(lang.code)}
           >
-            <Image
-              src={lang.flagSrc}
-              alt={lang.label}
-              width={24}
-              height={16}
-              style={{ objectFit: "cover" }}
-            />
-          </button>
+            <span className="mr-2">{lang.flag}</span>
+            <span>{lang.name}</span>
+          </DropdownMenuItem>
         ))}
-      </div>
-    </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
