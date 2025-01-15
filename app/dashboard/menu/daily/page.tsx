@@ -3,13 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import {
-  addDays,
-  addWeeks,
-  addMonths,
-  format,
-  isSameDay
-} from "date-fns";
+import { addDays, addWeeks, addMonths, format, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { DateRange } from "react-day-picker";
 
@@ -23,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -81,8 +75,8 @@ interface NewMenu {
   dateRange: DateRange;
   repeat_pattern: "none" | "weekly" | "monthly";
   active: boolean;
-  firstCourses: string[];   // multiple "first" items
-  secondCourses: string[];  // multiple "second" items
+  firstCourses: string[]; // multiple "first" items
+  secondCourses: string[]; // multiple "second" items
   previewDates?: string[];
 }
 
@@ -97,23 +91,23 @@ const WIZARD_STEPS: WizardStep[] = [
   {
     key: "date",
     title: "Select Dates",
-    description: "Choose the date range for your menus."
+    description: "Choose the date range for your menus.",
   },
   {
     key: "pattern",
     title: "Set Repeat Pattern",
-    description: "One-time, weekly, or monthly?"
+    description: "One-time, weekly, or monthly?",
   },
   {
     key: "courses",
     title: "Add Courses",
-    description: "Enter multiple first and second courses."
+    description: "Enter multiple first and second courses.",
   },
   {
     key: "preview",
     title: "Preview & Confirm",
-    description: "Review before creating menus."
-  }
+    description: "Review before creating menus.",
+  },
 ];
 
 /* ------------------------------------------------------------------------
@@ -140,7 +134,10 @@ function generatePreviewDates(
   return dates;
 }
 
-function checkDateConflicts(dates: Date[], existingMenus: DailyMenu[]): string[] {
+function checkDateConflicts(
+  dates: Date[],
+  existingMenus: DailyMenu[]
+): string[] {
   const conflicts = dates.filter((date) =>
     existingMenus.some((m) => isSameDay(new Date(m.date), date))
   );
@@ -153,14 +150,12 @@ function checkDateConflicts(dates: Date[], existingMenus: DailyMenu[]): string[]
 async function fetchDailyMenus(
   supabase: ReturnType<typeof createClientComponentClient<Database>>
 ): Promise<DailyMenu[]> {
-  const { data, error } = await supabase
-    .from("daily_menus")
-    .select(
-      `id, date, repeat_pattern, active, scheduled_for, created_at,
+  const { data, error } = await supabase.from("daily_menus").select(
+    `id, date, repeat_pattern, active, scheduled_for, created_at,
        daily_menu_items(
          id, course_name, course_type, display_order, daily_menu_id
        )`
-    );
+  );
 
   if (error) throw error;
   return (data ?? []) as DailyMenu[];
@@ -189,7 +184,7 @@ export default function DailyMenuPage() {
     active: true,
     firstCourses: [""],
     secondCourses: [""],
-    previewDates: []
+    previewDates: [],
   });
 
   /* -----------------
@@ -198,22 +193,25 @@ export default function DailyMenuPage() {
   const {
     data: dailyMenus = [],
     isLoading,
-    error
+    error,
   } = useQuery<DailyMenu[], Error>({
     queryKey: ["dailyMenus"],
-    queryFn: () => fetchDailyMenus(supabase)
+    queryFn: () => fetchDailyMenus(supabase),
   });
 
   /* -----------------
      Toggle Status 
   ----------------- */
-  const toggleMenuStatus = useMutation({
-    // toggles an existing daily_menus row's active field
-    mutationFn: async (vars: { id: string; newStatus: boolean }) => {
+  const toggleMenuStatus = useMutation<
+    void,
+    Error,
+    { id: string; newStatus: boolean }
+  >({
+    mutationFn: async ({ id, newStatus }) => {
       const { error: toggleErr } = await supabase
         .from("daily_menus")
-        .update({ active: vars.newStatus })
-        .eq("id", vars.id);
+        .update({ active: newStatus })
+        .eq("id", id);
       if (toggleErr) throw toggleErr;
     },
     onSuccess: async () => {
@@ -222,22 +220,30 @@ export default function DailyMenuPage() {
     },
     onError: (err) => {
       if (err instanceof Error) {
-        toast({ title: "Error", description: err.message, variant: "destructive" });
+        toast({
+          title: "Error",
+          description: err.message,
+          variant: "destructive",
+        });
       }
-    }
+    },
   });
 
   /* -----------------
      Create new menus 
   ----------------- */
-  const createMenuMutation = useMutation({
+  const createMenuMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
       setIsSubmitting(true);
       const { from, to } = newMenu.dateRange;
       if (!from) throw new Error("Please select a start date first!");
 
       const finalEnd = to || from;
-      let dateList = generatePreviewDates(from, finalEnd, newMenu.repeat_pattern);
+      let dateList = generatePreviewDates(
+        from,
+        finalEnd,
+        newMenu.repeat_pattern
+      );
 
       // Check conflicts
       const conflictFound = checkDateConflicts(dateList, dailyMenus);
@@ -252,14 +258,15 @@ export default function DailyMenuPage() {
           (d) => !conflictFound.includes(format(d, "PPP", { locale: es }))
         );
       }
-      if (!dateList.length) throw new Error("No valid dates remain to schedule!");
+      if (!dateList.length)
+        throw new Error("No valid dates remain to schedule!");
 
       // Insert daily_menus rows
       const rows = dateList.map((d) => ({
         date: format(d, "yyyy-MM-dd"),
         repeat_pattern: newMenu.repeat_pattern,
         active: newMenu.active,
-        scheduled_for: format(d, "yyyy-MM-dd'T'11:00:00.000'Z'")
+        scheduled_for: format(d, "yyyy-MM-dd'T'11:00:00.000'Z'"),
       }));
       const { data: inserted, error: insertErr } = await supabase
         .from("daily_menus")
@@ -268,23 +275,29 @@ export default function DailyMenuPage() {
       if (insertErr) throw insertErr;
 
       // Insert daily_menu_items for each new menu
-      const allInserts = (inserted || []).flatMap((menu) => [
-        // each first course
-        ...newMenu.firstCourses.map((course, index) => ({
-          daily_menu_id: menu.id,
-          course_name: course,
-          course_type: "first" as const,
-          display_order: index + 1
-        })),
-        // each second course
-        ...newMenu.secondCourses.map((course, index) => ({
-          daily_menu_id: menu.id,
-          course_name: course,
-          course_type: "second" as const,
-          display_order: index + 1
-        }))
-      ]);
-      if (allInserts.length) {
+      if (inserted && inserted.length > 0) {
+        // Build an array of new items from firstCourses & secondCourses
+        const allInserts = inserted.flatMap(
+          (menu) =>
+            [
+              // each first course
+              ...newMenu.firstCourses.map((course, index) => ({
+                daily_menu_id: menu.id,
+                course_name: course,
+                course_type: "first" as const,
+                display_order: index + 1,
+              })),
+              // each second course
+              ...newMenu.secondCourses.map((course, index) => ({
+                daily_menu_id: menu.id,
+                course_name: course,
+                course_type: "second" as const,
+                display_order: index + 1,
+              })),
+            ] satisfies Omit<DailyMenuItem, "id">[]
+        );
+
+        // Insert them
         const { error: itemsErr } = await supabase
           .from("daily_menu_items")
           .insert(allInserts);
@@ -295,17 +308,21 @@ export default function DailyMenuPage() {
       await queryClient.invalidateQueries({ queryKey: ["dailyMenus"] });
       toast({
         title: "Success",
-        description: "Daily menus created with multiple items per course."
+        description: "Daily menus created with multiple items per course.",
       });
     },
     onError: (err) => {
       if (err instanceof Error) {
-        toast({ title: "Error", description: err.message, variant: "destructive" });
+        toast({
+          title: "Error",
+          description: err.message,
+          variant: "destructive",
+        });
       }
     },
     onSettled: () => {
       setIsSubmitting(false);
-    }
+    },
   });
 
   /* -----------------
@@ -317,7 +334,11 @@ export default function DailyMenuPage() {
       const { from, to } = newMenu.dateRange;
       if (!from) return;
       const finalEnd = to || from;
-      const dateList = generatePreviewDates(from, finalEnd, newMenu.repeat_pattern);
+      const dateList = generatePreviewDates(
+        from,
+        finalEnd,
+        newMenu.repeat_pattern
+      );
       const conflictDates = checkDateConflicts(dateList, dailyMenus);
 
       setPreviewDates(dateList.map((d) => format(d, "PPP", { locale: es })));
@@ -351,7 +372,7 @@ export default function DailyMenuPage() {
       active: true,
       firstCourses: [""],
       secondCourses: [""],
-      previewDates: []
+      previewDates: [],
     });
   }
 
@@ -372,7 +393,9 @@ export default function DailyMenuPage() {
               key={step.key}
               className={cn(
                 "w-8 h-8 rounded-full flex items-center justify-center border border-muted-foreground text-sm font-semibold",
-                isActive ? "bg-primary text-white border-primary" : "text-muted-foreground"
+                isActive
+                  ? "bg-primary text-white border-primary"
+                  : "text-muted-foreground"
               )}
             >
               {idx + 1}
@@ -415,7 +438,7 @@ export default function DailyMenuPage() {
             onSelect={(range) => {
               if (range?.from) {
                 updateMenu({
-                  dateRange: { from: range.from, to: range.to || range.from }
+                  dateRange: { from: range.from, to: range.to || range.from },
                 });
               }
             }}
@@ -443,8 +466,8 @@ export default function DailyMenuPage() {
               {val === "none"
                 ? "One-time: Creates a menu only for the selected date(s)."
                 : val === "weekly"
-                ? "Weekly: Automatically create menus every week."
-                : "Monthly: Automatically create menus on the same date each month."}
+                  ? "Weekly: Automatically create menus every week."
+                  : "Monthly: Automatically create menus on the same date each month."}
             </p>
           </div>
         ))}
@@ -460,9 +483,13 @@ export default function DailyMenuPage() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <Label className="text-lg font-semibold">First Courses</Label>
-            <Button variant="outline" size="sm" onClick={() => {
-              updateMenu({ firstCourses: [...newMenu.firstCourses, ""] });
-            }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                updateMenu({ firstCourses: [...newMenu.firstCourses, ""] });
+              }}
+            >
               + Add Another First
             </Button>
           </div>
@@ -482,8 +509,12 @@ export default function DailyMenuPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    const updated = newMenu.firstCourses.filter((_, i) => i !== index);
-                    updateMenu({ firstCourses: updated.length ? updated : [""] });
+                    const updated = newMenu.firstCourses.filter(
+                      (_, i) => i !== index
+                    );
+                    updateMenu({
+                      firstCourses: updated.length ? updated : [""],
+                    });
                   }}
                 >
                   Remove
@@ -497,9 +528,13 @@ export default function DailyMenuPage() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <Label className="text-lg font-semibold">Second Courses</Label>
-            <Button variant="outline" size="sm" onClick={() => {
-              updateMenu({ secondCourses: [...newMenu.secondCourses, ""] });
-            }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                updateMenu({ secondCourses: [...newMenu.secondCourses, ""] });
+              }}
+            >
               + Add Another Second
             </Button>
           </div>
@@ -519,8 +554,12 @@ export default function DailyMenuPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    const updated = newMenu.secondCourses.filter((_, i) => i !== index);
-                    updateMenu({ secondCourses: updated.length ? updated : [""] });
+                    const updated = newMenu.secondCourses.filter(
+                      (_, i) => i !== index
+                    );
+                    updateMenu({
+                      secondCourses: updated.length ? updated : [""],
+                    });
                   }}
                 >
                   Remove
@@ -616,13 +655,13 @@ export default function DailyMenuPage() {
       .map((m) => new Date(m.date)),
     hasInactiveMenu: dailyMenus
       .filter((m) => !m.active)
-      .map((m) => new Date(m.date))
+      .map((m) => new Date(m.date)),
   };
   const modifiersStyles = {
     hasActiveOneTime: { backgroundColor: "var(--primary)", opacity: 0.3 },
-    hasActiveWeekly: { backgroundColor: "#3B82F6", opacity: 0.3 },  // Blue
+    hasActiveWeekly: { backgroundColor: "#3B82F6", opacity: 0.3 }, // Blue
     hasActiveMonthly: { backgroundColor: "#8B5CF6", opacity: 0.3 }, // Purple
-    hasInactiveMenu: { backgroundColor: "var(--muted)", opacity: 0.3 }
+    hasInactiveMenu: { backgroundColor: "var(--muted)", opacity: 0.3 },
   };
 
   /* -----------------------------
@@ -646,7 +685,9 @@ export default function DailyMenuPage() {
   ------------------------------------------------------------------------*/
   return (
     <main className="container mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold mb-4">Daily Menus (Multi-item) with Calendar</h1>
+      <h1 className="text-2xl font-bold mb-4">
+        Daily Menus (Multi-item) with Calendar
+      </h1>
 
       {error && (
         <Alert variant="destructive">
@@ -689,10 +730,12 @@ export default function DailyMenuPage() {
 
           {/* Button to open wizard to create a new menu */}
           <div className="mt-6">
-            <Button onClick={() => {
-              resetWizard();
-              setIsDialogOpen(true);
-            }}>
+            <Button
+              onClick={() => {
+                resetWizard();
+                setIsDialogOpen(true);
+              }}
+            >
               Create New Menu
             </Button>
           </div>
@@ -709,7 +752,10 @@ export default function DailyMenuPage() {
             <div className="space-y-4">
               {dailyMenus
                 .filter((m) => m.active)
-                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                .sort(
+                  (a, b) =>
+                    new Date(a.date).getTime() - new Date(b.date).getTime()
+                )
                 .map((menu) => (
                   <div
                     key={menu.id}
@@ -725,15 +771,15 @@ export default function DailyMenuPage() {
                           menu.repeat_pattern === "weekly"
                             ? "bg-blue-100 text-blue-700"
                             : menu.repeat_pattern === "monthly"
-                            ? "bg-purple-100 text-purple-700"
-                            : "bg-gray-100 text-gray-700"
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-gray-100 text-gray-700"
                         )}
                       >
                         {menu.repeat_pattern === "none"
                           ? "One-time"
                           : menu.repeat_pattern === "weekly"
-                          ? "Weekly"
-                          : "Monthly"}
+                            ? "Weekly"
+                            : "Monthly"}
                       </span>
                     </div>
 
@@ -774,7 +820,7 @@ export default function DailyMenuPage() {
                         onClick={() =>
                           toggleMenuStatus.mutate({
                             id: menu.id,
-                            newStatus: false
+                            newStatus: false,
                           })
                         }
                       >
@@ -812,8 +858,8 @@ export default function DailyMenuPage() {
               {isSubmitting
                 ? "Submitting..."
                 : currentStep === WIZARD_STEPS.length - 1
-                ? "Create"
-                : "Next"}
+                  ? "Create"
+                  : "Next"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -837,7 +883,7 @@ export default function DailyMenuPage() {
 function EditMenuDialog({
   isOpen,
   menu,
-  onClose
+  onClose,
 }: {
   isOpen: boolean;
   menu: DailyMenu;
@@ -847,7 +893,7 @@ function EditMenuDialog({
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Separate the existing items into firstCourses and secondCourses
+  // Separate existing items into firstCourses and secondCourses
   const [firstCourses, setFirstCourses] = useState<string[]>(
     menu.daily_menu_items
       ? menu.daily_menu_items
@@ -865,8 +911,8 @@ function EditMenuDialog({
       : []
   );
 
-  // A simple approach: remove all items for this menu & re-insert them
-  const updateMenuMutation = useMutation({
+  // Remove all items for this menu & re-insert
+  const updateMenuMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
       // 1) Delete old items
       const { error: delErr } = await supabase
@@ -876,22 +922,22 @@ function EditMenuDialog({
       if (delErr) throw delErr;
 
       // 2) Insert new items
-      const allInserts: Omit<DailyMenuItem, "id">[] = [
+      const allInserts = [
         // first courses
         ...firstCourses.map((course, idx) => ({
           daily_menu_id: menu.id,
           course_name: course,
-          course_type: "first",
-          display_order: idx + 1
+          course_type: "first" as const,
+          display_order: idx + 1,
         })),
         // second courses
         ...secondCourses.map((course, idx) => ({
           daily_menu_id: menu.id,
           course_name: course,
-          course_type: "second",
-          display_order: idx + 1
-        }))
-      ];
+          course_type: "second" as const,
+          display_order: idx + 1,
+        })),
+      ] satisfies Omit<DailyMenuItem, "id">[];
 
       if (allInserts.length) {
         const { error: insertErr } = await supabase
@@ -907,9 +953,13 @@ function EditMenuDialog({
     },
     onError: (err) => {
       if (err instanceof Error) {
-        toast({ title: "Error", description: err.message, variant: "destructive" });
+        toast({
+          title: "Error",
+          description: err.message,
+          variant: "destructive",
+        });
       }
-    }
+    },
   });
 
   function handleSave() {
@@ -923,7 +973,9 @@ function EditMenuDialog({
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Edit Menu Items</DialogTitle>
-          <DialogDescription>Edit the first/second courses for {menu.date}.</DialogDescription>
+          <DialogDescription>
+            Edit the first/second courses for {menu.date}.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
@@ -1003,9 +1055,11 @@ function EditMenuDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={updateMenuMutation.isLoading}>
-            {updateMenuMutation.isLoading ? "Saving..." : "Save Changes"}
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave}>
+            {updateMenuMutation.isPending ? "Saving..." : "Save Changes"}
           </Button>
         </DialogFooter>
       </DialogContent>
