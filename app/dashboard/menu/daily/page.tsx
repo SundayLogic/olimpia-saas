@@ -17,20 +17,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-/* --------------------------------------------------------------------------------------
+/* -------------------------------------------------------------------------
    1) Database & Local Types
--------------------------------------------------------------------------------------- */
+---------------------------------------------------------------------------- */
 interface Database {
   public: {
     Tables: {
       daily_menus: {
         Row: {
           id: string;
-          date: string;
+          date: string;                   // e.g. "YYYY-MM-DD"
           active: boolean;
           created_at: string;
-          carried_forward: boolean;       // NEW
-          carried_from_id: string | null;// NEW
+          carried_forward: boolean;       // new
+          carried_from_id: string | null; // new
+          price: number;                  // new
+          scheduled_for: string;          // new
+          is_draft: boolean;             // new
         };
       };
       daily_menu_items: {
@@ -53,15 +56,22 @@ interface DailyMenuItem {
   course_type: "first" | "second";
   display_order: number;
 }
-
 interface DailyMenu {
   id: string;
   date: string;
   active: boolean;
   created_at: string;
-  carried_forward: boolean;       
-  carried_from_id: string | null; 
+  carried_forward: boolean;
+  carried_from_id: string | null;
+  price: number;               // added
+  scheduled_for: string;       // added
+  is_draft: boolean;           // added
   daily_menu_items: DailyMenuItem[];
+}
+
+interface EditableCourseItem {
+  id?: string;
+  name: string;
 }
 
 type MenusTodayTomorrow = {
@@ -69,14 +79,9 @@ type MenusTodayTomorrow = {
   tomorrow: DailyMenu | null;
 };
 
-interface EditableCourseItem {
-  id?: string;
-  name: string;
-}
-
-/* --------------------------------------------------------------------------------------
-   2) fetchMenus => returns today & tomorrow in one shot
--------------------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------
+   2) fetchMenus => returns "today" and "tomorrow" from DB
+---------------------------------------------------------------------------- */
 async function fetchMenus(
   supabase: ReturnType<typeof createClientComponentClient<Database>>
 ): Promise<MenusTodayTomorrow> {
@@ -92,7 +97,10 @@ async function fetchMenus(
       created_at,
       carried_forward,
       carried_from_id,
-      daily_menu_items (
+      price,
+      scheduled_for,
+      is_draft,
+      daily_menu_items(
         id,
         daily_menu_id,
         course_name,
@@ -113,16 +121,15 @@ async function fetchMenus(
   return { today: t, tomorrow: tm };
 }
 
-/* --------------------------------------------------------------------------------------
-   3) carryForwardMenu => duplicates one daily_menu into tomorrow
--------------------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------
+   3) carryForwardMenu => duplicates a daily_menus record (incl. price)
+---------------------------------------------------------------------------- */
 async function carryForwardMenu(
   supabase: ReturnType<typeof createClientComponentClient<Database>>,
   fromMenu: DailyMenu
 ): Promise<void> {
   const tomorrowStr = format(addDays(new Date(), 1), "yyyy-MM-dd");
 
-  // Insert a new tomorrow record referencing old
   const { data: newRec, error: newErr } = await supabase
     .from("daily_menus")
     .insert({
@@ -130,13 +137,16 @@ async function carryForwardMenu(
       active: true,
       carried_forward: true,
       carried_from_id: fromMenu.id,
+      price: fromMenu.price, // copy price
+      scheduled_for: format(addDays(new Date(), 1), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx"),
+      is_draft: false,
     })
     .select()
     .single();
 
   if (newErr) throw new Error(newErr.message);
 
-  // Copy items
+  // replicate items
   const cloneItems = fromMenu.daily_menu_items.map((item) => ({
     daily_menu_id: newRec.id,
     course_name: item.course_name,
@@ -149,9 +159,9 @@ async function carryForwardMenu(
   if (itemsErr) throw new Error(itemsErr.message);
 }
 
-/* --------------------------------------------------------------------------------------
-   4) Dialog for editing tomorrow (either existing or new)
--------------------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------
+   4) EditTomorrowDialog => create or update tomorrow's menu (incl. price)
+---------------------------------------------------------------------------- */
 function EditTomorrowDialog({
   isOpen,
   menu,
@@ -163,15 +173,20 @@ function EditTomorrowDialog({
 }) {
   const supabase = createClientComponentClient<Database>();
   const qc = useQueryClient();
+
+  // Local state for courses & price
   const [first, setFirst] = useState<EditableCourseItem[]>([]);
   const [second, setSecond] = useState<EditableCourseItem[]>([]);
+  const [price, setPrice] = useState<number>(15);
 
-  // Init local arrays from the fetched menu
+  // On open => fill from existing menu or defaults
   useEffect(() => {
     if (!menu) {
       setFirst([{ name: "" }]);
       setSecond([{ name: "" }]);
+      setPrice(15); // default
     } else {
+      // handle items
       const f = menu.daily_menu_items
         .filter((x) => x.course_type === "first")
         .sort((a, b) => a.display_order - b.display_order)
@@ -182,73 +197,91 @@ function EditTomorrowDialog({
         .map((c) => ({ id: c.id, name: c.course_name }));
       setFirst(f.length ? f : [{ name: "" }]);
       setSecond(s.length ? s : [{ name: "" }]);
+
+      // handle price
+      setPrice(menu.price ?? 15);
     }
   }, [menu]);
 
-  // Insert or update tomorrow's menu
+  // Mutation => either create or update tomorrow
   const saveMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
       const tomorrowStr = format(addDays(new Date(), 1), "yyyy-MM-dd");
+
       if (menu) {
-        // update existing tomorrow
-        // clear old items
+        // update existing tomorrow => clear items, re-insert
         const { error: delErr } = await supabase
           .from("daily_menu_items")
           .delete()
           .eq("daily_menu_id", menu.id);
         if (delErr) throw new Error(delErr.message);
 
-        const newItems = [
-          ...first.map((c, i) => ({
+        // update price & other fields
+        const { error: upErr } = await supabase
+          .from("daily_menus")
+          .update({ price })
+          .eq("id", menu.id);
+        if (upErr) throw new Error(upErr.message);
+
+        // insert items
+        const items = [
+          ...first.map((fc, i) => ({
             daily_menu_id: menu.id,
-            course_name: c.name,
+            course_name: fc.name,
             course_type: "first" as const,
             display_order: i + 1,
           })),
-          ...second.map((c, i) => ({
+          ...second.map((sc, i) => ({
             daily_menu_id: menu.id,
-            course_name: c.name,
+            course_name: sc.name,
             course_type: "second" as const,
             display_order: i + 1,
           })),
         ];
         const { error: insErr } = await supabase
           .from("daily_menu_items")
-          .insert(newItems);
+          .insert(items);
         if (insErr) throw new Error(insErr.message);
       } else {
-        // create brand-new tomorrow
-        const { data: inserted, error: newErr } = await supabase
+        // create brand-new tomorrow row
+        const { data: newRec, error: newErr } = await supabase
           .from("daily_menus")
           .insert({
             date: tomorrowStr,
             active: true,
             carried_forward: false,
             carried_from_id: null,
+            price,
+            scheduled_for: format(
+              addDays(new Date(), 1),
+              "yyyy-MM-dd'T'HH:mm:ss.SSSxxx"
+            ),
+            is_draft: false,
           })
           .select()
           .single();
         if (newErr) throw new Error(newErr.message);
 
-        const tomorrowId = inserted.id as string;
+        // insert items
+        const tomorrowId = newRec.id;
         const newItems = [
-          ...first.map((c, i) => ({
+          ...first.map((fc, i) => ({
             daily_menu_id: tomorrowId,
-            course_name: c.name,
+            course_name: fc.name,
             course_type: "first" as const,
             display_order: i + 1,
           })),
-          ...second.map((c, i) => ({
+          ...second.map((sc, i) => ({
             daily_menu_id: tomorrowId,
-            course_name: c.name,
+            course_name: sc.name,
             course_type: "second" as const,
             display_order: i + 1,
           })),
         ];
-        const { error: itemsErr } = await supabase
+        const { error: itmErr } = await supabase
           .from("daily_menu_items")
           .insert(newItems);
-        if (itemsErr) throw new Error(itemsErr.message);
+        if (itmErr) throw new Error(itmErr.message);
       }
     },
     onSuccess: async () => {
@@ -257,30 +290,45 @@ function EditTomorrowDialog({
     },
   });
 
-  if (!isOpen) return null;
   const saving = saveMutation.isPending;
 
-  return (
+  return isOpen ? (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{menu ? "Edit Tomorrow" : "Create Tomorrow"}</DialogTitle>
+          <DialogTitle>
+            {menu ? "Edit Tomorrow" : "Create Tomorrow"}
+          </DialogTitle>
           <DialogDescription>
             {menu
-              ? "Modify tomorrow’s items."
-              : "Add brand-new items for tomorrow."}
+              ? "Adjust tomorrow’s items and price."
+              : "Add new menu for tomorrow with default price 15."}
           </DialogDescription>
         </DialogHeader>
+
         <div className="py-4 space-y-4">
+          {/* Price */}
+          <div>
+            <Label>Price</Label>
+            <Input
+              type="number"
+              min={0}
+              step={0.01}
+              value={price}
+              onChange={(e) => setPrice(Number(e.target.value))}
+            />
+          </div>
+
+          {/* First courses */}
           <div>
             <Label>First Courses</Label>
-            {first.map((fc, i) => (
-              <div key={fc.id ?? `f-${i}`} className="flex gap-2 mt-2">
+            {first.map((fc, idx) => (
+              <div key={fc.id ?? `f-${idx}`} className="flex gap-2 mt-2">
                 <Input
                   value={fc.name}
                   onChange={(e) => {
                     const arr = [...first];
-                    arr[i].name = e.target.value;
+                    arr[idx].name = e.target.value;
                     setFirst(arr);
                   }}
                 />
@@ -290,7 +338,7 @@ function EditTomorrowDialog({
                     size="sm"
                     onClick={() => {
                       const arr = [...first];
-                      arr.splice(i, 1);
+                      arr.splice(idx, 1);
                       setFirst(arr);
                     }}
                   >
@@ -308,15 +356,17 @@ function EditTomorrowDialog({
               + Add Another First
             </Button>
           </div>
+
+          {/* Second courses */}
           <div>
             <Label>Second Courses</Label>
-            {second.map((sc, i) => (
-              <div key={sc.id ?? `s-${i}`} className="flex gap-2 mt-2">
+            {second.map((sc, idx) => (
+              <div key={sc.id ?? `s-${idx}`} className="flex gap-2 mt-2">
                 <Input
                   value={sc.name}
                   onChange={(e) => {
                     const arr = [...second];
-                    arr[i].name = e.target.value;
+                    arr[idx].name = e.target.value;
                     setSecond(arr);
                   }}
                 />
@@ -326,7 +376,7 @@ function EditTomorrowDialog({
                     size="sm"
                     onClick={() => {
                       const arr = [...second];
-                      arr.splice(i, 1);
+                      arr.splice(idx, 1);
                       setSecond(arr);
                     }}
                   >
@@ -345,6 +395,7 @@ function EditTomorrowDialog({
             </Button>
           </div>
         </div>
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
@@ -355,17 +406,18 @@ function EditTomorrowDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  ) : null;
 }
 
-/* --------------------------------------------------------------------------------------
-   5) Main Export => Page that references everything
--------------------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------
+   5) Main Export => Page
+---------------------------------------------------------------------------- */
 export default function DailyMenusPage() {
   const supabase = createClientComponentClient<Database>();
-  const [dialogOpen, setDialogOpen] = useState(false);
   const queryClient = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
 
+  // load "today" & "tomorrow" from supabase
   const {
     data = { today: null, tomorrow: null },
     isLoading,
@@ -376,6 +428,7 @@ export default function DailyMenusPage() {
     staleTime: 30000,
   });
 
+  // For the carry-forward button
   const carryForwardMut = useMutation<void, Error, DailyMenu>({
     mutationFn: async (fromMenu) => {
       await carryForwardMenu(supabase, fromMenu);
@@ -392,7 +445,7 @@ export default function DailyMenusPage() {
 
   return (
     <main className="p-4 space-y-4">
-      <h1 className="text-2xl font-bold">Daily Menus (Carry-Forward)</h1>
+      <h1 className="text-2xl font-bold">Daily Menus (Price = 15 by default)</h1>
 
       {/* TODAY */}
       <section className="border p-3 rounded">
@@ -400,9 +453,13 @@ export default function DailyMenusPage() {
         {today ? (
           <div className="mt-2">
             <strong>{today.date}</strong>, active={today.active ? "Yes" : "No"}
+            <div className="text-sm font-medium mt-1 text-gray-600">
+              Price: {today.price}€
+            </div>
             {today.daily_menu_items?.length === 0 && (
               <p className="mt-1 text-gray-500 italic text-sm">No items</p>
             )}
+            {/* Display items */}
             <div className="mt-2 flex gap-4">
               <div>
                 <b>First:</b>
@@ -410,7 +467,9 @@ export default function DailyMenusPage() {
                   {today.daily_menu_items
                     .filter((it) => it.course_type === "first")
                     .sort((a, b) => a.display_order - b.display_order)
-                    .map((x) => <li key={x.id}>{x.course_name}</li>)}
+                    .map((x) => (
+                      <li key={x.id}>{x.course_name}</li>
+                    ))}
                 </ul>
               </div>
               <div>
@@ -419,7 +478,9 @@ export default function DailyMenusPage() {
                   {today.daily_menu_items
                     .filter((it) => it.course_type === "second")
                     .sort((a, b) => a.display_order - b.display_order)
-                    .map((x) => <li key={x.id}>{x.course_name}</li>)}
+                    .map((x) => (
+                      <li key={x.id}>{x.course_name}</li>
+                    ))}
                 </ul>
               </div>
             </div>
@@ -433,7 +494,7 @@ export default function DailyMenusPage() {
             </Button>
           </div>
         ) : (
-          <p className="mt-2 text-sm text-gray-500">No menu defined for today</p>
+          <p className="mt-2 text-sm text-gray-500">No menu found for today.</p>
         )}
       </section>
 
@@ -443,6 +504,9 @@ export default function DailyMenusPage() {
         {tomorrow ? (
           <div className="mt-2">
             <strong>{tomorrow.date}</strong>, active={tomorrow.active ? "Yes" : "No"}
+            <div className="text-sm font-medium mt-1 text-gray-600">
+              Price: {tomorrow.price}€
+            </div>
             {tomorrow.carried_forward && (
               <p className="italic text-gray-500 text-sm">
                 Carried forward from: {tomorrow.carried_from_id}
@@ -451,6 +515,7 @@ export default function DailyMenusPage() {
             {tomorrow.daily_menu_items?.length === 0 && (
               <p className="mt-1 text-gray-500 italic text-sm">No items</p>
             )}
+            {/* Display items */}
             <div className="mt-2 flex gap-4">
               <div>
                 <b>First:</b>
@@ -458,7 +523,9 @@ export default function DailyMenusPage() {
                   {tomorrow.daily_menu_items
                     .filter((it) => it.course_type === "first")
                     .sort((a, b) => a.display_order - b.display_order)
-                    .map((x) => <li key={x.id}>{x.course_name}</li>)}
+                    .map((x) => (
+                      <li key={x.id}>{x.course_name}</li>
+                    ))}
                 </ul>
               </div>
               <div>
@@ -467,7 +534,9 @@ export default function DailyMenusPage() {
                   {tomorrow.daily_menu_items
                     .filter((it) => it.course_type === "second")
                     .sort((a, b) => a.display_order - b.display_order)
-                    .map((x) => <li key={x.id}>{x.course_name}</li>)}
+                    .map((x) => (
+                      <li key={x.id}>{x.course_name}</li>
+                    ))}
                 </ul>
               </div>
             </div>
@@ -478,8 +547,8 @@ export default function DailyMenusPage() {
         ) : (
           <div className="mt-2 text-sm text-gray-500">
             <p>
-              No menu set for tomorrow. If you do nothing, we reuse today&apos;s menu.
-              Or create tomorrow&apos;s menu now:
+              No menu set for tomorrow. We&apos;ll reuse today&apos;s if you do nothing, or
+              create now:
             </p>
             <Button variant="outline" className="mt-2" onClick={() => setDialogOpen(true)}>
               Create Tomorrow&apos;s Menu
@@ -488,63 +557,11 @@ export default function DailyMenusPage() {
         )}
       </section>
 
-      {/* The EditTomorrowDialog */}
-      <EditTomorrowDialog isOpen={dialogOpen} menu={tomorrow} onClose={() => setDialogOpen(false)} />
+      <EditTomorrowDialog
+        isOpen={dialogOpen}
+        menu={tomorrow}
+        onClose={() => setDialogOpen(false)}
+      />
     </main>
   );
 }
-
-/* --------------------------------------------------------------------------------------
-   6) OPTIONAL: Edge Function + Cron in the SAME file (commented out)
-
-   // Edge Function (Deno)
-   // Just for reference, won't run in Next.js environment
-   // supabase/functions/midnight-rollover/index.ts (INLINED as comment)
-   // 
-   // import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-   // import { createClient } from "@supabase/supabase-js";
-   // import { format, addDays } from "https://deno.land/std@0.168.0/datetime/mod.ts";
-   // 
-   // serve(async (_req) => {
-   //   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-   //   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-   //   const supabase = createClient(supabaseUrl, supabaseKey);
-   //   const todayStr = format(new Date(), "yyyy-MM-dd");
-   //   const tomorrowStr = format(addDays(new Date(), 1), "yyyy-MM-dd");
-   // 
-   //   const { data: tomorrowMenu } = await supabase
-   //     .from("daily_menus")
-   //     .select("*")
-   //     .eq("date", tomorrowStr)
-   //     .single();
-   //   
-   //   if (!tomorrowMenu) {
-   //     const { data: todayMenu } = await supabase
-   //       .from("daily_menus")
-   //       .select("*, daily_menu_items(*)")
-   //       .eq("date", todayStr)
-   //       .single();
-   //     if (todayMenu) {
-   //       await carryForwardMenu(supabase, todayMenu); // same carryForwardMenu logic
-   //     }
-   //   }
-   // 
-   //   return new Response(JSON.stringify({ success: true }), {
-   //     headers: { "Content-Type": "application/json" },
-   //   });
-   // });
-
-   // Cron Setup:
-   // select
-   //   cron.schedule(
-   //     'carry-forward-daily-menu',
-   //     '0 0 * * *', -- midnight
-   //     $$
-   //       select net.http_post(
-   //         'https://YOUR-PROJECT.functions.supabase.co/midnight-rollover',
-   //         '{}'::jsonb,
-   //         'application/json'
-   //       );
-   //     $$
-   //   );
--------------------------------------------------------------------------------------- */
