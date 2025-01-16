@@ -6,8 +6,11 @@ import { useDropzone } from "react-dropzone";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Database } from "@/types";
+import type { Database } from "@/types";
 import Image from "next/image";
+
+// i18n
+import { useTranslation } from "react-i18next";
 
 // Icons
 import { Upload, Trash2, FolderIcon, AlertCircle, Edit2 } from "lucide-react";
@@ -75,7 +78,7 @@ const SelectValue = dynamic(() =>
 );
 
 /* ---------------------------------------------------------------------
-   1) We now only have one bucket ("menu") plus an added "blog" category
+   1) We have one bucket ("menu") plus a "blog" subfolder
 ---------------------------------------------------------------------- */
 const BUCKETS = {
   menu: {
@@ -91,7 +94,7 @@ const BUCKETS = {
       "para-veganos": "Para Veganos",
       postres: "Postres",
       wines: "Wines",
-      blog: "Blog", // <-- Blog images stored in the same bucket under "blog" folder
+      blog: "Blog"
     },
   },
 } as const;
@@ -99,7 +102,7 @@ const BUCKETS = {
 type MenuCategory = keyof typeof BUCKETS.menu.categories;
 
 /* ---------------------------------------------------------------------
-   2) Usage-count functions for menu vs. blog
+   2) Usage-count functions for menu vs. blog references
 ---------------------------------------------------------------------- */
 async function getMenuUsageCount(
   supabase: ReturnType<typeof createClientComponentClient<Database>>,
@@ -117,7 +120,7 @@ async function getBlogUsageCount(
   supabase: ReturnType<typeof createClientComponentClient<Database>>,
   imagePath: string
 ): Promise<number> {
-  // Blog usage check in "blog_posts"
+  // Example usage check in "blog_posts"
   const { count } = await supabase
     .from("blog_posts")
     .select("*", { count: "exact", head: true })
@@ -140,18 +143,13 @@ async function fetchImages(
   supabase: ReturnType<typeof createClientComponentClient<Database>>,
   folder: string
 ): Promise<ImageInfo[]> {
-  console.log("Fetching images from folder:", folder);
-
   const { data: storageData, error: storageError } = await supabase.storage
     .from("menu")
     .list(folder);
 
   if (storageError) {
-    console.error("Storage error:", storageError);
     throw storageError;
   }
-
-  console.log("Storage data:", storageData);
 
   const imageList: ImageInfo[] = [];
   for (const file of storageData || []) {
@@ -162,7 +160,6 @@ async function fetchImages(
 
     const path = `${folder}/${file.name}`;
     const { data: urlData } = supabase.storage.from("menu").getPublicUrl(path);
-    console.log("Generated URL for:", path, urlData.publicUrl);
 
     const usageCount =
       folder === "blog"
@@ -177,15 +174,14 @@ async function fetchImages(
       usageCount,
     });
   }
-
-  console.log("Returning images:", imageList);
   return imageList;
 }
 
 /* ---------------------------------------------------------------------
-   4) The main ImagesPage component (single-bucket approach)
+   4) Main ImagesPage component
 ---------------------------------------------------------------------- */
 export default function ImagesPage() {
+  const { t } = useTranslation("imagesPage"); // <--- Our new i18n namespace
   const supabase = createClientComponentClient<Database>();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -205,17 +201,12 @@ export default function ImagesPage() {
     queryFn: () => fetchImages(supabase, selectedFolder),
   });
 
-  /* -------------------------------------------------------------------
-     4.1) Drag & drop setup (for uploading)
-  ---------------------------------------------------------------------*/
+  // Drag & drop for uploading
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { "image/jpeg": [], "image/png": [], "image/webp": [] },
     onDrop: (acceptedFiles: File[]) => uploadMutation.mutate(acceptedFiles),
   });
 
-  /* -------------------------------------------------------------------
-     4.2) Mutations (upload, delete, move, rename)
-  ---------------------------------------------------------------------*/
   // Upload
   const uploadMutation = useMutation<string[], Error, File[]>({
     mutationFn: async (files: File[]) => {
@@ -223,8 +214,8 @@ export default function ImagesPage() {
       for (const file of files) {
         if (file.size > 2 * 1024 * 1024) {
           toast({
-            title: "Error",
-            description: `File ${file.name} exceeds 2MB limit`,
+            title: t("error"),
+            description: t("errors.fileTooLarge", { fileName: file.name }),
             variant: "destructive",
           });
           continue;
@@ -239,8 +230,8 @@ export default function ImagesPage() {
         if (uploadError) {
           if (uploadError.message.includes("duplicate")) {
             toast({
-              title: "Error",
-              description: `File ${file.name} already exists`,
+              title: t("error"),
+              description: t("errors.fileAlreadyExists", { fileName: file.name }),
               variant: "destructive",
             });
           } else {
@@ -254,13 +245,16 @@ export default function ImagesPage() {
     },
     onSuccess: (fileNames) => {
       if (fileNames.length > 0) {
-        toast({ title: "Success", description: `Uploaded ${fileNames.length} file(s)` });
+        toast({
+          title: t("success"),
+          description: t("uploadedFiles", { count: fileNames.length }),
+        });
         queryClient.invalidateQueries({ queryKey: ["images", selectedFolder] });
       }
     },
     onError: (err) => {
-      const message = err instanceof Error ? err.message : "Failed to upload images";
-      toast({ title: "Error", description: message, variant: "destructive" });
+      const message = err instanceof Error ? err.message : t("errors.uploadFailed");
+      toast({ title: t("error"), description: message, variant: "destructive" });
     },
   });
 
@@ -278,13 +272,13 @@ export default function ImagesPage() {
       return image.name;
     },
     onSuccess: (fileName) => {
-      toast({ title: "Success", description: `Deleted ${fileName}` });
+      toast({ title: t("success"), description: t("deletedFile", { fileName }) });
       setDeleteDialog({ open: false, image: null });
       queryClient.invalidateQueries({ queryKey: ["images", selectedFolder] });
     },
     onError: (err) => {
-      const message = err instanceof Error ? err.message : "Failed to delete image";
-      toast({ title: "Error", description: message, variant: "destructive" });
+      const message = err instanceof Error ? err.message : t("errors.deleteFailed");
+      toast({ title: t("error"), description: message, variant: "destructive" });
     },
   });
 
@@ -302,9 +296,9 @@ export default function ImagesPage() {
       const { data: fileData, error: downloadError } = await supabase.storage
         .from("menu")
         .download(image.path);
-      if (downloadError || !fileData) throw new Error("Failed to download file");
+      if (downloadError || !fileData) throw new Error(t("errors.downloadFailed"));
 
-      // 2) Upload new file in the target folder
+      // 2) Upload new file
       const newPath = `${targetFolder}/${image.name}`;
       const newFile = new File([fileData], image.name, { type: fileData.type });
       const { error: uploadError } = await supabase.storage
@@ -324,15 +318,15 @@ export default function ImagesPage() {
       return image.name;
     },
     onSuccess: (fileName, { targetFolder }) => {
-      toast({ title: "Success", description: `Moved ${fileName}` });
+      toast({ title: t("success"), description: t("movedFile", { fileName }) });
       setMoveDialog({ open: false, image: null });
-      // Invalidate queries for both old folder and new folder
+      // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ["images", selectedFolder] });
       queryClient.invalidateQueries({ queryKey: ["images", targetFolder] });
     },
     onError: (err) => {
-      const message = err instanceof Error ? err.message : "Failed to move image";
-      toast({ title: "Error", description: message, variant: "destructive" });
+      const message = err instanceof Error ? err.message : t("errors.moveFailed");
+      toast({ title: t("error"), description: message, variant: "destructive" });
     },
   });
 
@@ -352,7 +346,7 @@ export default function ImagesPage() {
       const { data: fileData, error: downloadError } = await supabase.storage
         .from("menu")
         .download(image.path);
-      if (downloadError || !fileData) throw new Error("Failed to download file");
+      if (downloadError || !fileData) throw new Error(t("errors.downloadFailed"));
 
       // 2) Upload under new name
       const newPath = `${image.folder}/${newImageName}`;
@@ -374,24 +368,22 @@ export default function ImagesPage() {
       return { oldName: image.name, newName: newImageName };
     },
     onSuccess: ({ oldName, newName }) => {
-      toast({ title: "Success", description: `Renamed ${oldName} to ${newName}` });
+      toast({ title: t("success"), description: t("renamedFile", { oldName, newName }) });
       setRenameDialog({ open: false, image: null });
       setNewImageName("");
       queryClient.invalidateQueries({ queryKey: ["images", selectedFolder] });
     },
     onError: (err) => {
-      const message = err instanceof Error ? err.message : "Failed to rename image";
-      toast({ title: "Error", description: message, variant: "destructive" });
+      const message = err instanceof Error ? err.message : t("errors.renameFailed");
+      toast({ title: t("error"), description: message, variant: "destructive" });
     },
   });
 
-  /* -------------------------------------------------------------------
-     4.3) Folder selector (categories in BUCKETS.menu.categories)
-  ---------------------------------------------------------------------*/
+  // Folder selector
   const folderSelector = (
     <Select value={selectedFolder} onValueChange={setSelectedFolder}>
       <SelectTrigger className="w-[180px]">
-        <SelectValue placeholder="Select category">
+        <SelectValue placeholder={t("selectCategory") as string}>
           {BUCKETS.menu.categories[selectedFolder as MenuCategory]}
         </SelectValue>
       </SelectTrigger>
@@ -405,9 +397,7 @@ export default function ImagesPage() {
     </Select>
   );
 
-  /* -------------------------------------------------------------------
-     5) Render
-  ---------------------------------------------------------------------*/
+  // Renders
   if (imagesLoading) {
     return (
       <div className="flex items-center justify-center h-[200px]">
@@ -420,7 +410,9 @@ export default function ImagesPage() {
     return (
       <div className="container p-6">
         <Alert variant="destructive">
-          <AlertDescription>Failed to load images: {imagesError.message}</AlertDescription>
+          <AlertDescription>
+            {t("errors.loadImagesFailed")}: {imagesError.message}
+          </AlertDescription>
         </Alert>
       </div>
     );
@@ -428,7 +420,7 @@ export default function ImagesPage() {
 
   return (
     <div className="container p-6">
-      <PageHeader heading="Image Management" text="Upload and manage images">
+      <PageHeader heading={t("heading")} text={t("description")}>
         {folderSelector}
       </PageHeader>
 
@@ -447,9 +439,11 @@ export default function ImagesPage() {
         <div className="flex flex-col items-center justify-center">
           <Upload className="h-8 w-8 mb-4 text-muted-foreground" />
           <p className="text-lg font-medium mb-2">
-            {isDragActive ? "Drop files here" : "Drag & drop files here"}
+            {isDragActive ? t("dropFilesHere") : t("dragDropOrClick")}
           </p>
-          <p className="text-sm text-muted-foreground">or click to select files</p>
+          <p className="text-sm text-muted-foreground">
+            {t("maxSize")}
+          </p>
         </div>
       </div>
 
@@ -467,14 +461,12 @@ export default function ImagesPage() {
               className="object-cover transition-all group-hover:scale-105"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               unoptimized
-              // Remove the unused 'e' parameter if not needed:
               onError={() => {
+                // fallback or console error
                 console.error("Image load error:", image.url);
-                // Optionally set a fallback source:
-                // e.currentTarget.src = '/placeholder.jpg';
               }}
             />
-            {/* Overlay */}
+            {/* Overlay with actions */}
             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <p className="text-white text-sm mb-2 truncate">
@@ -520,22 +512,22 @@ export default function ImagesPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Image</AlertDialogTitle>
+            <AlertDialogTitle>{t("deleteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
               {deleteDialog.image && deleteDialog.image.usageCount > 0 ? (
                 <div className="flex items-center gap-2 text-yellow-600">
                   <AlertCircle className="h-4 w-4" />
-                  This image is used in {deleteDialog.image.usageCount}{" "}
-                  {deleteDialog.image.usageCount === 1 ? "item" : "items"}. Deleting it
-                  will remove the image from those items.
+                  {t("deleteUsedImage", {
+                    usageCount: deleteDialog.image.usageCount,
+                  })}
                 </div>
               ) : (
-                "Are you sure you want to delete this image? This action cannot be undone."
+                t("deleteWarning")
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (deleteDialog.image) {
@@ -544,7 +536,7 @@ export default function ImagesPage() {
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              {deleteMutation.isPending ? t("deleting") : t("deleteButton")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -557,25 +549,25 @@ export default function ImagesPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Move Image</DialogTitle>
-            <DialogDescription>Select a new category/folder</DialogDescription>
+            <DialogTitle>{t("moveTitle")}</DialogTitle>
+            <DialogDescription>{t("moveDescription")}</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             {/* Current folder */}
             <div className="grid gap-2">
-              <Label>Current Folder/Category</Label>
+              <Label>{t("moveCurrentFolder")}</Label>
               <Input disabled value={moveDialog.image?.folder || ""} />
             </div>
             {/* Destination */}
             <div className="grid gap-2">
-              <Label>Destination</Label>
+              <Label>{t("moveDestination")}</Label>
               <Select
                 value={targetFolder}
                 onValueChange={(val) => setTargetFolder(val)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder={t("selectCategory")} />
                 </SelectTrigger>
                 <SelectContent>
                   {Object.entries(BUCKETS.menu.categories)
@@ -591,9 +583,9 @@ export default function ImagesPage() {
               {moveDialog.image && moveDialog.image.usageCount > 0 && (
                 <p className="text-sm text-yellow-600 flex items-center gap-2 mt-2">
                   <AlertCircle className="h-4 w-4" />
-                  This image is used in {moveDialog.image.usageCount}{" "}
-                  {moveDialog.image.usageCount === 1 ? "item" : "items"}. Moving it
-                  will update references as needed.
+                  {t("moveUsedImage", {
+                    usageCount: moveDialog.image.usageCount,
+                  })}
                 </p>
               )}
             </div>
@@ -601,7 +593,7 @@ export default function ImagesPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setMoveDialog({ open: false, image: null })}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               onClick={() => {
@@ -618,7 +610,7 @@ export default function ImagesPage() {
                 moveMutation.isPending
               }
             >
-              {moveMutation.isPending ? "Moving..." : "Move Image"}
+              {moveMutation.isPending ? t("moving") : t("moveButton")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -634,38 +626,37 @@ export default function ImagesPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename Image</DialogTitle>
-            {/* Use &quot; instead of raw quotes to fix react/no-unescaped-entities */}
-            <DialogDescription>Enter a new filename (e.g. &quot;photo.jpg&quot;)</DialogDescription>
+            <DialogTitle>{t("renameTitle")}</DialogTitle>
+            <DialogDescription>{t("renameDescription")}</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             {/* Current name */}
             <div className="grid gap-2">
-              <Label>Current Name</Label>
+              <Label>{t("renameCurrentName")}</Label>
               <Input disabled value={renameDialog.image?.name || ""} />
             </div>
             {/* New name */}
             <div className="grid gap-2">
-              <Label>New Name</Label>
+              <Label>{t("renameNewName")}</Label>
               <Input
                 value={newImageName}
                 onChange={(e) => setNewImageName(e.target.value)}
-                placeholder="image.jpg"
+                placeholder={t("renamePlaceholder") as string}
               />
               {/* Validation warnings */}
               {!newImageName.includes(".") && newImageName && (
                 <p className="text-sm text-red-500 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
-                  Please include a file extension (e.g., &quot;.jpg&quot;, &quot;.png&quot;, &quot;.webp&quot;)
+                  {t("renameNoExtensionWarning")}
                 </p>
               )}
               {renameDialog.image && renameDialog.image.usageCount > 0 && (
                 <p className="text-sm text-yellow-600 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
-                  This image is used in {renameDialog.image.usageCount}{" "}
-                  {renameDialog.image.usageCount === 1 ? "item" : "items"}. Renaming it
-                  will affect those references.
+                  {t("renameUsedImage", {
+                    usageCount: renameDialog.image.usageCount,
+                  })}
                 </p>
               )}
             </div>
@@ -679,7 +670,7 @@ export default function ImagesPage() {
                 setNewImageName("");
               }}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               onClick={() => {
@@ -697,7 +688,7 @@ export default function ImagesPage() {
                 renameMutation.isPending
               }
             >
-              {renameMutation.isPending ? "Renaming..." : "Rename Image"}
+              {renameMutation.isPending ? t("renaming") : t("renameButton")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -156,5 +156,54 @@
     "bottleLabel": "bottle",
     "glassLabel": "glass",
     "editAriaLabel": "Edit {{wineName}}"
+  },
+"imagesPage": {
+    "heading": "Image Management",
+    "description": "Upload and manage images",
+    "selectCategory": "Select category",
+    "dropFilesHere": "Drop files here",
+    "dragDropOrClick": "Drag & drop files here or click to select files",
+    "maxSize": "Max file size: 2MB",
+    "success": "Success",
+    "error": "Error",
+    "cancel": "Cancel",
+
+    "deleteTitle": "Delete Image",
+    "deleteWarning": "Are you sure you want to delete this image? This action cannot be undone.",
+    "deleteUsedImage": "This image is used in {{usageCount}} {{usageCount === 1 ? 'item' : 'items'}}. Deleting it will remove the image from those items.",
+    "deleteButton": "Delete",
+    "deleting": "Deleting...",
+
+    "moveTitle": "Move Image",
+    "moveDescription": "Select a new category/folder",
+    "moveCurrentFolder": "Current Folder/Category",
+    "moveDestination": "Destination",
+    "moveButton": "Move Image",
+    "moving": "Moving...",
+    "moveUsedImage": "This image is used in {{usageCount}} {{usageCount === 1 ? 'item' : 'items'}}. Moving it will update references as needed.",
+
+    "renameTitle": "Rename Image",
+    "renameDescription": "Enter a new filename (e.g. \"photo.jpg\")",
+    "renameCurrentName": "Current Name",
+    "renameNewName": "New Name",
+    "renamePlaceholder": "image.jpg",
+    "renameNoExtensionWarning": "Please include a file extension (e.g., \".jpg\", \".png\", \".webp\")",
+    "renameButton": "Rename Image",
+    "renaming": "Renaming...",
+
+    "errors": {
+      "fileTooLarge": "File {{fileName}} exceeds 2MB limit",
+      "fileAlreadyExists": "File {{fileName}} already exists",
+      "uploadFailed": "Failed to upload images",
+      "deleteFailed": "Failed to delete image",
+      "downloadFailed": "Failed to download file",
+      "moveFailed": "Failed to move image",
+      "renameFailed": "Failed to rename image",
+      "loadImagesFailed": "Failed to load images"
+    },
+    "uploadedFiles": "Uploaded {{count}} file(s)",
+    "deletedFile": "Deleted {{fileName}}",
+    "movedFile": "Moved {{fileName}}",
+    "renamedFile": "Renamed {{oldName}} to {{newName}}"
   }
 }

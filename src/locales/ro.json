@@ -156,5 +156,54 @@
     "bottleLabel": "sticlă",
     "glassLabel": "pahar",
     "editAriaLabel": "Editează {{wineName}}"
+  },
+ "imagesPage": {
+    "heading": "Gestionare Imagini",
+    "description": "Încarcă și gestionează imagini",
+    "selectCategory": "Selectează categoria",
+    "dropFilesHere": "Trage fișierele aici",
+    "dragDropOrClick": "Trage și plasează fișierele aici sau fă clic pentru a selecta",
+    "maxSize": "Dimensiune maximă fișier: 2MB",
+    "success": "Succes",
+    "error": "Eroare",
+    "cancel": "Anulează",
+
+    "deleteTitle": "Șterge Imaginea",
+    "deleteWarning": "Ești sigur că vrei să ștergi această imagine? Această acțiune nu poate fi anulată.",
+    "deleteUsedImage": "Această imagine este folosită în {{usageCount}} {{usageCount === 1 ? 'element' : 'elemente'}}. Ștergerea o va elimina din acele elemente.",
+    "deleteButton": "Șterge",
+    "deleting": "Se șterge...",
+
+    "moveTitle": "Mută Imaginea",
+    "moveDescription": "Selectează o nouă categorie/folder",
+    "moveCurrentFolder": "Folder/Categorie Curentă",
+    "moveDestination": "Destinație",
+    "moveButton": "Mută Imaginea",
+    "moving": "Se mută...",
+    "moveUsedImage": "Această imagine este folosită în {{usageCount}} {{usageCount === 1 ? 'element' : 'elemente'}}. Mutarea acesteia va actualiza referințele după cum este necesar.",
+
+    "renameTitle": "Redenumește Imaginea",
+    "renameDescription": "Introdu un nume de fișier nou (ex. \"poza.jpg\")",
+    "renameCurrentName": "Nume Actual",
+    "renameNewName": "Nume Nou",
+    "renamePlaceholder": "imagine.jpg",
+    "renameNoExtensionWarning": "Te rugăm să incluzi o extensie de fișier (ex. \".jpg\", \".png\", \".webp\")",
+    "renameButton": "Redenumește Imaginea",
+    "renaming": "Se redenumește...",
+
+    "errors": {
+      "fileTooLarge": "Fișierul {{fileName}} depășește limita de 2MB",
+      "fileAlreadyExists": "Fișierul {{fileName}} există deja",
+      "uploadFailed": "Nu s-au putut încărca imaginile",
+      "deleteFailed": "Nu s-a putut șterge imaginea",
+      "downloadFailed": "Nu s-a putut descărca fișierul",
+      "moveFailed": "Nu s-a putut muta imaginea",
+      "renameFailed": "Nu s-a putut redenumi imaginea",
+      "loadImagesFailed": "Nu s-au putut încărca imaginile"
+    },
+    "uploadedFiles": "S-au încărcat {{count}} fișier(e)",
+    "deletedFile": "S-a șters {{fileName}}",
+    "movedFile": "S-a mutat {{fileName}}",
+    "renamedFile": "S-a redenumit {{oldName}} în {{newName}}"
   }
 }

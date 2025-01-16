@@ -156,5 +156,54 @@
     "bottleLabel": "botella",
     "glassLabel": "copa",
     "editAriaLabel": "Editar {{wineName}}"
+  },
+ "imagesPage": {
+    "heading": "Gestión de Imágenes",
+    "description": "Sube y gestiona imágenes",
+    "selectCategory": "Seleccionar categoría",
+    "dropFilesHere": "Suelta los archivos aquí",
+    "dragDropOrClick": "Arrastra y suelta archivos aquí o haz clic para seleccionar",
+    "maxSize": "Tamaño máximo de archivo: 2MB",
+    "success": "Éxito",
+    "error": "Error",
+    "cancel": "Cancelar",
+
+    "deleteTitle": "Eliminar Imagen",
+    "deleteWarning": "¿Estás seguro de que deseas eliminar esta imagen? Esta acción no se puede deshacer.",
+    "deleteUsedImage": "Esta imagen se utiliza en {{usageCount}} {{usageCount === 1 ? 'elemento' : 'elementos'}}. Al eliminarla, la imagen se quitará de esos elementos.",
+    "deleteButton": "Eliminar",
+    "deleting": "Eliminando...",
+
+    "moveTitle": "Mover Imagen",
+    "moveDescription": "Selecciona una nueva carpeta/categoría",
+    "moveCurrentFolder": "Carpeta/Categoría Actual",
+    "moveDestination": "Destino",
+    "moveButton": "Mover Imagen",
+    "moving": "Moviendo...",
+    "moveUsedImage": "Esta imagen se utiliza en {{usageCount}} {{usageCount === 1 ? 'elemento' : 'elementos'}}. Al moverla, se actualizarán las referencias según sea necesario.",
+
+    "renameTitle": "Renombrar Imagen",
+    "renameDescription": "Ingresa un nombre de archivo nuevo (p.ej. \"foto.jpg\")",
+    "renameCurrentName": "Nombre Actual",
+    "renameNewName": "Nombre Nuevo",
+    "renamePlaceholder": "imagen.jpg",
+    "renameNoExtensionWarning": "Incluye una extensión de archivo (p.ej. \".jpg\", \".png\", \".webp\")",
+    "renameButton": "Renombrar Imagen",
+    "renaming": "Renombrando...",
+
+    "errors": {
+      "fileTooLarge": "El archivo {{fileName}} excede el límite de 2MB",
+      "fileAlreadyExists": "El archivo {{fileName}} ya existe",
+      "uploadFailed": "No se pudo subir las imágenes",
+      "deleteFailed": "No se pudo eliminar la imagen",
+      "downloadFailed": "No se pudo descargar el archivo",
+      "moveFailed": "No se pudo mover la imagen",
+      "renameFailed": "No se pudo renombrar la imagen",
+      "loadImagesFailed": "No se pudieron cargar las imágenes"
+    },
+    "uploadedFiles": "Se subieron {{count}} archivo(s)",
+    "deletedFile": "Se eliminó {{fileName}}",
+    "movedFile": "Se movió {{fileName}}",
+    "renamedFile": "Se renombró {{oldName}} a {{newName}}"
   }
 }
