@@ -249,5 +249,54 @@
       "failedToDeletePost": "Nu s-a putut șterge postarea"
     },
     "successPostDeleted": "Postare ștearsă cu succes"
+  },
+ "blogSinglePage": {
+    "error": "Eroare",
+    "success": "Succes",
+    "saving": "Se salvează...",
+    "lastSaved": "Ultima salvare",
+    "allChangesSaved": "Toate modificările au fost salvate",
+
+    "editMode": "Editare",
+    "previewMode": "Previzualizare",
+
+    "titlePlaceholder": "Titlul postării",
+    "cancel": "Anulează",
+    "savingButton": "Se salvează...",
+    "publishButton": "Publică",
+    "saveDraftButton": "Salvează Schița",
+
+    "sidebar": {
+      "featuredImage": "Imagine Principală",
+      "noFeaturedImage": "Nicio imagine principală",
+      "changeImage": "Schimbă Imaginea",
+      "selectImage": "Selectează Imaginea",
+      "status": "Stare",
+      "selectStatus": "Selectează starea",
+      "statusDraft": "Schiță",
+      "statusPublished": "Publicat",
+      "metaDescription": "Meta Descriere",
+      "metaDescriptionPlaceholder": "Introduce descrierea SEO..."
+    },
+
+    "imageSelector": {
+      "title": "Selectează Imaginea Principală",
+      "noImagesFound": "Nu s-au găsit imagini în folderul de blog"
+    },
+
+    "promptEnterUrl": "Introdu adresa URL",
+    "promptEnterImageUrl": "Introdu adresa URL a imaginii",
+
+    "errors": {
+      "failedToLoadImages": "Nu s-au putut încărca imaginile",
+      "failedAutosave": "Eșec la salvarea automată",
+      "failedLoadBlogPost": "Nu s-a putut încărca postarea de blog",
+      "noUserFound": "Nu a fost găsit niciun utilizator",
+      "failedSaveBlogPost": "Nu s-a putut salva postarea de blog",
+      "failedUpdateImage": "Nu s-a putut actualiza imaginea principală"
+    },
+    "successPostCreated": "Postarea de blog a fost creată cu succes",
+    "successPostUpdated": "Postarea de blog a fost actualizată cu succes",
+    "successFeaturedImage": "Imaginea principală a fost actualizată cu succes"
   }
 }

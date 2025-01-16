@@ -16,6 +16,7 @@ import StarterKit from "@tiptap/starter-kit";
 import ImageExt from "@tiptap/extension-image";
 import LinkExt from "@tiptap/extension-link";
 import type { JSONContent } from "@tiptap/react";
+import { useTranslation } from "react-i18next";
 
 import {
   Loader2,
@@ -141,6 +142,7 @@ function ImageSelector({
   onSelect,
   currentImageUrl,
 }: ImageSelectorProps) {
+  const { t } = useTranslation("blogSinglePage");
   const [images, setImages] = useState<{ name: string; url: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -182,20 +184,24 @@ function ImageSelector({
         setImages(imageList);
       } catch (err) {
         console.error("Error fetching blog images:", err);
-        setError(err instanceof Error ? err.message : "Failed to load images");
+        setError(
+          err instanceof Error
+            ? err.message
+            : t("errors.failedToLoadImages")
+        );
       } finally {
         setLoading(false);
       }
     };
 
     void fetchBlogImages();
-  }, [open, supabase]);
+  }, [open, supabase, t]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Select Featured Image</DialogTitle>
+          <DialogTitle>{t("imageSelector.title")}</DialogTitle>
         </DialogHeader>
 
         {loading ? (
@@ -206,7 +212,7 @@ function ImageSelector({
           <div className="text-center py-8 text-red-500">{error}</div>
         ) : images.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            No images found in the blog folder
+            {t("imageSelector.noImagesFound")}
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-4">
@@ -239,7 +245,7 @@ function ImageSelector({
 
         <div className="flex justify-end gap-2 pt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("cancel")}
           </Button>
         </div>
       </DialogContent>
@@ -251,6 +257,7 @@ function ImageSelector({
    3) The Editor Page
 ---------------------------------------------------------------------- */
 export default function Page() {
+  const { t } = useTranslation("blogSinglePage");
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
@@ -380,12 +387,12 @@ export default function Page() {
           setAutoSave((p) => ({
             ...p,
             saving: false,
-            error: "Failed to auto-save",
+            error: t("errors.failedAutosave"),
           }));
         }
       }
     },
-    [isNew, isEditorReady, supabase, params.id, form]
+    [isNew, isEditorReady, supabase, params.id, form, t]
   );
 
   // Fetch existing post if not new
@@ -452,9 +459,11 @@ export default function Page() {
       } catch (err) {
         console.error(err);
         toast({
-          title: "Error",
+          title: t("error"),
           description:
-            err instanceof Error ? err.message : "Failed to load blog post",
+            err instanceof Error
+              ? err.message
+              : t("errors.failedLoadBlogPost"),
           variant: "destructive",
         });
       } finally {
@@ -465,7 +474,7 @@ export default function Page() {
     if (!isNew && editor && isEditorReady) {
       void fetchPost();
     }
-  }, [isNew, supabase, editor, isEditorReady, params.id, toast, form]);
+  }, [isNew, supabase, editor, isEditorReady, params.id, toast, form, t]);
 
   // Final Save => create or update
   const onSubmit = async (values: FormData) => {
@@ -474,7 +483,7 @@ export default function Page() {
 
       const { data: userData, error: userErr } = await supabase.auth.getUser();
       if (userErr) throw userErr;
-      if (!userData?.user) throw new Error("No user found");
+      if (!userData?.user) throw new Error(t("errors.noUserFound") || "No user found");
 
       // Get the current post if it exists
       let currentPost = null;
@@ -525,8 +534,8 @@ export default function Page() {
 
         if (createErr) throw createErr;
         toast({
-          title: "Success",
-          description: "Blog post created successfully",
+          title: t("success"),
+          description: t("successPostCreated"),
         });
       } else {
         // Update existing post
@@ -540,8 +549,8 @@ export default function Page() {
 
         if (updateErr) throw updateErr;
         toast({
-          title: "Success",
-          description: "Blog post updated successfully",
+          title: t("success"),
+          description: t("successPostUpdated"),
         });
       }
 
@@ -551,9 +560,9 @@ export default function Page() {
     } catch (err) {
       console.error("Save error:", err);
       toast({
-        title: "Error",
+        title: t("error"),
         description:
-          err instanceof Error ? err.message : "Failed to save blog post",
+          err instanceof Error ? err.message : t("errors.failedSaveBlogPost"),
         variant: "destructive",
       });
     } finally {
@@ -581,15 +590,15 @@ export default function Page() {
 
       setIsImageSelectorOpen(false);
       toast({
-        title: "Success",
-        description: "Featured image updated successfully",
+        title: t("success"),
+        description: t("successFeaturedImage"),
       });
     } catch (err) {
       console.error("Error updating featured image:", err);
       toast({
-        title: "Error",
+        title: t("error"),
         description:
-          err instanceof Error ? err.message : "Failed to update featured image",
+          err instanceof Error ? err.message : t("errors.failedUpdateImage"),
         variant: "destructive",
       });
     }
@@ -603,7 +612,7 @@ export default function Page() {
           {autoSave.lastSaved && (
             <span className="text-sm text-muted-foreground flex items-center">
               <Save className="w-4 h-4 mr-1" />
-              Last saved {format(autoSave.lastSaved, "h:mm a")}
+              {t("lastSaved")} {format(autoSave.lastSaved, "h:mm a")}
             </span>
           )}
         </div>
@@ -618,12 +627,12 @@ export default function Page() {
             {isPreview ? (
               <>
                 <EyeOff className="w-4 h-4 mr-2" />
-                Edit
+                {t("editMode")}
               </>
             ) : (
               <>
                 <Eye className="w-4 h-4 mr-2" />
-                Preview
+                {t("previewMode")}
               </>
             )}
           </Button>
@@ -645,7 +654,7 @@ export default function Page() {
             {/* Title */}
             <Input
               type="text"
-              placeholder="Post title"
+              placeholder={t("titlePlaceholder") as string}
               className="text-3xl font-bold border-none bg-transparent focus-visible:ring-0 p-0 placeholder:text-muted-foreground/60"
               {...form.register("title")}
               disabled={isPreview}
@@ -824,7 +833,7 @@ export default function Page() {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        const url = window.prompt("Enter URL");
+                        const url = window.prompt(t("promptEnterUrl") || "Enter URL");
                         if (url) {
                           editor.chain().focus().setLink({ href: url }).run();
                         }
@@ -840,7 +849,7 @@ export default function Page() {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        const url = window.prompt("Enter image URL");
+                        const url = window.prompt(t("promptEnterImageUrl") || "Enter image URL");
                         if (url) {
                           editor.chain().focus().setImage({ src: url }).run();
                         }
@@ -866,7 +875,7 @@ export default function Page() {
               {/* Featured Image Display + "Change" Button */}
               <div>
                 <label className="text-sm font-medium mb-2 inline-block">
-                  Featured Image
+                  {t("sidebar.featuredImage")}
                 </label>
                 {featuredImageUrl ? (
                   <div className="relative w-full h-48 mb-2 rounded-md overflow-hidden bg-muted">
@@ -879,7 +888,7 @@ export default function Page() {
                     />
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">No featured image</p>
+                  <p className="text-sm text-muted-foreground">{t("sidebar.noFeaturedImage")}</p>
                 )}
                 <Button
                   variant="outline"
@@ -887,34 +896,34 @@ export default function Page() {
                   className="w-full mt-2"
                   onClick={() => setIsImageSelectorOpen(true)}
                 >
-                  {featuredImageUrl ? "Change Image" : "Select Image"}
+                  {featuredImageUrl ? t("sidebar.changeImage") : t("sidebar.selectImage")}
                 </Button>
               </div>
 
               {/* Status */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Status</label>
+                <label className="text-sm font-medium">{t("sidebar.status")}</label>
                 <Select
                   value={status}
                   onValueChange={(v) => form.setValue("status", v as BlogStatus)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
+                    <SelectValue placeholder={t("sidebar.selectStatus")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="published">Published</SelectItem>
+                    <SelectItem value="draft">{t("sidebar.statusDraft")}</SelectItem>
+                    <SelectItem value="published">{t("sidebar.statusPublished")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               {/* Meta Description */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Meta Description</label>
+                <label className="text-sm font-medium">{t("sidebar.metaDescription")}</label>
                 <Textarea
                   value={metaDescription}
                   onChange={(e) => form.setValue("meta_description", e.target.value)}
-                  placeholder="Enter SEO description..."
+                  placeholder={t("sidebar.metaDescriptionPlaceholder") as string}
                   className="h-20"
                   disabled={isPreview}
                 />
@@ -930,12 +939,12 @@ export default function Page() {
           {autoSave.saving && (
             <span className="flex items-center">
               <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-              Saving...
+              {t("saving")}
             </span>
           )}
           {autoSave.error && <span className="text-destructive">{autoSave.error}</span>}
           {!autoSave.saving && !autoSave.error && autoSave.lastSaved && (
-            <span className="text-muted-foreground">All changes saved</span>
+            <span className="text-muted-foreground">{t("allChangesSaved")}</span>
           )}
         </div>
 
@@ -945,18 +954,18 @@ export default function Page() {
             onClick={() => router.push("/dashboard/blog")}
             disabled={isLoading || autoSave.saving}
           >
-            Cancel
+            {t("cancel")}
           </Button>
           <Button onClick={form.handleSubmit(onSubmit)} disabled={isLoading || autoSave.saving}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
+                {t("savingButton")}
               </>
             ) : status === "published" ? (
-              "Publish"
+              t("publishButton")
             ) : (
-              "Save Draft"
+              t("saveDraftButton")
             )}
           </Button>
         </div>

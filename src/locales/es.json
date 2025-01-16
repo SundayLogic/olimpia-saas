@@ -249,5 +249,54 @@
       "failedToDeletePost": "No se pudo eliminar la entrada"
     },
     "successPostDeleted": "Entrada eliminada correctamente"
+  },
+  "blogSinglePage": {
+    "error": "Error",
+    "success": "Éxito",
+    "saving": "Guardando...",
+    "lastSaved": "Última vez guardado",
+    "allChangesSaved": "Todos los cambios guardados",
+
+    "editMode": "Editar",
+    "previewMode": "Vista previa",
+
+    "titlePlaceholder": "Título de la entrada",
+    "cancel": "Cancelar",
+    "savingButton": "Guardando...",
+    "publishButton": "Publicar",
+    "saveDraftButton": "Guardar Borrador",
+
+    "sidebar": {
+      "featuredImage": "Imagen Destacada",
+      "noFeaturedImage": "Sin imagen destacada",
+      "changeImage": "Cambiar Imagen",
+      "selectImage": "Seleccionar Imagen",
+      "status": "Estado",
+      "selectStatus": "Selecciona un estado",
+      "statusDraft": "Borrador",
+      "statusPublished": "Publicado",
+      "metaDescription": "Meta Descripción",
+      "metaDescriptionPlaceholder": "Escribe una descripción SEO..."
+    },
+
+    "imageSelector": {
+      "title": "Seleccionar Imagen Destacada",
+      "noImagesFound": "No hay imágenes en la carpeta de blog"
+    },
+
+    "promptEnterUrl": "Ingresa la URL",
+    "promptEnterImageUrl": "Ingresa la URL de la imagen",
+
+    "errors": {
+      "failedToLoadImages": "No se pudieron cargar las imágenes",
+      "failedAutosave": "Error al guardar automáticamente",
+      "failedLoadBlogPost": "No se pudo cargar la entrada del blog",
+      "noUserFound": "No se encontró un usuario",
+      "failedSaveBlogPost": "No se pudo guardar la entrada del blog",
+      "failedUpdateImage": "No se pudo actualizar la imagen destacada"
+    },
+    "successPostCreated": "Entrada de blog creada correctamente",
+    "successPostUpdated": "Entrada de blog actualizada correctamente",
+    "successFeaturedImage": "Imagen destacada actualizada correctamente"
   }
 }

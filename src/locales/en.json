@@ -249,5 +249,54 @@
       "failedToDeletePost": "Failed to delete post"
     },
     "successPostDeleted": "Post deleted successfully"
+  },
+"blogSinglePage": {
+    "error": "Error",
+    "success": "Success",
+    "saving": "Saving...",
+    "lastSaved": "Last saved",
+    "allChangesSaved": "All changes saved",
+
+    "editMode": "Edit",
+    "previewMode": "Preview",
+
+    "titlePlaceholder": "Post title",
+    "cancel": "Cancel",
+    "savingButton": "Saving...",
+    "publishButton": "Publish",
+    "saveDraftButton": "Save Draft",
+
+    "sidebar": {
+      "featuredImage": "Featured Image",
+      "noFeaturedImage": "No featured image",
+      "changeImage": "Change Image",
+      "selectImage": "Select Image",
+      "status": "Status",
+      "selectStatus": "Select status",
+      "statusDraft": "Draft",
+      "statusPublished": "Published",
+      "metaDescription": "Meta Description",
+      "metaDescriptionPlaceholder": "Enter SEO description..."
+    },
+
+    "imageSelector": {
+      "title": "Select Featured Image",
+      "noImagesFound": "No images found in the blog folder"
+    },
+
+    "promptEnterUrl": "Enter URL",
+    "promptEnterImageUrl": "Enter image URL",
+
+    "errors": {
+      "failedToLoadImages": "Failed to load images",
+      "failedAutosave": "Failed to auto-save",
+      "failedLoadBlogPost": "Failed to load blog post",
+      "noUserFound": "No user found",
+      "failedSaveBlogPost": "Failed to save blog post",
+      "failedUpdateImage": "Failed to update featured image"
+    },
+    "successPostCreated": "Blog post created successfully",
+    "successPostUpdated": "Blog post updated successfully",
+    "successFeaturedImage": "Featured image updated successfully"
   }
 }
