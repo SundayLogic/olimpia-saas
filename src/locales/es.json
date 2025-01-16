@@ -205,5 +205,49 @@
     "deletedFile": "Se eliminó {{fileName}}",
     "movedFile": "Se movió {{fileName}}",
     "renamedFile": "Se renombró {{oldName}} a {{newName}}"
+  },
+"blogPage": {
+    "heading": "Entradas del Blog",
+    "description": "Crea y gestiona tu contenido de blog",
+    "newPost": "Nueva Entrada",
+    "searchPlaceholder": "Buscar entradas...",
+    "status": "Estado",
+    "allStatus": "Todos los estados",
+    "published": "Publicado",
+    "draft": "Borrador",
+    "filterByAuthor": "Filtrar por Autor",
+    "allAuthors": "Todos los Autores",
+    "sortBy": "Ordenar por",
+    "newestFirst": "Más recientes primero",
+    "oldestFirst": "Más antiguas primero",
+    "titleAz": "Título A-Z",
+    "authorBadge": "Autor:",
+    "searchBadge": "Buscar:",
+    "noPostsMatchingFilters": "No se encontraron entradas que coincidan con tus filtros.",
+    "noPostsFound": "No hay entradas de blog. ¡Crea tu primera entrada!",
+
+    "editButton": "Editar",
+    "by": "Por",
+    "updated": "Actualizado",
+
+    "deleteDialogTitle": "Eliminar Entrada",
+    "deleteDialogDescription": "¿Estás seguro de que deseas eliminar \"{{title}}\"? Esta acción no se puede deshacer.",
+    "deleteButton": "Eliminar",
+    "cancel": "Cancelar",
+
+    "quickStatsHeading": "Estadísticas Rápidas",
+    "statsTotalPosts": "Entradas Totales",
+    "statsPublished": "Publicadas",
+    "statsDrafts": "Borradores",
+    "statsAuthors": "Autores",
+
+    "error": "Error",
+    "success": "Éxito",
+    "errors": {
+      "failedToLoadPosts": "No se pudieron cargar las entradas del blog",
+      "loadPostsGeneric": "Ocurrió un error al cargar las entradas",
+      "failedToDeletePost": "No se pudo eliminar la entrada"
+    },
+    "successPostDeleted": "Entrada eliminada correctamente"
   }
 }

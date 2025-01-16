@@ -205,5 +205,49 @@
     "deletedFile": "S-a șters {{fileName}}",
     "movedFile": "S-a mutat {{fileName}}",
     "renamedFile": "S-a redenumit {{oldName}} în {{newName}}"
+  },
+  "blogPage": {
+    "heading": "Postări Blog",
+    "description": "Creează și gestionează conținutul blogului tău",
+    "newPost": "Postare Nouă",
+    "searchPlaceholder": "Caută postări...",
+    "status": "Stare",
+    "allStatus": "Toate",
+    "published": "Publicat",
+    "draft": "Ciornă",
+    "filterByAuthor": "Filtrează după Autor",
+    "allAuthors": "Toți Autorii",
+    "sortBy": "Sortează după",
+    "newestFirst": "Cele mai recente primele",
+    "oldestFirst": "Cele mai vechi primele",
+    "titleAz": "Titlu A-Z",
+    "authorBadge": "Autor:",
+    "searchBadge": "Căutare:",
+    "noPostsMatchingFilters": "Nicio postare găsită care să corespundă filtrului.",
+    "noPostsFound": "Nu există postări pe blog. Creează prima ta postare!",
+
+    "editButton": "Editează",
+    "by": "De",
+    "updated": "Actualizat",
+
+    "deleteDialogTitle": "Șterge Postarea",
+    "deleteDialogDescription": "Ești sigur că vrei să ștergi \"{{title}}\"? Această acțiune nu poate fi anulată.",
+    "deleteButton": "Șterge",
+    "cancel": "Anulează",
+
+    "quickStatsHeading": "Statistici Rapide",
+    "statsTotalPosts": "Total Postări",
+    "statsPublished": "Publicate",
+    "statsDrafts": "Ciorne",
+    "statsAuthors": "Autori",
+
+    "error": "Eroare",
+    "success": "Succes",
+    "errors": {
+      "failedToLoadPosts": "Nu s-au putut încărca postările de blog",
+      "loadPostsGeneric": "A apărut o eroare la încărcarea postărilor",
+      "failedToDeletePost": "Nu s-a putut șterge postarea"
+    },
+    "successPostDeleted": "Postare ștearsă cu succes"
   }
 }

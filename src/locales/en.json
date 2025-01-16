@@ -205,5 +205,49 @@
     "deletedFile": "Deleted {{fileName}}",
     "movedFile": "Moved {{fileName}}",
     "renamedFile": "Renamed {{oldName}} to {{newName}}"
+  },
+ "blogPage": {
+    "heading": "Blog Posts",
+    "description": "Create and manage your blog content",
+    "newPost": "New Post",
+    "searchPlaceholder": "Search posts...",
+    "status": "Status",
+    "allStatus": "All Status",
+    "published": "Published",
+    "draft": "Draft",
+    "filterByAuthor": "Filter by Author",
+    "allAuthors": "All Authors",
+    "sortBy": "Sort by",
+    "newestFirst": "Newest First",
+    "oldestFirst": "Oldest First",
+    "titleAz": "Title A-Z",
+    "authorBadge": "Author:",
+    "searchBadge": "Search:",
+    "noPostsMatchingFilters": "No posts found matching your filters.",
+    "noPostsFound": "No blog posts found. Create your first post!",
+
+    "editButton": "Edit",
+    "by": "By",
+    "updated": "Updated",
+
+    "deleteDialogTitle": "Delete Post",
+    "deleteDialogDescription": "Are you sure you want to delete \"{{title}}\"? This action cannot be undone.",
+    "deleteButton": "Delete",
+    "cancel": "Cancel",
+
+    "quickStatsHeading": "Quick Stats",
+    "statsTotalPosts": "Total Posts",
+    "statsPublished": "Published",
+    "statsDrafts": "Drafts",
+    "statsAuthors": "Authors",
+
+    "error": "Error",
+    "success": "Success",
+    "errors": {
+      "failedToLoadPosts": "Failed to load blog posts",
+      "loadPostsGeneric": "An error occurred while loading posts",
+      "failedToDeletePost": "Failed to delete post"
+    },
+    "successPostDeleted": "Post deleted successfully"
   }
 }

@@ -6,6 +6,8 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import Image from "next/image";
+import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "react-i18next";
 
 // Icons
 import { Plus, Search, Trash2, Calendar } from "lucide-react";
@@ -13,10 +15,10 @@ import { Plus, Search, Trash2, Calendar } from "lucide-react";
 // UI
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/core/layout";
 
+// Dynamically imported alert-dialog components
 const AlertDialog = dynamic(() =>
   import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialog)
 );
@@ -42,6 +44,7 @@ const AlertDialogAction = dynamic(() =>
   import("@/components/ui/alert-dialog").then((mod) => mod.AlertDialogAction)
 );
 
+// Dynamically imported select components
 const Select = dynamic(() =>
   import("@/components/ui/select").then((mod) => mod.Select)
 );
@@ -61,7 +64,6 @@ const SelectValue = dynamic(() =>
 /* ---------------------------------------------------------------------
    1) Types & Helpers
 ---------------------------------------------------------------------- */
-
 import type { JSONContent } from "@tiptap/react";
 
 /** Tiptap doc shape. */
@@ -147,6 +149,7 @@ interface BlogPost {
 }
 
 export default function BlogPage() {
+  const { t } = useTranslation("blogPage");
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -176,8 +179,8 @@ export default function BlogPage() {
 
         if (error) {
           toast({
-            title: "Error",
-            description: "Failed to load blog posts",
+            title: t("error"),
+            description: t("errors.failedToLoadPosts"),
             variant: "destructive",
           });
           return;
@@ -218,15 +221,15 @@ export default function BlogPage() {
       } catch (err) {
         console.error(err);
         toast({
-          title: "Error",
-          description: "An error occurred while loading posts",
+          title: t("error"),
+          description: t("errors.loadPostsGeneric"),
           variant: "destructive",
         });
       } finally {
         setIsLoading(false);
       }
     })();
-  }, [supabase, toast]);
+  }, [supabase, toast, t]);
 
   // Delete logic
   const handleDeletePost = async () => {
@@ -238,13 +241,16 @@ export default function BlogPage() {
 
     if (error) {
       toast({
-        title: "Error",
-        description: "Failed to delete post",
+        title: t("error"),
+        description: t("errors.failedToDeletePost"),
         variant: "destructive",
       });
       return;
     }
-    toast({ title: "Success", description: "Post deleted successfully" });
+    toast({
+      title: t("success"),
+      description: t("successPostDeleted"),
+    });
     setPosts((cur) => cur.filter((x) => x.id !== deletePost.id));
     setDeletePost(null);
   };
@@ -306,10 +312,13 @@ export default function BlogPage() {
 
   return (
     <div className="p-6">
-      <PageHeader heading="Blog Posts" text="Create and manage your blog content">
+      <PageHeader
+        heading={t("heading")}
+        text={t("description")}
+      >
         <Button onClick={() => router.push("/dashboard/blog/new")}>
           <Plus className="mr-2 h-4 w-4" />
-          New Post
+          {t("newPost")}
         </Button>
       </PageHeader>
 
@@ -318,7 +327,7 @@ export default function BlogPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search posts..."
+            placeholder={t("searchPlaceholder") as string}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -335,12 +344,12 @@ export default function BlogPage() {
           }
         >
           <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Status" />
+            <SelectValue placeholder={t("status")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="published">Published</SelectItem>
-            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="all">{t("allStatus")}</SelectItem>
+            <SelectItem value="published">{t("published")}</SelectItem>
+            <SelectItem value="draft">{t("draft")}</SelectItem>
           </SelectContent>
         </Select>
 
@@ -349,10 +358,10 @@ export default function BlogPage() {
           onValueChange={(val) => setFilters((prev) => ({ ...prev, author: val }))}
         >
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by Author" />
+            <SelectValue placeholder={t("filterByAuthor")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Authors</SelectItem>
+            <SelectItem value="all">{t("allAuthors")}</SelectItem>
             {uniqueAuthors.map((a) => (
               <SelectItem key={a} value={a || "Unnamed"}>
                 {a}
@@ -371,12 +380,12 @@ export default function BlogPage() {
           }
         >
           <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Sort by" />
+            <SelectValue placeholder={t("sortBy")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="newest">Newest First</SelectItem>
-            <SelectItem value="oldest">Oldest First</SelectItem>
-            <SelectItem value="title">Title A-Z</SelectItem>
+            <SelectItem value="newest">{t("newestFirst")}</SelectItem>
+            <SelectItem value="oldest">{t("oldestFirst")}</SelectItem>
+            <SelectItem value="title">{t("titleAz")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -389,10 +398,14 @@ export default function BlogPage() {
             </Badge>
           )}
           {filters.author !== "all" && (
-            <Badge variant="secondary">Author: {filters.author}</Badge>
+            <Badge variant="secondary">
+              {t("authorBadge")} {filters.author}
+            </Badge>
           )}
           {searchQuery && (
-            <Badge variant="secondary">Search: {searchQuery}</Badge>
+            <Badge variant="secondary">
+              {t("searchBadge")} {searchQuery}
+            </Badge>
           )}
         </div>
       )}
@@ -406,8 +419,8 @@ export default function BlogPage() {
         <div className="text-center py-12">
           <p className="text-muted-foreground">
             {searchQuery || filters.status !== "all" || filters.author !== "all"
-              ? "No posts found matching your filters."
-              : "No blog posts found. Create your first post!"}
+              ? t("noPostsMatchingFilters")
+              : t("noPostsFound")}
           </p>
         </div>
       ) : (
@@ -433,7 +446,7 @@ export default function BlogPage() {
                 <div className="flex items-center gap-2 mb-2">
                   <h3 className="font-medium truncate">{post.title}</h3>
                   <Badge variant={post.published ? "default" : "secondary"}>
-                    {post.published ? "Published" : "Draft"}
+                    {post.published ? t("published") : t("draft")}
                   </Badge>
                 </div>
 
@@ -446,7 +459,7 @@ export default function BlogPage() {
                     <>
                       <span>•</span>
                       <span>
-                        By{" "}
+                        {t("by")}{" "}
                         {post.author_info[0].name ||
                           post.author_info[0].email}
                       </span>
@@ -456,7 +469,7 @@ export default function BlogPage() {
                     <>
                       <span>•</span>
                       <span>
-                        Updated{" "}
+                        {t("updated")}{" "}
                         {format(new Date(post.updated_at), "MMM d, yyyy")}
                       </span>
                     </>
@@ -471,13 +484,12 @@ export default function BlogPage() {
 
                 {/* Action buttons (View is REMOVED) */}
                 <div className="flex items-center gap-2 mt-4">
-                  {/* Removed the "View" button */}
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => router.push(`/dashboard/blog/${post.id}`)}
                   >
-                    Edit
+                    {t("editButton")}
                   </Button>
                   <Button
                     variant="outline"
@@ -498,19 +510,18 @@ export default function BlogPage() {
       <AlertDialog open={!!deletePost} onOpenChange={() => setDeletePost(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Post</AlertDialogTitle>
+            <AlertDialogTitle>{t("deleteDialogTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &quot;{deletePost?.title}&quot;?
-              This action cannot be undone.
+              {t("deleteDialogDescription", { title: deletePost?.title })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeletePost}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {t("deleteButton")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -518,26 +529,26 @@ export default function BlogPage() {
 
       {/* Quick Stats */}
       <div className="mt-8 p-4 border rounded-lg bg-card">
-        <h3 className="font-medium mb-4">Quick Stats</h3>
+        <h3 className="font-medium mb-4">{t("quickStatsHeading")}</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-4 border rounded-md">
-            <div className="text-sm text-muted-foreground">Total Posts</div>
+            <div className="text-sm text-muted-foreground">{t("statsTotalPosts")}</div>
             <div className="text-2xl font-bold">{posts.length}</div>
           </div>
           <div className="p-4 border rounded-md">
-            <div className="text-sm text-muted-foreground">Published</div>
+            <div className="text-sm text-muted-foreground">{t("statsPublished")}</div>
             <div className="text-2xl font-bold">
               {posts.filter((p) => p.published).length}
             </div>
           </div>
           <div className="p-4 border rounded-md">
-            <div className="text-sm text-muted-foreground">Drafts</div>
+            <div className="text-sm text-muted-foreground">{t("statsDrafts")}</div>
             <div className="text-2xl font-bold">
               {posts.filter((p) => !p.published).length}
             </div>
           </div>
           <div className="p-4 border rounded-md">
-            <div className="text-sm text-muted-foreground">Authors</div>
+            <div className="text-sm text-muted-foreground">{t("statsAuthors")}</div>
             <div className="text-2xl font-bold">{uniqueAuthors.length}</div>
           </div>
         </div>
